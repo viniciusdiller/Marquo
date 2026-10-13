@@ -475,6 +475,7 @@ model Client {
 
   @@unique([tenantId, phone])
   @@index([tenantId])
+  @@index([tenantId, name])
 }
 
 // ─────────────────────────────────────────────
@@ -589,6 +590,7 @@ model Ticket {
 
   @@index([tenantId, status])
   @@index([tenantId, openedAt])
+  @@index([tenantId, status, closedAt])
 }
 
 model TicketItem {
