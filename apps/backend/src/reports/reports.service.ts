@@ -35,6 +35,9 @@ export class ReportsService {
 
     if (ticketIds.length === 0) {
       return {
+        totalRevenueCents: 0,
+        totalTickets: 0,
+        averageTicketCents: 0,
         totalServices: 0,
         mostRequestedService: null,
         totalProducts: 0,

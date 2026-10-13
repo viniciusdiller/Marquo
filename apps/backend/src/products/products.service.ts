@@ -14,7 +14,8 @@ export class ProductsService {
       where: { tenantId, ...(includeInactive ? {} : { isActive: true }) },
       orderBy: { name: "asc" },
     });
-    const balances = await this.balancesByProduct(tenantId);
+    if (products.length === 0) return [];
+    const balances = await this.balancesByProduct(tenantId, products.map((p) => p.id));
     return products.map((product) => ({ ...product, stock: balances.get(product.id) ?? 0 }));
   }
 
@@ -106,10 +107,13 @@ export class ProductsService {
     return result._sum.quantity ?? 0;
   }
 
-  private async balancesByProduct(tenantId: string): Promise<Map<string, number>> {
+  private async balancesByProduct(tenantId: string, productIds?: string[]): Promise<Map<string, number>> {
     const rows = await this.prisma.stockMovement.groupBy({
       by: ["productId"],
-      where: { tenantId },
+      where: {
+        tenantId,
+        ...(productIds && productIds.length > 0 ? { productId: { in: productIds } } : {}),
+      },
       _sum: { quantity: true },
     });
     return new Map(rows.map((row) => [row.productId, row._sum.quantity ?? 0]));

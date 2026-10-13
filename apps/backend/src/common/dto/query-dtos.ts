@@ -1,10 +1,11 @@
 import { IsIn, IsISO8601, IsOptional, IsString, MaxLength, IsUUID } from "class-validator";
+import { PaginationQueryDto } from "../pagination/pagination-query.dto";
 
 // @Query("campo") solto não passa pelo ValidationPipe: `?professionalId[a]=b` ou
 // `?search=a&search=b` chegam como objeto/array, vão cru pro Prisma/`.trim()` e viram 500 em
 // vez de 400. Estes DTOs fecham essa fronteira (mesmo padrão de PaginationQueryDto).
 
-export class ClientSearchQueryDto {
+export class ClientSearchQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)

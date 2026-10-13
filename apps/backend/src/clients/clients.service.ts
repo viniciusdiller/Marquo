@@ -3,6 +3,8 @@ import { Prisma } from "@totalagenda/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { isValidCpf, normalizeCpf } from "../common/utils/cpf.util";
 import { isPlausibleBrazilianPhone, normalizePhone } from "../common/utils/phone.util";
+import { resolvePagination, toPage } from "../common/pagination/paginate";
+import { ClientSearchQueryDto } from "../common/dto/query-dtos";
 import { CreateClientDto } from "./dto/create-client.dto";
 import { UpdateClientDto } from "./dto/update-client.dto";
 
@@ -14,30 +16,38 @@ export class ClientsService {
   // Cadastro rico / painel (M2)
   // ─────────────────────────────────────────────
 
-  async list(tenantId: string, search?: string) {
+  async list(tenantId: string, queryOrSearch?: string | ClientSearchQueryDto) {
+    const query: ClientSearchQueryDto =
+      typeof queryOrSearch === "string" ? { search: queryOrSearch } : (queryOrSearch ?? {});
+    const pagination = resolvePagination(query);
     const where: Prisma.ClientWhereInput = { tenantId };
-    if (search?.trim()) {
-      const term = search.trim();
+    if (query.search?.trim()) {
+      const term = query.search.trim();
       const digits = term.replace(/\D/g, "");
       where.OR = [
         { name: { contains: term, mode: "insensitive" } },
         ...(digits ? [{ phone: { contains: digits } as Prisma.StringFilter }] : []),
       ];
     }
-    return this.prisma.client.findMany({
-      where,
-      orderBy: { name: "asc" },
-      take: 200,
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        email: true,
-        tags: true,
-        createdAt: true,
-        _count: { select: { appointments: true } },
-      },
-    });
+    const [total, items] = await Promise.all([
+      this.prisma.client.count({ where }),
+      this.prisma.client.findMany({
+        where,
+        orderBy: { name: "asc" },
+        skip: pagination.skip,
+        take: pagination.take,
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          email: true,
+          tags: true,
+          createdAt: true,
+          _count: { select: { appointments: true } },
+        },
+      }),
+    ]);
+    return toPage(items, total, pagination);
   }
 
   async getDetail(tenantId: string, id: string) {

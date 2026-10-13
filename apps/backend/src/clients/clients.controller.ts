@@ -16,7 +16,7 @@ export class ClientsController {
 
   @Get()
   list(@CurrentUser() user: AuthenticatedUser, @Query() query: ClientSearchQueryDto) {
-    return this.clientsService.list(user.tenantId, query.search);
+    return this.clientsService.list(user.tenantId, query);
   }
 
   @Get(":id")
