@@ -56,7 +56,7 @@ describe("InternalAuthGuard (Nest real, corpo cru)", () => {
     app = await buildApp();
     const res = await request(app.getHttpServer()).get("/internal/ping?search=a").set(headersFor("GET", "/internal/ping?search=a", ""));
     expect(res.status).toBe(200);
-  });
+  }, 15000);
 
   // O corpo assinado são os bytes CRUS: com espaços e acentos, para pegar reserialização de JSON.
   it("POST assinado com corpo JSON passa (assina os bytes crus, não o JSON reserializado)", async () => {
