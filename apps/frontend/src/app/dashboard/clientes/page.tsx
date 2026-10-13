@@ -1,19 +1,21 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { IdentificationCard, LockSimple, MagnifyingGlass, Plus } from "@phosphor-icons/react/dist/ssr";
-import type { AdminClientListItem } from "@totalagenda/shared-types";
+import type { AdminClientListItem, Paginated } from "@totalagenda/shared-types";
 import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
+import { parsePageParam } from "@/lib/pagination";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { HowItWorks } from "@/components/ui/HowItWorks";
+import { Pagination } from "@/components/ui/Pagination";
 import { riseIn } from "@/lib/stagger";
 
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; pagina?: string }>;
 }) {
   const session = await auth();
   if (session?.user.role === "PROFESSIONAL") {
@@ -25,11 +27,19 @@ export default async function ClientsPage({
     );
   }
 
-  const { q } = await searchParams;
-  const query = q?.trim() ?? "";
-  const clients = await authedFetch<AdminClientListItem[]>(
-    `/clients${query ? `?search=${encodeURIComponent(query)}` : ""}`,
-  ).catch(() => []);
+  const sp = await searchParams;
+  const query = sp.q?.trim() ?? "";
+  const page = parsePageParam(sp.pagina);
+
+  const res = await authedFetch<Paginated<AdminClientListItem> | AdminClientListItem[]>(
+    `/clients?page=${page}&pageSize=15${query ? `&search=${encodeURIComponent(query)}` : ""}`,
+  ).catch(() => ({ items: [], total: 0, page: 1, pageSize: 15, pageCount: 1 }));
+
+  const paginated: Paginated<AdminClientListItem> = Array.isArray(res)
+    ? { items: res, total: res.length, page: 1, pageSize: res.length || 15, pageCount: 1 }
+    : res;
+
+  const clients = paginated.items;
 
   return (
     <div className="mx-auto w-full max-w-7xl">
@@ -132,6 +142,17 @@ export default async function ClientsPage({
               ))}
             </ul>
           )}
+
+          {paginated.pageCount > 1 ? (
+            <div className="mt-8 flex justify-center">
+              <Pagination
+                page={paginated.page}
+                pageCount={paginated.pageCount}
+                pathname="/dashboard/clientes"
+                searchParams={sp}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

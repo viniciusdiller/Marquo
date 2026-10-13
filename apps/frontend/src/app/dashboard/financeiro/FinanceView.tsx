@@ -71,6 +71,11 @@ export function FinanceView({
   }
 
   function EntryList({ items }: { items: FinancialEntry[] }) {
+    const [page, setPage] = useState(1);
+    const pageSize = 15;
+    const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+    const currentItems = items.slice((page - 1) * pageSize, page * pageSize);
+
     if (items.length === 0)
       return (
         <div className="mt-4">
@@ -78,68 +83,96 @@ export function FinanceView({
         </div>
       );
     return (
-      <ul className="mt-4 divide-y divide-zinc-100 text-sm dark:divide-white/5">
-        {items.map((e, i) => {
-          const overdue = e.status === "PENDING" && DateTime.fromISO(e.dueDate) < DateTime.now();
-          return (
-            <li
-              key={e.id}
-              style={riseIn(i)}
-              className="animate-rise-in flex items-center justify-between gap-3 py-2.5"
-            >
-              <div>
-                <p className="font-medium text-zinc-900 dark:text-white">{e.description}</p>
-                <p className="text-xs text-zinc-400">
-                  {e.category?.name ?? "Sem categoria"}
-                  {e.counterparty ? ` · ${e.counterparty}` : ""} · vence{" "}
-                  {DateTime.fromISO(e.dueDate).toFormat("dd/LL/yyyy")}
-                  {e.source !== "MANUAL" ? " · auto" : ""}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span
-                  className={
-                    e.direction === "INCOME"
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-zinc-700 dark:text-stone-200"
-                  }
-                >
-                  {e.direction === "INCOME" ? "+" : "−"}
-                  {brl(e.amountCents)}
-                </span>
-                {e.status === "PAID" ? (
-                  <span className="text-xs text-zinc-400">quitado</span>
-                ) : e.status === "CANCELED" ? (
-                  <span className="text-xs text-zinc-400">cancelado</span>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmingAction({ entry: e, kind: "settle" })}
-                      className={
-                        overdue
-                          ? "rounded-md bg-amber-500 px-2 py-1 text-xs font-medium text-white"
-                          : "rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium dark:border-white/15 dark:text-stone-200"
-                      }
-                    >
-                      Dar baixa
-                    </button>
-                    {e.source === "MANUAL" ? (
+      <div className="flex flex-col">
+        <ul className="mt-4 divide-y divide-zinc-100 text-sm dark:divide-white/5">
+          {currentItems.map((e, i) => {
+            const overdue = e.status === "PENDING" && DateTime.fromISO(e.dueDate) < DateTime.now();
+            return (
+              <li
+                key={e.id}
+                style={riseIn(i)}
+                className="animate-rise-in flex items-center justify-between gap-3 py-2.5"
+              >
+                <div>
+                  <p className="font-medium text-zinc-900 dark:text-white">{e.description}</p>
+                  <p className="text-xs text-zinc-400">
+                    {e.category?.name ?? "Sem categoria"}
+                    {e.counterparty ? ` · ${e.counterparty}` : ""} · vence{" "}
+                    {DateTime.fromISO(e.dueDate).toFormat("dd/LL/yyyy")}
+                    {e.source !== "MANUAL" ? " · auto" : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span
+                    className={
+                      e.direction === "INCOME"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-zinc-700 dark:text-stone-200"
+                    }
+                  >
+                    {e.direction === "INCOME" ? "+" : "−"}
+                    {brl(e.amountCents)}
+                  </span>
+                  {e.status === "PAID" ? (
+                    <span className="text-xs text-zinc-400">quitado</span>
+                  ) : e.status === "CANCELED" ? (
+                    <span className="text-xs text-zinc-400">cancelado</span>
+                  ) : (
+                    <>
                       <button
                         type="button"
-                        onClick={() => setConfirmingAction({ entry: e, kind: "cancel" })}
-                        className="text-xs text-zinc-400 hover:text-red-500"
+                        onClick={() => setConfirmingAction({ entry: e, kind: "settle" })}
+                        className={
+                          overdue
+                            ? "rounded-md bg-amber-500 px-2 py-1 text-xs font-medium text-white"
+                            : "rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium dark:border-white/15 dark:text-stone-200"
+                        }
                       >
-                        cancelar
+                        Dar baixa
                       </button>
-                    ) : null}
-                  </>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+                      {e.source === "MANUAL" ? (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingAction({ entry: e, kind: "cancel" })}
+                          className="text-xs text-zinc-400 hover:text-red-500"
+                        >
+                          cancelar
+                        </button>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        {pageCount > 1 ? (
+          <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3 text-xs text-zinc-500 dark:border-white/5 dark:text-stone-400">
+            <span>
+              Página {page} de {pageCount} ({items.length} itens)
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded px-2.5 py-1 font-medium hover:bg-zinc-100 disabled:opacity-30 disabled:pointer-events-none dark:hover:bg-white/10"
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                disabled={page >= pageCount}
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                className="rounded px-2.5 py-1 font-medium hover:bg-zinc-100 disabled:opacity-30 disabled:pointer-events-none dark:hover:bg-white/10"
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
     );
   }
 

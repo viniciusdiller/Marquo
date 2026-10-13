@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Ticket } from "@totalagenda/shared-types";
+import type { Paginated, Ticket } from "@totalagenda/shared-types";
 import { authedFetch } from "@/lib/api-server";
 import { ApiError } from "@/lib/api";
 
@@ -121,7 +121,10 @@ export async function searchClientsAction(
   if (term.length < 2) return { ok: true, clients: [] };
   if (term.length > 100) return { ok: false, error: "Busca muito longa." };
   try {
-    const rows = await authedFetch<ClientOption[]>(`/clients?search=${encodeURIComponent(term)}`);
+    const res = await authedFetch<Paginated<ClientOption> | ClientOption[]>(
+      `/clients?search=${encodeURIComponent(term)}&pageSize=8`,
+    );
+    const rows = Array.isArray(res) ? res : res.items;
     return { ok: true, clients: rows.slice(0, 8).map((c) => ({ id: c.id, name: c.name, phone: c.phone })) };
   } catch (err) {
     return { ok: false, error: err instanceof ApiError ? err.message : "Erro ao buscar clientes." };
