@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from "@nestjs/common";
 import { Role } from "@totalagenda/database";
 import { TicketsService } from "./tickets.service";
 import {
@@ -11,6 +11,7 @@ import {
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
+import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
 
 @Roles(Role.OWNER, Role.RECEPTIONIST)
 @Controller("tickets")
@@ -18,8 +19,11 @@ export class TicketsController {
   constructor(private readonly tickets: TicketsService) {}
 
   @Get()
-  listOpen(@CurrentUser() user: AuthenticatedUser) {
-    return this.tickets.findOpen(user.tenantId);
+  listOpen(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.tickets.findOpen(user.tenantId, query);
   }
 
   @Get(":id")

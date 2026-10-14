@@ -4,6 +4,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import { AdjustStockDto } from "./dto/adjust-stock.dto";
+import { resolvePagination, toPage } from "../common/pagination/paginate";
+import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
 
 @Injectable()
 export class ProductsService {
@@ -91,12 +93,32 @@ export class ProductsService {
     });
   }
 
-  listMovements(tenantId: string, productId: string) {
-    return this.prisma.stockMovement.findMany({
-      where: { tenantId, productId },
-      orderBy: { createdAt: "desc" },
-      take: 100,
+  async listMovements(
+    tenantId: string,
+    productId: string,
+    paginationQuery: PaginationQueryDto = {},
+  ) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, tenantId },
+      select: { id: true },
     });
+    if (!product) {
+      throw new NotFoundException("Produto não encontrado.");
+    }
+
+    const pagination = resolvePagination(paginationQuery);
+    const [total, items] = await Promise.all([
+      this.prisma.stockMovement.count({
+        where: { tenantId, productId },
+      }),
+      this.prisma.stockMovement.findMany({
+        where: { tenantId, productId },
+        orderBy: { createdAt: "desc" },
+        skip: pagination.skip,
+        take: pagination.take,
+      }),
+    ]);
+    return toPage(items, total, pagination);
   }
 
   async stockBalance(tenantId: string, productId: string): Promise<number> {

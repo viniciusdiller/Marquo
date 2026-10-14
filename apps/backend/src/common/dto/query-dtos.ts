@@ -64,3 +64,13 @@ export class CashFlowQueryDto extends RequiredDateRangeQueryDto {
   @IsIn(["due", "paid"])
   basis?: "due" | "paid";
 }
+
+export class AppointmentsFilterQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @IsISO8601()
+  from?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  to?: string;
+}
