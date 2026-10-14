@@ -7,6 +7,7 @@ import { AdjustStockDto } from "./dto/adjust-stock.dto";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
+import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
 
 @Roles(Role.OWNER, Role.RECEPTIONIST)
 @Controller("products")
@@ -24,8 +25,12 @@ export class ProductsController {
   }
 
   @Get(":id/movements")
-  movements(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
-    return this.products.listMovements(user.tenantId, id);
+  movements(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id") id: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.products.listMovements(user.tenantId, id, query);
   }
 
   @Roles(Role.OWNER)

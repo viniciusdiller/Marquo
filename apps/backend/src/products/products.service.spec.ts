@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { NotFoundException } from "@nestjs/common";
 import { ProductsService } from "./products.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -13,6 +13,7 @@ function build(over: Record<string, unknown> = {}) {
       groupBy: jest.fn().mockResolvedValue([]),
       create: jest.fn().mockImplementation(({ data }) => ({ id: "sm-1", ...data })),
       findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
     },
     ...over,
   } as unknown as PrismaService;
@@ -48,4 +49,39 @@ describe("ProductsService", () => {
     (prisma.product.findFirst as jest.Mock).mockResolvedValue(null);
     await expect(service.getOrThrow("t-1", "p-9")).rejects.toThrow(NotFoundException);
   });
+
+  describe("listMovements", () => {
+    it("devolve movimentos paginados respeitando skip e take", async () => {
+      const { service, prisma } = build();
+      (prisma.stockMovement.count as jest.Mock).mockResolvedValue(25);
+      (prisma.stockMovement.findMany as jest.Mock).mockResolvedValue([
+        { id: "sm-1", productId: "p-1", quantity: 5 },
+      ]);
+
+      const result = await service.listMovements("t-1", "p-1", { page: 2, pageSize: 10 });
+
+      expect(prisma.stockMovement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId: "t-1", productId: "p-1" },
+          skip: 10,
+          take: 10,
+        }),
+      );
+      expect(result.page).toBe(2);
+      expect(result.pageSize).toBe(10);
+      expect(result.total).toBe(25);
+      expect(result.pageCount).toBe(3);
+      expect(result.items).toHaveLength(1);
+    });
+
+    it("Anti-IDOR: lança NotFoundException se produto pertencer a outro tenant", async () => {
+      const { service, prisma } = build();
+      (prisma.product.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.listMovements("tenant-A", "produto-do-tenant-B", { page: 1 }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
 });
+

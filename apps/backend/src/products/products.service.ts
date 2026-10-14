@@ -4,6 +4,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import { AdjustStockDto } from "./dto/adjust-stock.dto";
+import { resolvePagination, toPage } from "../common/pagination/paginate";
+import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
 
 @Injectable()
 export class ProductsService {
@@ -14,7 +16,8 @@ export class ProductsService {
       where: { tenantId, ...(includeInactive ? {} : { isActive: true }) },
       orderBy: { name: "asc" },
     });
-    const balances = await this.balancesByProduct(tenantId);
+    if (products.length === 0) return [];
+    const balances = await this.balancesByProduct(tenantId, products.map((p) => p.id));
     return products.map((product) => ({ ...product, stock: balances.get(product.id) ?? 0 }));
   }
 
@@ -90,12 +93,32 @@ export class ProductsService {
     });
   }
 
-  listMovements(tenantId: string, productId: string) {
-    return this.prisma.stockMovement.findMany({
-      where: { tenantId, productId },
-      orderBy: { createdAt: "desc" },
-      take: 100,
+  async listMovements(
+    tenantId: string,
+    productId: string,
+    paginationQuery: PaginationQueryDto = {},
+  ) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, tenantId },
+      select: { id: true },
     });
+    if (!product) {
+      throw new NotFoundException("Produto não encontrado.");
+    }
+
+    const pagination = resolvePagination(paginationQuery);
+    const [total, items] = await Promise.all([
+      this.prisma.stockMovement.count({
+        where: { tenantId, productId },
+      }),
+      this.prisma.stockMovement.findMany({
+        where: { tenantId, productId },
+        orderBy: { createdAt: "desc" },
+        skip: pagination.skip,
+        take: pagination.take,
+      }),
+    ]);
+    return toPage(items, total, pagination);
   }
 
   async stockBalance(tenantId: string, productId: string): Promise<number> {
@@ -106,10 +129,13 @@ export class ProductsService {
     return result._sum.quantity ?? 0;
   }
 
-  private async balancesByProduct(tenantId: string): Promise<Map<string, number>> {
+  private async balancesByProduct(tenantId: string, productIds?: string[]): Promise<Map<string, number>> {
     const rows = await this.prisma.stockMovement.groupBy({
       by: ["productId"],
-      where: { tenantId },
+      where: {
+        tenantId,
+        ...(productIds && productIds.length > 0 ? { productId: { in: productIds } } : {}),
+      },
       _sum: { quantity: true },
     });
     return new Map(rows.map((row) => [row.productId, row._sum.quantity ?? 0]));

@@ -17,6 +17,8 @@ import {
   SetTicketClientDto,
   SetTicketDiscountDto,
 } from "./dto/ticket-dtos";
+import { resolvePagination } from "../common/pagination/paginate";
+import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
 
 const TICKET_INCLUDE = {
   items: { include: { professional: { include: { user: { select: { name: true } } } } } },
@@ -97,11 +99,17 @@ export class TicketsService {
     );
   }
 
-  async findOpen(tenantId: string) {
+  async findOpen(tenantId: string, paginationQuery?: PaginationQueryDto) {
+    const hasPagination =
+      paginationQuery?.page !== undefined || paginationQuery?.pageSize !== undefined;
+    const pagination = resolvePagination(paginationQuery ?? {});
+
     const tickets = await this.prisma.ticket.findMany({
       where: { tenantId, status: TicketStatus.OPEN },
       include: TICKET_INCLUDE,
       orderBy: { openedAt: "asc" },
+      take: hasPagination ? pagination.take : undefined,
+      ...(hasPagination ? { skip: pagination.skip } : {}),
     });
     return tickets.map((ticket) => this.serialize(ticket));
   }

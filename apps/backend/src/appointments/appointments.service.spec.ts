@@ -601,6 +601,17 @@ describe("AppointmentsService", () => {
         expect.objectContaining({ take: 500 }),
       );
     });
+
+    it("aplica skip e take quando parâmetros de paginação são informados", async () => {
+      const prisma = buildPrismaMock(buildTxMock());
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+
+      await service.findForAdmin(owner, undefined, undefined, { page: 3, pageSize: 25 });
+
+      expect(prisma.appointment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 50, take: 25 }),
+      );
+    });
   });
 
   describe("getCalendar", () => {

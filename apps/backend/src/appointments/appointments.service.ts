@@ -16,6 +16,7 @@ import { UpdateAppointmentStatusDto } from "./dto/update-appointment-status.dto"
 import { AuthenticatedUser } from "../auth/types/auth-user";
 import { ClientsService } from "../clients/clients.service";
 import { resolvePagination, toPage } from "../common/pagination/paginate";
+import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
 import { ListConsumerBookingsQueryDto } from "./dto/list-consumer-bookings-query.dto";
 import { ConsumerAuthService } from "../consumer-auth/consumer-auth.service";
 import { AuthenticatedConsumer } from "../consumer-auth/types/consumer-auth-user";
@@ -187,7 +188,12 @@ export class AppointmentsService {
   // Leitura
   // ─────────────────────────────────────────────
 
-  async findForAdmin(user: AuthenticatedUser, from?: string, to?: string) {
+  async findForAdmin(
+    user: AuthenticatedUser,
+    from?: string,
+    to?: string,
+    paginationQuery?: PaginationQueryDto,
+  ) {
     const where: Prisma.AppointmentWhereInput = { tenantId: user.tenantId };
 
     // RECEPTIONIST e OWNER veem a agenda inteira; PROFESSIONAL só a própria.
@@ -206,15 +212,18 @@ export class AppointmentsService {
       };
     }
 
+    const hasPagination =
+      paginationQuery?.page !== undefined || paginationQuery?.pageSize !== undefined;
+    const pagination = resolvePagination(paginationQuery ?? {});
+    const take = hasPagination ? pagination.take : 500;
+    const skip = hasPagination ? pagination.skip : undefined;
+
     const appointments = await this.prisma.appointment.findMany({
       where,
       include: APPOINTMENT_INCLUDE,
       orderBy: { startAt: "asc" },
-      // Sem filtro de data, isso é o histórico inteiro do tenant — teto evita que uma
-      // consulta sem from/to (ou um tenant antigo com muitos anos de dado) vire uma consulta
-      // pesada sem limite nenhum. A tela de agenda já usa getCalendar (com teto de 45 dias)
-      // pro caso do dia a dia; isso aqui é o endpoint de listagem/relatório mais amplo.
-      take: 500,
+      take,
+      ...(skip !== undefined ? { skip } : {}),
     });
     return appointments.map((appointment) => this.serialize(appointment));
   }
