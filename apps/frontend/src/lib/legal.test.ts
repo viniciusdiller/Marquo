@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { LEGAL_DOCS_VERSION } from "@totalagenda/shared-types";
+import { LEGAL_DOCS_VERSION } from "@marquo/shared-types";
 import { LEGAL_DRAFT, hasPlaceholders, splitPlaceholders } from "./legal.ts";
 import { PRIVACY_SECTIONS, TERMS_SECTIONS } from "./legal-content.ts";
 

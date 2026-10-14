@@ -14,7 +14,7 @@ export default function TenantNotFound() {
         href="/"
         className="mt-2 text-sm font-semibold text-accent-600 hover:text-accent-700 dark:text-accent-300"
       >
-        Voltar para o TotalAgenda
+        Voltar para o Marquo
       </Link>
     </main>
   );

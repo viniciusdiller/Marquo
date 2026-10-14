@@ -34,7 +34,7 @@ export function Features() {
                 </p>
               </div>
               <div className="mt-10 flex items-center gap-2 rounded-xl bg-white/10 px-4 py-3 font-mono text-sm text-stone-100 ring-1 ring-white/10">
-                totalagenda.com/
+                marquo.com.br/
                 <span className="text-accent-300">studio-da-ana</span>
               </div>
             </div>

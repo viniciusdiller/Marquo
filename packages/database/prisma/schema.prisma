@@ -142,7 +142,7 @@ model Tenant {
   address         String?
   businessHours   String? // texto livre (ex: "Seg-Sex 9h-19h"), não agregado automaticamente
   logoUrl         String? // caminho servido pelo backend, ex: /uploads/tenants/<id>/logo.webp
-  accentColor     String? // hex "#RRGGBB"; nulo usa o roxo padrão do TotalAgenda
+  accentColor     String? // hex "#RRGGBB"; nulo usa o roxo padrão do Marquo
   whatsappNumber  String? // só dígitos, com DDI (ex: 5511912345678) — vira link wa.me
   instagramUrl    String?
 

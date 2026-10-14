@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { Prisma } from "@totalagenda/database";
+import { Prisma } from "@marquo/database";
 import type Stripe from "stripe";
 import { PrismaService } from "../prisma/prisma.service";
 import { StripeService } from "../billing/stripe.service";

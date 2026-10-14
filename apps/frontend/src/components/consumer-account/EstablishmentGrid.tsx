@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ConsumerEstablishment } from "@totalagenda/shared-types";
+import type { ConsumerEstablishment } from "@marquo/shared-types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 

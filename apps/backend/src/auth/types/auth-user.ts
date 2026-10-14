@@ -1,4 +1,4 @@
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 
 export interface JwtPayload {
   sub: string; // userId

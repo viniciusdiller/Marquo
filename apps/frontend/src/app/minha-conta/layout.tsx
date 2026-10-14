@@ -4,7 +4,7 @@ import { BrandPattern } from "@/components/brand/BrandPattern";
 
 // Área do cliente final (conta global, fora de /[slug]). Reusa componentes que leem
 // --tenant-accent (Input accentScoped, Button "tenant") definindo a paleta fixa da marca aqui —
-// mesmo critério do layout do salão: identidade TotalAgenda, sem customização por tenant.
+// mesmo critério do layout do salão: identidade Marquo, sem customização por tenant.
 export default function MinhaContaLayout({ children }: { children: React.ReactNode }) {
   return (
     <div

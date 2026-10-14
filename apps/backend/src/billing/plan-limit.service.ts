@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { PlanTier } from "@totalagenda/database";
+import { PlanTier } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()

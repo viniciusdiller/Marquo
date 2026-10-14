@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Plus, Trash } from "@phosphor-icons/react/dist/ssr";
-import type { IntakeFieldDef, IntakeFormSummary } from "@totalagenda/shared-types";
+import type { IntakeFieldDef, IntakeFormSummary } from "@marquo/shared-types";
 import { riseIn } from "@/lib/stagger";
 import { FieldHint } from "@/components/ui/HowItWorks";
 import { saveIntakeFormAction } from "./actions";

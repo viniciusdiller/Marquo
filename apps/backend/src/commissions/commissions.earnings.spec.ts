@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { CommissionsService } from "./commissions.service";
 import { PrismaService } from "../prisma/prisma.service";
 

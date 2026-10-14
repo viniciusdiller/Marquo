@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { MapPin, Star } from "@phosphor-icons/react/dist/ssr";
-import type { MarketplaceResult } from "@totalagenda/shared-types";
+import type { MarketplaceResult } from "@marquo/shared-types";
 import { Container } from "../ui/Container";
 import { Reveal } from "../ui/Reveal";
 import { PressCard } from "../ui/PressCard";
@@ -34,7 +34,7 @@ export async function RegisteredPlaces() {
         <Reveal>
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="font-display text-3xl font-bold tracking-tight text-zinc-900 md:text-4xl dark:text-white">
-              Negócios que já usam o TotalAgenda
+              Negócios que já usam o Marquo
             </h2>
             <Link
               href="/descobrir"

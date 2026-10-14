@@ -1,6 +1,6 @@
 "use server";
 
-import type { CreateBookingInput, CreateWaitlistInput, PublicBooking } from "@totalagenda/shared-types";
+import type { CreateBookingInput, CreateWaitlistInput, PublicBooking } from "@marquo/shared-types";
 import { ApiError } from "@/lib/api";
 import { consumerAuthedFetch } from "@/lib/consumer-session";
 

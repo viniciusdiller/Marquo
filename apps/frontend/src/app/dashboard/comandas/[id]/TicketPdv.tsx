@@ -10,7 +10,7 @@ import { HowItWorks, FieldHint } from "@/components/ui/HowItWorks";
 import { formatCentsBRL, formatPhoneBR, moneyToCents } from "@/lib/masks";
 import { formatDateTime, formatShortDateTime } from "@/lib/datetime";
 import { brl } from "@/lib/money";
-import type { AdminProduct, PaymentMethod, Ticket } from "@totalagenda/shared-types";
+import type { AdminProduct, PaymentMethod, Ticket } from "@marquo/shared-types";
 import {
   addItemAction,
   addPaymentAction,

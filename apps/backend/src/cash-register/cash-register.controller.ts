@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post } from "@nestjs/common";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { CashRegisterService } from "./cash-register.service";
 import { OpenCashRegisterDto } from "./dto/open-cash-register.dto";
 import { CashMovementDto, CloseCashRegisterDto } from "./dto/cash-movement.dto";

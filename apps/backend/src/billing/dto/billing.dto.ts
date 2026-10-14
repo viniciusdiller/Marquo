@@ -1,5 +1,5 @@
 import { ArrayMaxSize, ArrayUnique, IsArray, IsEnum, IsOptional, IsUUID } from "class-validator";
-import { PlanTier } from "@totalagenda/database";
+import { PlanTier } from "@marquo/database";
 
 // O cliente só escolhe QUAL plano. Preço, Price do Stripe, tenant e customer são sempre derivados
 // no servidor (env + JWT): nenhum campo de valor existe nestes DTOs.

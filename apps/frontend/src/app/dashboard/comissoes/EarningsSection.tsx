@@ -1,7 +1,7 @@
 import Link from "next/link";
 import clsx from "clsx";
 import { Users } from "@phosphor-icons/react/dist/ssr";
-import type { EarningsReport, ProfessionalEarnings } from "@totalagenda/shared-types";
+import type { EarningsReport, ProfessionalEarnings } from "@marquo/shared-types";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PRESET_LABEL, type EarningsPeriod } from "@/lib/earnings-period";

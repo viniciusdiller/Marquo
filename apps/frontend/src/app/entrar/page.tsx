@@ -6,7 +6,7 @@ import { Logo } from "@/components/brand/Logo";
 import { Footer } from "@/components/marketing/Footer";
 import { BrandPattern } from "@/components/brand/BrandPattern";
 
-export const metadata: Metadata = { title: "Entrar - TotalAgenda" };
+export const metadata: Metadata = { title: "Entrar - Marquo" };
 
 export default async function LoginPage({
   searchParams,

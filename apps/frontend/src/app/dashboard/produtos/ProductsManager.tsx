@@ -3,7 +3,7 @@
 import { useActionState, useState, useTransition } from "react";
 import clsx from "clsx";
 import { Package, Plus } from "@phosphor-icons/react/dist/ssr";
-import type { AdminProduct } from "@totalagenda/shared-types";
+import type { AdminProduct } from "@marquo/shared-types";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { MaskedInput } from "@/components/ui/MaskedInput";

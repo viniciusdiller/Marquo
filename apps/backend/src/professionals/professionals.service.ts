@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { PlanLimitService } from "../billing/plan-limit.service";
 import { hasOverlappingIntervals } from "../common/utils/interval.util";

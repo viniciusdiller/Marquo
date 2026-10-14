@@ -1,7 +1,7 @@
 "use client";
 
 import { DateTime } from "luxon";
-import type { PublicProfessional, PublicService } from "@totalagenda/shared-types";
+import type { PublicProfessional, PublicService } from "@marquo/shared-types";
 
 const TIMEZONE = "America/Sao_Paulo";
 

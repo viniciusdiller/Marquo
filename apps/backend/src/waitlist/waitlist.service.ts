@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { WaitlistStatus } from "@totalagenda/database";
+import { WaitlistStatus } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { ConsumerAuthService } from "../consumer-auth/consumer-auth.service";
 import { AuthenticatedConsumer } from "../consumer-auth/types/consumer-auth-user";

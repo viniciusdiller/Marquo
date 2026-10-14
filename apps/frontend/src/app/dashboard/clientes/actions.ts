@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { IntakeFormSummary } from "@totalagenda/shared-types";
+import type { IntakeFormSummary } from "@marquo/shared-types";
 import { authedFetch } from "@/lib/api-server";
 import { ApiError } from "@/lib/api";
 

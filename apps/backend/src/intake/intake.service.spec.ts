@@ -1,7 +1,7 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { IntakeService } from "./intake.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 
 const FIELDS = [
   { key: "alergia", label: "Alergias", type: "textarea", required: true },

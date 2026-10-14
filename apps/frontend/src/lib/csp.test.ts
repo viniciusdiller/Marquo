@@ -16,7 +16,7 @@ describe("generateNonce", () => {
 });
 
 describe("buildCsp", () => {
-  const csp = buildCsp({ nonce: "abc123", isDev: false, apiUrl: "https://api.totalagenda.com.br" });
+  const csp = buildCsp({ nonce: "abc123", isDev: false, apiUrl: "https://api.marquo.com.br" });
 
   it("script só com nonce + strict-dynamic: sem 'unsafe-inline' e sem 'unsafe-eval' em produção", () => {
     const script = directive(csp, "script-src");
@@ -34,8 +34,8 @@ describe("buildCsp", () => {
   });
 
   it("libera só a origem da API para chamadas do navegador e imagens de /uploads", () => {
-    assert.match(directive(csp, "connect-src"), /https:\/\/api\.totalagenda\.com\.br/);
-    assert.match(directive(csp, "img-src"), /https:\/\/api\.totalagenda\.com\.br/);
+    assert.match(directive(csp, "connect-src"), /https:\/\/api\.marquo\.com\.br/);
+    assert.match(directive(csp, "img-src"), /https:\/\/api\.marquo\.com\.br/);
     assert.doesNotMatch(directive(csp, "connect-src"), /\*/);
   });
 

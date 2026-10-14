@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { CommissionRule } from "@totalagenda/shared-types";
+import type { CommissionRule } from "@marquo/shared-types";
 
 const actions = vi.hoisted(() => ({
   create: vi.fn(),

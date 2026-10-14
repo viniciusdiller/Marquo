@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LEGAL_DOCS_VERSION } from "@totalagenda/shared-types";
+import { LEGAL_DOCS_VERSION } from "@marquo/shared-types";
 import { Logo } from "@/components/brand/Logo";
 import { Footer } from "@/components/marketing/Footer";
 import { BackLink } from "@/components/ui/BackLink";

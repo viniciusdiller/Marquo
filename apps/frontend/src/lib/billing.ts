@@ -125,7 +125,7 @@ export function bannerFor(billing: BillingStatusResponse, now: number = Date.now
       };
     case "CANCELED":
       return {
-        message: "Sua assinatura foi cancelada. Assine novamente para voltar a usar o TotalAgenda.",
+        message: "Sua assinatura foi cancelada. Assine novamente para voltar a usar o Marquo.",
         tone: "danger",
         ctaLabel: "Assinar novamente",
       };

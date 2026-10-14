@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { TenantsController } from "./tenants.controller";
 import { ROLES_KEY } from "../common/decorators/roles.decorator";
 import { IS_PUBLIC_KEY } from "../common/decorators/public.decorator";

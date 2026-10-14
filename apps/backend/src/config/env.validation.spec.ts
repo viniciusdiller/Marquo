@@ -33,7 +33,7 @@ describe("validateEnv", () => {
         NODE_ENV: "production",
         CLIENT_IP_SECRET: "c".repeat(32),
         INTERNAL_API_SECRET: "i".repeat(32),
-        FRONTEND_URL: "https://totalagenda.com.br",
+        FRONTEND_URL: "https://marquo.com.br",
         STRIPE_SECRET_KEY: "sk_live_abc123",
         STRIPE_WEBHOOK_SECRET: "whsec_abc123",
         STRIPE_PRICE_ESSENCIAL: "price_e1",
@@ -62,7 +62,7 @@ describe("validateEnv", () => {
       ...strong,
       NODE_ENV: "production",
       CLIENT_IP_SECRET: "c".repeat(32),
-      FRONTEND_URL: "https://totalagenda.com.br",
+      FRONTEND_URL: "https://marquo.com.br",
       STRIPE_SECRET_KEY: "sk_live_abc123",
       STRIPE_WEBHOOK_SECRET: "whsec_abc123",
       STRIPE_PRICE_ESSENCIAL: "price_e1",
@@ -88,7 +88,7 @@ describe("validateEnv: Stripe e FRONTEND_URL", () => {
     STRIPE_PRICE_PROFISSIONAL: "price_p1",
     STRIPE_PRICE_PREMIUM: "price_x1",
   };
-  const prod = { ...dev, NODE_ENV: "production", CLIENT_IP_SECRET: "c".repeat(32), INTERNAL_API_SECRET: "i".repeat(32), FRONTEND_URL: "https://totalagenda.com.br" };
+  const prod = { ...dev, NODE_ENV: "production", CLIENT_IP_SECRET: "c".repeat(32), INTERNAL_API_SECRET: "i".repeat(32), FRONTEND_URL: "https://marquo.com.br" };
 
   it("em desenvolvimento nada do Stripe é obrigatório (o backend local não cai no boot)", () => {
     expect(() => validateEnv(dev)).not.toThrow();

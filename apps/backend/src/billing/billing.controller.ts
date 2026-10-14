@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Post, Query } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { BillingService } from "./billing.service";
 import { CheckoutService } from "./checkout.service";
 import { PlanChangeService } from "./plan-change.service";

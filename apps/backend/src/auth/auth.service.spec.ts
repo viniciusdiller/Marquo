@@ -1,6 +1,6 @@
 import { BadRequestException, UnauthorizedException } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { AuthService } from "./auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 

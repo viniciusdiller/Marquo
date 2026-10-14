@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import type { MarketplaceSettings as Settings } from "@totalagenda/shared-types";
+import type { MarketplaceSettings as Settings } from "@marquo/shared-types";
 import { Input } from "@/components/ui/Input";
 import { saveMarketplaceAction, type MarketplaceActionState } from "./actions";
 

@@ -2,7 +2,7 @@ import { join } from "path";
 import { mkdir, unlink } from "fs/promises";
 import { randomUUID } from "crypto";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@totalagenda/database";
+import { Prisma } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { UpdateTenantProfileDto } from "./dto/update-tenant-profile.dto";
 import { UpdateMarketplaceDto } from "./dto/update-marketplace.dto";

@@ -1,4 +1,4 @@
-import type { IntakeFormSummary } from "@totalagenda/shared-types";
+import type { IntakeFormSummary } from "@marquo/shared-types";
 import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
 import { requireRole } from "@/lib/guards";

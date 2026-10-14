@@ -1,5 +1,5 @@
 import { BadGatewayException, ConflictException, ServiceUnavailableException } from "@nestjs/common";
-import { PlanTier, Role } from "@totalagenda/database";
+import { PlanTier, Role } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 import { CheckoutService } from "./checkout.service";

@@ -1,6 +1,6 @@
 import { Type } from "class-transformer";
 import { ArrayMaxSize, ArrayMinSize, IsEnum, IsInt, Max, Min, ValidateNested } from "class-validator";
-import { Weekday } from "@totalagenda/database";
+import { Weekday } from "@marquo/database";
 
 export class WorkingHoursIntervalDto {
   @IsEnum(Weekday)

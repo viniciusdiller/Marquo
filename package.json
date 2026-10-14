@@ -1,5 +1,5 @@
 {
-  "name": "totalagenda",
+  "name": "marquo",
   "private": true,
   "version": "0.0.1",
   "engines": {
@@ -36,8 +36,8 @@
     "test": "turbo run test",
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
-    "db:studio": "pnpm --filter @totalagenda/database db:studio",
-    "db:seed": "pnpm --filter @totalagenda/database db:seed"
+    "db:studio": "pnpm --filter @marquo/database db:studio",
+    "db:seed": "pnpm --filter @marquo/database db:seed"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

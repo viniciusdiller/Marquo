@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
 import { CaretLeft } from "@phosphor-icons/react/dist/ssr";
-import type { AdminClientDetail } from "@totalagenda/shared-types";
+import type { AdminClientDetail } from "@marquo/shared-types";
 import { authedFetch } from "@/lib/api-server";
 import { ApiError } from "@/lib/api";
 import { ClientForm } from "../ClientForm";

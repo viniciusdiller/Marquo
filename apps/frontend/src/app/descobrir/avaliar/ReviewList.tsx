@@ -4,7 +4,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import { DateTime } from "luxon";
 import { Star } from "@phosphor-icons/react/dist/ssr";
-import type { ReviewablePastAppointment } from "@totalagenda/shared-types";
+import type { ReviewablePastAppointment } from "@marquo/shared-types";
 import { submitReviewAction } from "./actions";
 
 const FOCUS_RING =

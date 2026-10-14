@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, ReviewStatus } from "@totalagenda/database";
+import { Prisma, ReviewStatus } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 
 // ~111 km por grau de latitude; usamos um bounding box grosseiro e ordenamos por distância

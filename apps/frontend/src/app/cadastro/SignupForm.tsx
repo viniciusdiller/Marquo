@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LEGAL_DOCS_VERSION } from "@totalagenda/shared-types";
+import { LEGAL_DOCS_VERSION } from "@marquo/shared-types";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { ApiError, publicApi } from "@/lib/api";

@@ -1,4 +1,4 @@
-import type { PublicService } from "@totalagenda/shared-types";
+import type { PublicService } from "@marquo/shared-types";
 import { RadioCard } from "../ui/RadioCard";
 
 function formatPrice(cents: number) {

@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
   // shared-types é TS sem build e agora exporta um valor (LEGAL_DOCS_VERSION), não só tipos.
-  transpilePackages: ["@totalagenda/shared-types"],
+  transpilePackages: ["@marquo/shared-types"],
   images: {
     // picsum.photos é usado como placeholder de fotografia editorial (ver seção 4.8 da
     // design-taste-frontend skill) até termos fotos reais de salões/barbearias clientes.

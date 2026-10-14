@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from "@nestjs/common";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { CommissionsService } from "./commissions.service";
 import { UpsertCommissionRuleDto } from "./dto/upsert-commission-rule.dto";
 import { RangeByProfessionalQueryDto } from "../common/dto/query-dtos";

@@ -1,5 +1,5 @@
 import { Body, Controller, ForbiddenException, Get, Param, Patch, Post } from "@nestjs/common";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { ServicesService } from "./services.service";
 import { CreateServiceDto } from "./dto/create-service.dto";
 import { UpdateServiceDto } from "./dto/update-service.dto";

@@ -3,7 +3,7 @@
 // (ponto para o advogado). Ver lib/legal.ts.
 //
 // As afirmações sobre como o produto funciona (trial, cobrança, dados guardados) refletem o código
-// atual do TotalAgenda; confira com o time antes de publicar se algo mudou.
+// atual do Marquo; confira com o time antes de publicar se algo mudou.
 
 export interface LegalSection {
   title: string;
@@ -14,7 +14,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     title: "1. Quem somos e aceite",
     paragraphs: [
-      "O TotalAgenda é um sistema de agendamento e gestão para salões, barbearias e prestadores de serviço por horário, oferecido por [PREENCHER: razão social], inscrita no CNPJ [PREENCHER: CNPJ], com sede em [PREENCHER: endereço completo] (“TotalAgenda”, “nós”).",
+      "O Marquo é um sistema de agendamento e gestão para salões, barbearias e prestadores de serviço por horário, oferecido por [PREENCHER: razão social], inscrita no CNPJ [PREENCHER: CNPJ], com sede em [PREENCHER: endereço completo] (“Marquo”, “nós”).",
       "Ao criar uma conta você declara que leu e aceita estes Termos de Uso e a Política de Privacidade. Se não concordar, não crie a conta.",
     ],
   },
@@ -22,7 +22,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
     title: "2. O serviço",
     paragraphs: [
       "Cada negócio cadastrado (“Estabelecimento”) recebe uma página pública própria para receber agendamentos e um painel de gestão (agenda, clientes, comandas, produtos, caixa, financeiro e comissões, conforme o plano contratado).",
-      "O TotalAgenda é uma ferramenta: quem presta o serviço ao cliente final é o Estabelecimento, que é o único responsável por horários, preços, atendimento e pelas relações com os próprios clientes.",
+      "O Marquo é uma ferramenta: quem presta o serviço ao cliente final é o Estabelecimento, que é o único responsável por horários, preços, atendimento e pelas relações com os próprios clientes.",
     ],
   },
   {
@@ -36,7 +36,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
     title: "4. Período de teste, planos e pagamento",
     paragraphs: [
       "Novos cadastros têm 14 dias de teste gratuito, sem necessidade de cartão de crédito. Terminado o teste sem uma assinatura ativa, o acesso ao painel é bloqueado e a página pública deixa de aceitar novos agendamentos até a contratação de um plano.",
-      "Os planos, limites (como o número de profissionais) e valores mensais são os exibidos na página de planos no momento da contratação. O pagamento é feito por cartão, processado pela Stripe; o TotalAgenda não recebe nem armazena os dados do seu cartão.",
+      "Os planos, limites (como o número de profissionais) e valores mensais são os exibidos na página de planos no momento da contratação. O pagamento é feito por cartão, processado pela Stripe; o Marquo não recebe nem armazena os dados do seu cartão.",
       "A assinatura é renovada mensalmente até ser cancelada. Você pode cancelar a qualquer momento; o acesso segue até o fim do período já pago. Política de reembolso: [DECIDIR: reembolso proporcional, nenhum reembolso ou prazo de arrependimento].",
       "Reajustes de preço: [DECIDIR: regra e prazo de aviso prévio para reajuste].",
     ],
@@ -44,14 +44,14 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     title: "5. Uso aceitável",
     paragraphs: [
-      "É proibido usar o TotalAgenda para atividades ilegais, para enviar conteúdo ofensivo ou enganoso, para tentar acessar dados de outros Estabelecimentos, para sobrecarregar ou testar a segurança do sistema sem autorização, ou para revender o acesso sem acordo por escrito.",
+      "É proibido usar o Marquo para atividades ilegais, para enviar conteúdo ofensivo ou enganoso, para tentar acessar dados de outros Estabelecimentos, para sobrecarregar ou testar a segurança do sistema sem autorização, ou para revender o acesso sem acordo por escrito.",
       "Podemos suspender contas que violem estas regras, com aviso quando possível.",
     ],
   },
   {
     title: "6. Dados dos seus clientes",
     paragraphs: [
-      "Os dados pessoais dos clientes do seu Estabelecimento (nome, telefone, e-mail, histórico de atendimentos, notas, fichas de anamnese e avaliações) são tratados por nós em seu nome. Em relação a eles, o Estabelecimento é o controlador e o TotalAgenda é o operador, nos termos da Lei Geral de Proteção de Dados (LGPD, Lei 13.709/2018).",
+      "Os dados pessoais dos clientes do seu Estabelecimento (nome, telefone, e-mail, histórico de atendimentos, notas, fichas de anamnese e avaliações) são tratados por nós em seu nome. Em relação a eles, o Estabelecimento é o controlador e o Marquo é o operador, nos termos da Lei Geral de Proteção de Dados (LGPD, Lei 13.709/2018).",
       "Você é responsável por ter base legal para coletar esses dados, por informar seus clientes e por atender aos pedidos deles. Fichas de anamnese podem conter dados de saúde, que são dados pessoais sensíveis: colete apenas o necessário. [REVISAR: cláusula de operador/controlador e eventual contrato de tratamento de dados.]",
     ],
   },
@@ -64,7 +64,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     title: "8. Propriedade intelectual",
     paragraphs: [
-      "O software, a marca e o layout do TotalAgenda pertencem a nós. Você recebe um direito de uso limitado, não exclusivo e intransferível enquanto sua conta estiver ativa.",
+      "O software, a marca e o layout do Marquo pertencem a nós. Você recebe um direito de uso limitado, não exclusivo e intransferível enquanto sua conta estiver ativa.",
       "Os conteúdos que você enviar (logo, fotos, textos, dados de clientes) continuam sendo seus; você nos autoriza a armazená-los e exibi-los apenas para prestar o serviço.",
     ],
   },
@@ -98,19 +98,19 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     title: "1. Quem é o responsável",
     paragraphs: [
-      "Esta política descreve como o TotalAgenda trata dados pessoais. Somos [PREENCHER: razão social], CNPJ [PREENCHER: CNPJ], [PREENCHER: endereço completo].",
+      "Esta política descreve como o Marquo trata dados pessoais. Somos [PREENCHER: razão social], CNPJ [PREENCHER: CNPJ], [PREENCHER: endereço completo].",
       "Encarregado pelo tratamento de dados (LGPD): [PREENCHER: nome e e-mail do encarregado].",
-      "Papéis: para os dados do dono da conta e dos usuários do Estabelecimento (equipe) e para a conta de cliente do TotalAgenda, somos o controlador. Para os dados dos clientes de cada Estabelecimento, somos o operador e o Estabelecimento é o controlador. [REVISAR: enquadramento dos papéis.]",
+      "Papéis: para os dados do dono da conta e dos usuários do Estabelecimento (equipe) e para a conta de cliente do Marquo, somos o controlador. Para os dados dos clientes de cada Estabelecimento, somos o operador e o Estabelecimento é o controlador. [REVISAR: enquadramento dos papéis.]",
     ],
   },
   {
     title: "2. Quais dados tratamos",
     paragraphs: [
       "Dono e equipe do Estabelecimento: nome, e-mail, papel de acesso, senha (guardada apenas na forma de hash, nunca em texto), data e versão do aceite dos termos, e os dados do negócio que você preencher (nome, endereço, horários, telefone/WhatsApp, redes sociais, logo e fotos).",
-      "Conta de cliente do TotalAgenda: nome, telefone, e-mail, senha (em hash), avaliações, histórico de agendamentos e os dispositivos/navegadores com sessão aberta.",
+      "Conta de cliente do Marquo: nome, telefone, e-mail, senha (em hash), avaliações, histórico de agendamentos e os dispositivos/navegadores com sessão aberta.",
       "Clientes dos Estabelecimentos: nome, telefone, e-mail, histórico de atendimentos e pagamentos registrados, observações, etiquetas e fichas de anamnese, que podem conter dados de saúde (dados pessoais sensíveis). [REVISAR: tratamento de dados sensíveis, art. 11 da LGPD.]",
       "Dados técnicos: cookies de sessão e de preferência (tema), e registros de acesso do servidor, que incluem endereço IP. Contadores de tentativas de login são mantidos temporariamente. [PREENCHER: confirmar quais logs a hospedagem/proxy guardam e por quanto tempo.]",
-      "Pagamentos: o cartão é processado pela Stripe. O TotalAgenda não recebe nem armazena número, validade ou código do cartão; guarda apenas identificadores da assinatura e o status de cobrança.",
+      "Pagamentos: o cartão é processado pela Stripe. O Marquo não recebe nem armazena número, validade ou código do cartão; guarda apenas identificadores da assinatura e o status de cobrança.",
     ],
   },
   {
@@ -158,7 +158,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     title: "9. Crianças e adolescentes",
     paragraphs: [
-      "O TotalAgenda é destinado a maiores de idade. [REVISAR: tratamento de dados de menores, que podem ser clientes de um Estabelecimento, e o papel do responsável legal.]",
+      "O Marquo é destinado a maiores de idade. [REVISAR: tratamento de dados de menores, que podem ser clientes de um Estabelecimento, e o papel do responsável legal.]",
     ],
   },
   {

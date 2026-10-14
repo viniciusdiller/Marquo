@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
-import { AppointmentStatus, Role } from "@totalagenda/database";
+import { AppointmentStatus, Role } from "@marquo/database";
 import { AppointmentsService } from "./appointments.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ClientsService } from "../clients/clients.service";

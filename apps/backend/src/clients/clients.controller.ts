@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { ClientsService } from "./clients.service";
 import { CreateClientDto } from "./dto/create-client.dto";
 import { UpdateClientDto } from "./dto/update-client.dto";

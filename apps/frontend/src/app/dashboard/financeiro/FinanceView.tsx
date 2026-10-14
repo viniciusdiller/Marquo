@@ -16,7 +16,7 @@ import type {
   FinancialCategory,
   FinancialEntry,
   StaffRole,
-} from "@totalagenda/shared-types";
+} from "@marquo/shared-types";
 import {
   cancelEntryAction,
   createEntryAction,

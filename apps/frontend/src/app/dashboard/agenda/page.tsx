@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import type { CalendarResponse } from "@totalagenda/shared-types";
+import type { CalendarResponse } from "@marquo/shared-types";
 import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
 import { AgendaView } from "./AgendaView";

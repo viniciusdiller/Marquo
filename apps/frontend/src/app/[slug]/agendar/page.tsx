@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
 import { getTenant } from "../layout";
-import type { ConsumerMe } from "@totalagenda/shared-types";
+import type { ConsumerMe } from "@marquo/shared-types";
 import { consumerAuthedFetch } from "@/lib/consumer-session";
 import { formatPhoneBR } from "@/lib/masks";
 import { SiteHeader } from "@/components/account/SiteHeader";
@@ -16,7 +16,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const tenant = await getTenant(slug);
-  return { title: tenant ? `Agendar em ${tenant.name} - TotalAgenda` : "Negócio não encontrado" };
+  return { title: tenant ? `Agendar em ${tenant.name} - Marquo` : "Negócio não encontrado" };
 }
 
 export default async function AgendarPage({ params }: { params: Promise<{ slug: string }> }) {

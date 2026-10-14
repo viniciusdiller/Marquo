@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { DateTime } from "luxon";
-import { Weekday } from "@totalagenda/database";
+import { Weekday } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { intervalsOverlap } from "../common/utils/interval.util";
 

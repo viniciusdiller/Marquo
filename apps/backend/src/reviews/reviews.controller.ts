@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { ReviewsService } from "./reviews.service";
 import { CreateReviewDto, ReportReviewDto } from "./dto/review-dtos";
 import { Public } from "../common/decorators/public.decorator";

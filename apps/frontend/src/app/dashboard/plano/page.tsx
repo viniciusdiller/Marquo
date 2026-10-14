@@ -17,7 +17,7 @@ import { PlanCards } from "./PlanCards";
 import { PortalButton } from "./PortalButton";
 import { RefreshButton } from "./RefreshButton";
 
-export const metadata: Metadata = { title: "Plano e cobrança - TotalAgenda" };
+export const metadata: Metadata = { title: "Plano e cobrança - Marquo" };
 
 function statusSummary(billing: BillingStatusResponse): string {
   const sub = billing.subscription;
@@ -29,7 +29,7 @@ function statusSummary(billing: BillingStatusResponse): string {
         : `Você está no período de teste: ${left} dia${left === 1 ? "" : "s"} restante${left === 1 ? "" : "s"} (até ${formatDate(billing.trialEndsAt)}).`;
     }
     case "TRIAL_EXPIRED":
-      return "Seu período de teste terminou. Escolha um plano para voltar a usar o TotalAgenda.";
+      return "Seu período de teste terminou. Escolha um plano para voltar a usar o Marquo.";
     case "ACTIVE":
       return sub
         ? sub.cancelAtPeriodEnd && sub.currentPeriodEnd
@@ -41,7 +41,7 @@ function statusSummary(billing: BillingStatusResponse): string {
     case "UNPAID":
       return "Não conseguimos cobrar a assinatura. Atualize a forma de pagamento para reativar o acesso.";
     case "CANCELED":
-      return "Sua assinatura foi cancelada. Escolha um plano para voltar a usar o TotalAgenda.";
+      return "Sua assinatura foi cancelada. Escolha um plano para voltar a usar o Marquo.";
     case "INCOMPLETE":
       return "O pagamento da sua assinatura ainda não foi concluído. Escolha um plano para tentar de novo.";
   }

@@ -3,9 +3,10 @@ import {
   Catch,
   ConflictException,
   ExceptionFilter,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@totalagenda/database";
+import { Prisma } from "@marquo/database";
 import { Response } from "express";
 
 // SQLSTATE 23P01 = exclusion_violation (nossa constraint EXCLUDE anti double-booking).
@@ -15,6 +16,8 @@ const EXCLUSION_VIOLATION_SQLSTATE = "23P01";
 
 @Catch(Prisma.PrismaClientKnownRequestError, Prisma.PrismaClientUnknownRequestError)
 export class PrismaExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(PrismaExceptionFilter.name);
+
   catch(
     exception: Prisma.PrismaClientKnownRequestError | Prisma.PrismaClientUnknownRequestError,
     host: ArgumentsHost,
@@ -37,6 +40,13 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         new ConflictException("Este horário acabou de ser reservado por outro cliente."),
       );
     }
+
+    // O cliente só vê a mensagem genérica; o detalhe (código/tabela/coluna) fica no log do servidor,
+    // senão um erro de schema/migration vira um 409 mudo impossível de diagnosticar.
+    this.logger.error(
+      `Erro do Prisma sem tratamento específico: ${exception.message}`,
+      exception instanceof Prisma.PrismaClientKnownRequestError ? JSON.stringify(exception.meta) : undefined,
+    );
 
     return this.send(
       response,

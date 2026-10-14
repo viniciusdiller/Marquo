@@ -1,6 +1,6 @@
 import { ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { RolesGuard } from "./roles.guard";
 import { ROLES_KEY } from "../decorators/roles.decorator";
 

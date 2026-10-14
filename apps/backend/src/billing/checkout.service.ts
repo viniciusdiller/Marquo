@@ -1,5 +1,5 @@
 import { BadGatewayException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { PlanTier, SubscriptionStatus } from "@totalagenda/database";
+import { PlanTier, SubscriptionStatus } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 import { StripeService } from "./stripe.service";

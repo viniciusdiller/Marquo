@@ -1,5 +1,5 @@
 import { InstagramLogo, ArrowUpRight } from "@phosphor-icons/react/dist/ssr";
-import type { PublicTenant } from "@totalagenda/shared-types";
+import type { PublicTenant } from "@marquo/shared-types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 

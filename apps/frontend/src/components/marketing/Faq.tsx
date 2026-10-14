@@ -10,7 +10,7 @@ const faqs = [
       "Não. Você usa qualquer plano por 14 dias sem informar cartão. Só pedimos os dados de pagamento quando você decidir continuar.",
   },
   {
-    question: "O TotalAgenda cobra alguma coisa do meu cliente?",
+    question: "O Marquo cobra alguma coisa do meu cliente?",
     answer:
       "Não. O pagamento do serviço continua sendo combinado direto entre você e o cliente, do jeito que já funciona hoje. Cobramos só a assinatura mensal do seu negócio.",
   },

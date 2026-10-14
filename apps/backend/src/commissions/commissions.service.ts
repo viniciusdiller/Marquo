@@ -6,8 +6,8 @@ import {
   Role,
   TicketItemKind,
   TicketStatus,
-} from "@totalagenda/database";
-import type { EarningsReport, ProfessionalEarnings } from "@totalagenda/shared-types";
+} from "@marquo/database";
+import type { EarningsReport, ProfessionalEarnings } from "@marquo/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { UpsertCommissionRuleDto } from "./dto/upsert-commission-rule.dto";
 import { allocateDiscount } from "./discount-allocation.util";

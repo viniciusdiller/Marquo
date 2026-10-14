@@ -9,7 +9,7 @@ import {
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
-import { Prisma } from "@totalagenda/database";
+import { Prisma } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { isPlausibleBrazilianPhone, normalizePhone } from "../common/utils/phone.util";
 import { resolvePagination, toPage } from "../common/pagination/paginate";

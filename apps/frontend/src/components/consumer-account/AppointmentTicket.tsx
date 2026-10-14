@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { DateTime } from "luxon";
-import type { AvailableSlot, PublicBooking } from "@totalagenda/shared-types";
+import type { AvailableSlot, PublicBooking } from "@marquo/shared-types";
 import { publicApi } from "@/lib/api";
 import { DateTimeStep } from "../booking/DateTimeStep";
 import { WaitlistForm } from "../booking/WaitlistForm";

@@ -2,7 +2,7 @@ import type {
   MarketplaceCategory,
   MarketplaceEstablishment,
   MarketplaceResult,
-} from "@totalagenda/shared-types";
+} from "@marquo/shared-types";
 import { ApiError } from "./api";
 import { assertSafeApiPath } from "./api-path";
 

@@ -1,4 +1,4 @@
-# Backend — TotalAgenda API (NestJS)
+# Backend — Marquo API (NestJS)
 
 Este arquivo é só detalhe interno do backend. O `CLAUDE.md` da raiz do monorepo é a
 fonte de verdade pra arquitetura cross-cutting, segurança e convenções — ler ele

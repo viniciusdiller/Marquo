@@ -47,7 +47,7 @@ export default async function ConfiguracoesPage() {
           <>
             Como seu negócio aparece em{" "}
             <span className="font-medium text-zinc-700 dark:text-stone-200">
-              totalagenda.com/{tenant.slug}
+              marquo.com.br/{tenant.slug}
             </span>
             .
           </>

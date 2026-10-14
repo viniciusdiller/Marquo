@@ -1,4 +1,4 @@
-import { SubscriptionStatus } from "@totalagenda/database";
+import { SubscriptionStatus } from "@marquo/database";
 import {
   BillingStatus,
   billingBlockMessage,

@@ -3,7 +3,7 @@
 import { AuthError } from "next-auth";
 import { isSafeRedirectPath } from "@/lib/safe-path";
 import { headers } from "next/headers";
-import type { ConsumerSession } from "@totalagenda/shared-types";
+import type { ConsumerSession } from "@marquo/shared-types";
 import { ApiError } from "@/lib/api";
 import { signIn } from "@/lib/auth";
 import { consumerPublicFetch, setConsumerToken } from "@/lib/consumer-session";

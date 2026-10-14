@@ -2,7 +2,7 @@
 // DATABASE_URL e JWT_SECRET (lê apps/backend/.env): envelhece linhas no banco para simular a passagem do
 // tempo (janela de tolerância de 60 s, teto de 90 dias) sem esperar de verdade.
 import { createHash, createHmac } from "node:crypto";
-import { PrismaClient } from "@totalagenda/database";
+import { PrismaClient } from "@marquo/database";
 import { LEGAL_VERSION, call, claims, createChecker, loadEnv } from "./lib.mjs";
 
 const env = loadEnv();

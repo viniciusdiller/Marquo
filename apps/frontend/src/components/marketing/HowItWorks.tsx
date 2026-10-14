@@ -12,7 +12,7 @@ const steps = [
   {
     icon: PaperPlaneTilt,
     title: "Compartilhe o link do seu negócio",
-    body: "Todo negócio recebe um link próprio, tipo totalagenda.com/seu-salao, para colocar na bio do Instagram ou no status do WhatsApp.",
+    body: "Todo negócio recebe um link próprio, tipo marquo.com.br/seu-salao, para colocar na bio do Instagram ou no status do WhatsApp.",
   },
   {
     icon: UsersThree,

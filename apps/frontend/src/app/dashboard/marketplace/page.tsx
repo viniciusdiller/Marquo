@@ -1,4 +1,4 @@
-import type { MarketplaceSettings as Settings, OwnerReview } from "@totalagenda/shared-types";
+import type { MarketplaceSettings as Settings, OwnerReview } from "@marquo/shared-types";
 import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
 import { requireRole } from "@/lib/guards";

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
-import type { PublicBooking } from "@totalagenda/shared-types";
+import type { PublicBooking } from "@marquo/shared-types";
 
 const TIMEZONE = "America/Sao_Paulo";
 

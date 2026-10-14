@@ -1,4 +1,4 @@
-import type { AdminProduct, CommissionRule, EarningsReport } from "@totalagenda/shared-types";
+import type { AdminProduct, CommissionRule, EarningsReport } from "@marquo/shared-types";
 import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
 import { requireRole } from "@/lib/guards";

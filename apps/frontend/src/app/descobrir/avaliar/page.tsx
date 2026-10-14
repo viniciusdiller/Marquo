@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import type { ReviewablePastAppointment } from "@totalagenda/shared-types";
+import type { ReviewablePastAppointment } from "@marquo/shared-types";
 import { consumerAuthedFetch } from "@/lib/consumer-session";
 import { Footer } from "@/components/marketing/Footer";
 import { SiteHeader } from "@/components/account/SiteHeader";
 import { BackLink } from "@/components/ui/BackLink";
 import { ReviewList } from "./ReviewList";
 
-export const metadata: Metadata = { title: "Avaliar visitas - TotalAgenda" };
+export const metadata: Metadata = { title: "Avaliar visitas - Marquo" };
 
 export default async function AvaliarPage() {
   // Mesma conta global do resto do site (cookie httpOnly único) — sem sessão, vai pro login e

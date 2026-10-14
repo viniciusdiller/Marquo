@@ -10,7 +10,7 @@
   --font-body: var(--font-body);
   --font-brand: var(--font-brand);
 
-  /* Marca TotalAgenda (paleta 3a — roxo + coral). A outra branch de rebranding troca
+  /* Marca Marquo (paleta 3a — roxo + coral). A outra branch de rebranding troca
      só estes valores, o --brand-wordmark abaixo, components/brand/palette.ts e
      app/icon.svg. */
   --color-accent-50: #f1ecff;
