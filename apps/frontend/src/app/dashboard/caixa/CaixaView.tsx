@@ -4,7 +4,6 @@ import { useActionState, useRef, useState } from "react";
 import { DateTime } from "luxon";
 import type { CashRegisterSummary } from "@totalagenda/shared-types";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Input } from "@/components/ui/Input";
 import { MaskedInput } from "@/components/ui/MaskedInput";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { riseIn } from "@/lib/stagger";

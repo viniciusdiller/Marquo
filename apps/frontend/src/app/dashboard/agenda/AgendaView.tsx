@@ -6,7 +6,6 @@ import { CaretLeft, CaretRight, Plus, Users, WarningCircle } from "@phosphor-ico
 import clsx from "clsx";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { HowItWorks } from "@/components/ui/HowItWorks";
 import type {
   CalendarResponse,
   PublicBooking,

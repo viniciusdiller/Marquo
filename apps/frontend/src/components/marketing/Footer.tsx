@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Container } from "../ui/Container";
 import { Logo } from "../brand/Logo";
 import { BrandPattern } from "../brand/BrandPattern";
@@ -86,12 +87,12 @@ export function Footer({ isHome = false }: { isHome?: boolean }) {
             reservados.
           </p>
           <div className="flex gap-5">
-            <a href="/termos" className="transition-colors hover:text-zinc-900 dark:hover:text-white">
+            <Link href="/termos" className="transition-colors hover:text-zinc-900 dark:hover:text-white">
               Termos de Uso
-            </a>
-            <a href="/privacidade" className="transition-colors hover:text-zinc-900 dark:hover:text-white">
+            </Link>
+            <Link href="/privacidade" className="transition-colors hover:text-zinc-900 dark:hover:text-white">
               Privacidade
-            </a>
+            </Link>
           </div>
         </div>
       </Container>
