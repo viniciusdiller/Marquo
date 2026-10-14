@@ -6,7 +6,7 @@ import type {
   ClientIntakeResponse,
   IntakeFieldDef,
   IntakeFormSummary,
-} from "@totalagenda/shared-types";
+} from "@marquo/shared-types";
 import { submitIntakeResponseAction } from "../actions";
 
 function FieldInput({

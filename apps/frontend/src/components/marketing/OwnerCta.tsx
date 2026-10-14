@@ -25,7 +25,7 @@ export function OwnerCta() {
               Quer ser encontrado por quem já está procurando um salão?
             </h2>
             <p className="mt-4 max-w-[48ch] text-[15px] leading-relaxed text-accent-50">
-              Cadastre seu negócio no TotalAgenda, apareça na busca acima e
+              Cadastre seu negócio no Marquo, apareça na busca acima e
               comece a receber agendamento direto pelo seu link — sem
               trocar mensagem. Teste grátis por 14 dias, sem cartão.
             </p>
@@ -40,7 +40,7 @@ export function OwnerCta() {
             <div className="relative mx-auto w-full max-w-xs rounded-2xl bg-white p-5 shadow-2xl shadow-zinc-900/20">
               <div className="flex items-center gap-2 rounded-xl bg-zinc-100 px-3 py-2.5 text-xs font-medium text-zinc-600 dark:bg-zinc-100">
                 <LinkSimple size={14} />
-                totalagenda.com/<span className="text-accent-600">seu-salao</span>
+                marquo.com.br/<span className="text-accent-600">seu-salao</span>
               </div>
               <div className="mt-4 flex items-center gap-2 text-accent-600">
                 <CalendarCheck size={18} weight="fill" />

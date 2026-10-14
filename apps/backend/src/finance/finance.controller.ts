@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { FinanceService } from "./finance.service";
 import {
   CreateCategoryDto,

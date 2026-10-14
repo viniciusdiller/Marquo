@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { DateTime } from "luxon";
 import { DeviceMobile, Monitor } from "@phosphor-icons/react/dist/ssr";
-import type { ConsumerDevice } from "@totalagenda/shared-types";
+import type { ConsumerDevice } from "@marquo/shared-types";
 import { revokeOtherSessionsAction, revokeSessionAction } from "@/app/minha-conta/actions";
 
 function deviceLabel(userAgent: string | null): string {

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { DateTime } from "luxon";
 import { IdentificationCard, LockSimple, MagnifyingGlass, Plus } from "@phosphor-icons/react/dist/ssr";
-import type { AdminClientListItem, Paginated } from "@totalagenda/shared-types";
+import type { AdminClientListItem, Paginated } from "@marquo/shared-types";
 import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
 import { parsePageParam } from "@/lib/pagination";

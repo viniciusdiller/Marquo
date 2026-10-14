@@ -1,6 +1,6 @@
 import { UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { PrismaService } from "../../prisma/prisma.service";
 import { JwtStrategy } from "./jwt.strategy";
 

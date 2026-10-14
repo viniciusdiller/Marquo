@@ -6,8 +6,8 @@ import {
   FinancialEntryStatus,
   PaymentMethod,
   Prisma,
-} from "@totalagenda/database";
-import type { CommissionPayout } from "@totalagenda/shared-types";
+} from "@marquo/database";
+import type { CommissionPayout } from "@marquo/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { resolvePagination, toPage } from "../common/pagination/paginate";
 import {

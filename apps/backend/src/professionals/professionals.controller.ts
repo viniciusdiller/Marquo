@@ -11,7 +11,7 @@ import {
   Put,
   Query,
 } from "@nestjs/common";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { ProfessionalsService } from "./professionals.service";
 import { CreateProfessionalDto } from "./dto/create-professional.dto";
 import { UpdateProfessionalDto } from "./dto/update-professional.dto";

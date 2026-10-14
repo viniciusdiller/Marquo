@@ -30,14 +30,14 @@ export function LogoMark({
     >
       {variant === "filled" ? <rect width="48" height="48" rx="13" fill={BRAND.primary} /> : null}
       <path
-        d="M13.5 37L24 11l10.5 26"
+        d="M11.5 37V12l12.5 14 12.5-14v25"
         stroke={mainStroke}
         strokeWidth="4.6"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
-        d="M19 29.2l3.4 3.4 6.6-7.6"
+        d="M18.6 31.6l3.6 3.6 7.2-8"
         stroke={checkStroke}
         strokeWidth="3.6"
         strokeLinecap="round"
@@ -61,9 +61,8 @@ export function Logo({
     >
       <LogoMark size={markSize} />
       <span className="font-brand text-lg font-bold tracking-[-0.02em] text-zinc-900 dark:text-white">
-        Total
         <span className="text-(--brand-wordmark) transition-[filter] duration-200 group-hover:brightness-110">
-          Agenda
+          Marquo
         </span>
       </span>
     </motion.span>

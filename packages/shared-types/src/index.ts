@@ -2,7 +2,7 @@
 // O frontend envia a versão que o usuário viu ao aceitar no cadastro; o backend só aceita se for
 // IGUAL a esta, então mudar o texto sem trocar a versão (ou o contrário) é erro. Ao alterar os
 // documentos, atualize esta constante junto com o texto em apps/frontend/src/lib/legal-content.ts.
-export const LEGAL_DOCS_VERSION = "2026-09-24";
+export const LEGAL_DOCS_VERSION = "2026-10-14";
 
 // Resposta padrão de qualquer listagem paginada (backend: common/pagination/paginate.ts).
 export interface Paginated<T> {
@@ -567,7 +567,7 @@ export interface ApiErrorBody {
   error?: string;
 }
 
-// CATÁLOGO DE PLANOS — a ÚNICA definição de preço e limite do TotalAgenda.
+// CATÁLOGO DE PLANOS — a ÚNICA definição de preço e limite do Marquo.
 //
 // Para mudar um preço ou limite: edite AQUI, faça o deploy, e crie o Price novo no Stripe (o valor de um Price é
 // imutável) apontando STRIPE_PRICE_<TIER> para ele. Quem consome este arquivo:

@@ -39,7 +39,7 @@ export function parsePlanCookie(value: string | undefined | null): PlanTier | nu
 
 // Tudo é igual entre os planos, menos o tamanho da equipe (backend: Plan.maxProfessionals). Por isso o texto
 // de cada plano fala de equipe, e não de recursos que os outros "não têm". A frase de apresentação de cada plano
-// (`audience`) vem do catálogo único (@totalagenda/shared-types); os PREÇOS vêm de GET /plans, nunca daqui.
+// (`audience`) vem do catálogo único (@marquo/shared-types); os PREÇOS vêm de GET /plans, nunca daqui.
 export function teamLabel(maxProfessionals: number | null): string {
   if (maxProfessionals === null) return "Profissionais ilimitados";
   if (maxProfessionals === 1) return "1 profissional";

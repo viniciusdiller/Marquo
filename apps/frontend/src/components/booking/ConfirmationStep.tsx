@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import { CheckCircle } from "@phosphor-icons/react/dist/ssr";
-import type { PublicBooking } from "@totalagenda/shared-types";
+import type { PublicBooking } from "@marquo/shared-types";
 import { Button } from "../ui/Button";
 
 const TIMEZONE = "America/Sao_Paulo";

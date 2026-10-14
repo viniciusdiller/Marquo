@@ -6,7 +6,7 @@ import { MagnifyingGlass, MapPin, Star } from "@phosphor-icons/react/dist/ssr";
 import type {
   MarketplaceCategory,
   MarketplaceResult,
-} from "@totalagenda/shared-types";
+} from "@marquo/shared-types";
 import { marketplaceApi } from "@/lib/marketplace-api";
 
 const priceLabel = (n: number | null) => (n ? "$".repeat(n) : "");

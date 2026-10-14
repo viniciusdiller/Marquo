@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { BillingController } from "./billing.controller";
 import { ChangePlanDto, CreateCheckoutDto, PreviewChangePlanQueryDto } from "./dto/billing.dto";
 import { ROLES_KEY } from "../common/decorators/roles.decorator";

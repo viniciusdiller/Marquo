@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { hashPasswordSetToken } from "../common/utils/password-set-token.util";
 import { LOCKOUT_THRESHOLD, lockoutDurationMs } from "../common/utils/lockout.util";

@@ -8,7 +8,7 @@ import { BackLink } from "@/components/ui/BackLink";
 import { type PlanInfo, isPlanInfo } from "@/lib/billing";
 import { parsePlanParam } from "@/lib/signup-plan";
 
-export const metadata: Metadata = { title: "Criar conta - TotalAgenda" };
+export const metadata: Metadata = { title: "Criar conta - Marquo" };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 const TIER_ORDER = ["ESSENCIAL", "PROFISSIONAL", "PREMIUM"];
@@ -36,7 +36,7 @@ export default async function CadastroPage({ searchParams }: { searchParams: Pro
         <BrandPattern mask="radial-gradient(ellipse 55% 60% at 50% 50%, transparent 30%, black 100%)" />
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between">
           <BackLink href="/" label="Voltar" />
-          <Link href="/" aria-label="TotalAgenda, página inicial">
+          <Link href="/" aria-label="Marquo, página inicial">
             <Logo />
           </Link>
           <Link

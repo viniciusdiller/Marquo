@@ -8,7 +8,7 @@ import {
   Post,
   Query,
 } from "@nestjs/common";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { TimeBlocksService } from "./time-blocks.service";
 import { CreateTimeBlockDto } from "./dto/create-time-block.dto";
 import { TimeBlocksQueryDto } from "../common/dto/query-dtos";

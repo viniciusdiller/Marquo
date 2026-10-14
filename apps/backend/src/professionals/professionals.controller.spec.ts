@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { ForbiddenException } from "@nestjs/common";
 import { ProfessionalsController } from "./professionals.controller";
 import { ROLES_KEY } from "../common/decorators/roles.decorator";

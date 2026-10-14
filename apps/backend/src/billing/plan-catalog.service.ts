@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { PlanTier } from "@totalagenda/database";
-import { PLAN_CATALOG } from "@totalagenda/shared-types";
+import { PlanTier } from "@marquo/database";
+import { PLAN_CATALOG } from "@marquo/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { StripeService } from "./stripe.service";
 

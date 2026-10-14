@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from "motion/react";
 import clsx from "clsx";
 import { DateTime } from "luxon";
 import { X } from "@phosphor-icons/react/dist/ssr";
-import type { CalendarProfessional } from "@totalagenda/shared-types";
+import type { CalendarProfessional } from "@marquo/shared-types";
 import { formatPhoneBR } from "@/lib/masks";
 import { createStaffAppointmentAction } from "./actions";
 import { getStatusDotClasses } from "@/lib/appointment-status";

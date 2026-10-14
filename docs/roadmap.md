@@ -1,6 +1,6 @@
 # Roadmap — paridade de funcionalidade com o Trinks
 
-Objetivo: TotalAgenda como alternativa ao Trinks — agenda + gestão white-label para o
+Objetivo: Marquo como alternativa ao Trinks — agenda + gestão white-label para o
 estabelecimento **e** marketplace central de descoberta para o consumidor final.
 **Sem integração de pagamento nesta fase** (PDV registra formas de pagamento e valores,
 mas não processa transação; PSP fica para depois).
@@ -143,9 +143,9 @@ Refactor que todo o resto depende. Fazer e **revisar antes** de construir M1–M
 - Identidade visual: pass de design próprio (não copiar layout do Trinks — só paridade
   de função).
 
-## Billing dentro do TotalAgenda (em andamento)
+## Billing dentro do Marquo (em andamento)
 
-O TotalAgenda passa a cadastrar, dar trial e cobrar sozinho (Stripe direto); o Admin-TotalSoftware
+O Marquo passa a cadastrar, dar trial e cobrar sozinho (Stripe direto); o Admin-TotalSoftware
 vira back-office. Decisões: produtos independentes (sem SSO), trial de 14 dias sem cartão, só cartão
 via Stripe, sem provedor de e-mail na v1, troca de plano por tela própria (downgrade valendo na
 hora, dono escolhe quais profissionais excedentes desativar), bloqueio total pós-trial/cancelamento.
@@ -161,8 +161,8 @@ hora, dono escolhe quais profissionais excedentes desativar), bloqueio total pó
   dedupe por `event.id`, estado relido na API do Stripe), `POST /billing/change-plan`, exclusão de
   profissional só sem histórico, mensagens do guard por estado.
 - [x] Fase 3 — UI `/dashboard/plano`, modal de troca de plano com aviso explícito, banner com link.
-- [x] Fase 4 (TotalAgenda) — `webhooks/totalsoftware`, `WebhookSecretGuard`, `TOTALAGENDA_*` e `Tenant.externalCustomerId`
-  removidos (`/auth/set-password` mantido para a Fase 5). Pendente nos outros repos: tirar o TotalAgenda do
+- [x] Fase 4 (Marquo) — `webhooks/totalsoftware`, `WebhookSecretGuard`, `TOTALAGENDA_*` e `Tenant.externalCustomerId`
+  removidos (`/auth/set-password` mantido para a Fase 5). Pendente nos outros repos: tirar o Marquo do
   Admin (checkout, provisionamento, página `/totalagenda`) e apontar o "Assinar" do site para `/cadastro`.
 - [x] Fase 5 — API interna com HMAC (`src/internal`) + página `/suporte-totalagenda` no Admin (buscar tenant, gerar link de redefinição), com auditoria e sessões antigas revogadas.
 

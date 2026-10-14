@@ -1,7 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { PlanTier } from "@totalagenda/database";
-import { PLAN_CURRENCY, PLAN_INTERVAL, planCatalogEntry } from "@totalagenda/shared-types";
+import { PlanTier } from "@marquo/database";
+import { PLAN_CURRENCY, PLAN_INTERVAL, planCatalogEntry } from "@marquo/shared-types";
 import Stripe from "stripe";
 import { failStripeCall } from "./stripe-errors";
 

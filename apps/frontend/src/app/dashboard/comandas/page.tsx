@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Receipt } from "@phosphor-icons/react/dist/ssr";
-import type { Ticket } from "@totalagenda/shared-types";
+import type { Ticket } from "@marquo/shared-types";
 import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
 import { requireRole } from "@/lib/guards";

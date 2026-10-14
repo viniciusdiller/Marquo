@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { DateTime } from "luxon";
 import { Star } from "@phosphor-icons/react/dist/ssr";
-import type { OwnerReview } from "@totalagenda/shared-types";
+import type { OwnerReview } from "@marquo/shared-types";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { riseIn } from "@/lib/stagger";

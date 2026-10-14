@@ -7,7 +7,7 @@ interface InputProps extends ComponentPropsWithoutRef<"input"> {
   hint?: string;
   // true dentro da página pública do tenant/wizard/conta do cliente, onde o foco deve usar
   // a cor de destaque escopada ao tenant (--tenant-accent) em vez da marca fixa do
-  // TotalAgenda. Padrão false — não afeta staff login nem formulários do dashboard.
+  // Marquo. Padrão false — não afeta staff login nem formulários do dashboard.
   accentScoped?: boolean;
 }
 

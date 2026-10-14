@@ -3,8 +3,8 @@ import { BadRequestException, ConflictException } from "@nestjs/common";
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import * as bcrypt from "bcrypt";
-import { Prisma, Role } from "@totalagenda/database";
-import { LEGAL_DOCS_VERSION } from "@totalagenda/shared-types";
+import { Prisma, Role } from "@marquo/database";
+import { LEGAL_DOCS_VERSION } from "@marquo/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { TRIAL_DAYS } from "../billing/trial.constants";
 import { computeBillingStatus, hasBillingAccess } from "../billing/billing-status.util";
@@ -110,7 +110,7 @@ describe("SignupService", () => {
   });
 
   // Regressão do risco novo do cadastro público: /[slug] divide o namespace com as rotas do app.
-  it.each(["Dashboard", "Entrar", "Cadastro", "TotalAgenda", "API"])(
+  it.each(["Dashboard", "Entrar", "Cadastro", "Marquo", "API"])(
     "nome '%s' não ocupa slug reservado",
     async (name) => {
       const { prisma, tx } = buildPrisma();

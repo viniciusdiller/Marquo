@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import type { PublicGalleryImage } from "@totalagenda/shared-types";
+import type { PublicGalleryImage } from "@marquo/shared-types";
 import { Container } from "../ui/Container";
 import { Reveal } from "../ui/Reveal";
 import { SectionHeading } from "../ui/SectionHeading";

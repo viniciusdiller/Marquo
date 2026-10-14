@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { DateTime } from "luxon";
 import clsx from "clsx";
 import { X } from "@phosphor-icons/react/dist/ssr";
-import type { CalendarProfessional, PublicBooking } from "@totalagenda/shared-types";
+import type { CalendarProfessional, PublicBooking } from "@marquo/shared-types";
 import {
   cancelAppointmentAction,
   rescheduleAppointmentAction,

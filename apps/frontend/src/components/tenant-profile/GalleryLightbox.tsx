@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CaretLeft, CaretRight, X } from "@phosphor-icons/react/dist/ssr";
-import type { PublicGalleryImage } from "@totalagenda/shared-types";
+import type { PublicGalleryImage } from "@marquo/shared-types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 const SPRING = { type: "spring" as const, stiffness: 300, damping: 30 };

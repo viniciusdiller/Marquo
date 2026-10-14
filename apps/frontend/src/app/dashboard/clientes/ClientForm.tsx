@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import type { AdminClientDetail } from "@totalagenda/shared-types";
+import type { AdminClientDetail } from "@marquo/shared-types";
 import { Input } from "@/components/ui/Input";
 import { MaskedInput } from "@/components/ui/MaskedInput";
 import { Button } from "@/components/ui/Button";

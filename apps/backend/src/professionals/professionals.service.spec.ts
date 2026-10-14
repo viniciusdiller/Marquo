@@ -1,5 +1,5 @@
 import { ConflictException, NotFoundException } from "@nestjs/common";
-import { AppointmentStatus } from "@totalagenda/database";
+import { AppointmentStatus } from "@marquo/database";
 import { ProfessionalsService } from "./professionals.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { PlanLimitService } from "../billing/plan-limit.service";

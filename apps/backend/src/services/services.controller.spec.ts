@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import { ForbiddenException } from "@nestjs/common";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { ProfessionalServicesController, ServicesController } from "./services.controller";
 import { ROLES_KEY } from "../common/decorators/roles.decorator";
 import type { AuthenticatedUser } from "../auth/types/auth-user";

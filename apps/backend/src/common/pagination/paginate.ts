@@ -1,4 +1,4 @@
-import type { Paginated } from "@totalagenda/shared-types";
+import type { Paginated } from "@marquo/shared-types";
 import { DEFAULT_PAGE_SIZE, PaginationQueryDto } from "./pagination-query.dto";
 
 export function resolvePagination(query: PaginationQueryDto) {

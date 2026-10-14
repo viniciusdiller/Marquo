@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { PaymentMethod, Prisma, TicketItemKind, TicketStatus } from "@totalagenda/database";
+import { PaymentMethod, Prisma, TicketItemKind, TicketStatus } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProductsService } from "../products/products.service";
 import { CommissionsService } from "../commissions/commissions.service";

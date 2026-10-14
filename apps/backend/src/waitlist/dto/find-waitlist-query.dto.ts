@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional } from "class-validator";
-import { WaitlistStatus } from "@totalagenda/database";
+import { WaitlistStatus } from "@marquo/database";
 
 export class FindWaitlistQueryDto {
   @IsOptional()

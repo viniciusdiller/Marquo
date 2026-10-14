@@ -5,7 +5,7 @@ import { GetClientBalanceQueryDto } from './dto/get-client-balance.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/types/auth-user';
 import { Roles } from '../common/decorators/roles.decorator';
-import { Role } from '@totalagenda/database';
+import { Role } from '@marquo/database';
 
 @Controller('reports')
 export class ReportsController {

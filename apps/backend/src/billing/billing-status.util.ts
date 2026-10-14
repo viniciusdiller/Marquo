@@ -1,4 +1,4 @@
-import { SubscriptionStatus } from "@totalagenda/database";
+import { SubscriptionStatus } from "@marquo/database";
 
 export type BillingStatus = "TRIALING" | "TRIAL_EXPIRED" | SubscriptionStatus;
 
@@ -22,12 +22,12 @@ export function hasBillingAccess(status: BillingStatus): boolean {
 export function billingBlockMessage(status: BillingStatus): string {
   switch (status) {
     case "CANCELED":
-      return "Sua assinatura foi cancelada. Assine novamente para voltar a usar o TotalAgenda.";
+      return "Sua assinatura foi cancelada. Assine novamente para voltar a usar o Marquo.";
     case "UNPAID":
       return "Não conseguimos processar o pagamento da sua assinatura. Atualize a forma de pagamento para reativar o acesso.";
     case "INCOMPLETE":
       return "O pagamento da sua assinatura ainda não foi concluído. Conclua o pagamento para liberar o acesso.";
     default:
-      return "Seu período de teste terminou. Assine um plano para continuar usando o TotalAgenda.";
+      return "Seu período de teste terminou. Assine um plano para continuar usando o Marquo.";
   }
 }

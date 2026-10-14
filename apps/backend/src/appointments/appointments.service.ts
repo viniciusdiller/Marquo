@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { DateTime } from "luxon";
-import { AppointmentStatus, Prisma, Role } from "@totalagenda/database";
+import { AppointmentStatus, Prisma, Role } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { computeBillingStatus, hasBillingAccess } from "../billing/billing-status.util";
 import { CreateAppointmentDto } from "./dto/create-appointment.dto";

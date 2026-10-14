@@ -1,5 +1,5 @@
 import "server-only";
-import type { ConsumerMe, Paginated, PublicBooking } from "@totalagenda/shared-types";
+import type { ConsumerMe, Paginated, PublicBooking } from "@marquo/shared-types";
 import { auth } from "@/lib/auth";
 import { consumerAuthedFetch, getConsumerToken } from "@/lib/consumer-session";
 

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { WaitlistService } from "./waitlist.service";
 import { CreateWaitlistEntryDto } from "./dto/create-waitlist-entry.dto";
 import { UpdateWaitlistStatusDto } from "./dto/update-waitlist-status.dto";

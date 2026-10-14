@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
-import { Prisma, Role } from "@totalagenda/database";
-import { LEGAL_DOCS_VERSION } from "@totalagenda/shared-types";
+import { Prisma, Role } from "@marquo/database";
+import { LEGAL_DOCS_VERSION } from "@marquo/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { generateUniqueSlug } from "../common/utils/slug.util";
 import { isReservedSlug } from "../common/constants/reserved-slugs";

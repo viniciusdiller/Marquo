@@ -1,4 +1,8 @@
-# TotalAgenda
+# Marquo
+
+> Antes chamado TotalAgenda. Identificadores legados mantidos de propósito (renomear quebra dados/integrações):
+> `metadata.product="totalagenda"` do Stripe, `idempotencyKey` `totalagenda-customer-*`, banco/usuário/volume do
+> Postgres (`totalagenda_*` no `docker-compose.yml`) e a página `/suporte-totalagenda` do Admin.
 
 SaaS multi-tenant de agendamento e gestão para salões, barbearias e prestadores de
 serviço por horário. Cada negócio (tenant) tem página pública própria em `/[slug]` +
@@ -13,7 +17,7 @@ painel de gestão em `/dashboard`. Concorrente direto do Trinks — ver
 | Backend   | NestJS 10 (`apps/backend`), Express, Passport JWT, class-validator, Luxon |
 | Frontend  | Next.js 16 (App Router, Turbopack) + React 19 (`apps/frontend`), Tailwind v4, NextAuth v5 beta, Zod |
 | DB        | PostgreSQL 16 + Prisma 5 (`packages/database`) |
-| Tipos     | `@totalagenda/shared-types` (contrato compartilhado front/back) |
+| Tipos     | `@marquo/shared-types` (contrato compartilhado front/back) |
 
 > `apps/frontend/AGENTS.md`: esta versão do Next tem breaking changes — consultar
 > `node_modules/next/dist/docs/` antes de escrever código de frontend.
@@ -23,8 +27,8 @@ painel de gestão em `/dashboard`. Concorrente direto do Trinks — ver
 ```bash
 docker compose up -d                    # Postgres em localhost:5432
 pnpm install
-pnpm --filter @totalagenda/database db:migrate
-pnpm --filter @totalagenda/database db:seed
+pnpm --filter @marquo/database db:migrate
+pnpm --filter @marquo/database db:seed
 pnpm dev                                # backend :3001, frontend :3000
 ```
 
@@ -78,7 +82,7 @@ depois" (evita janela de IDOR).
     antes de abrir amplamente.
 
 ### Billing
-**Em migração** (plano em `docs/roadmap.md`): o TotalAgenda passa a cadastrar, dar trial e cobrar
+**Em migração** (plano em `docs/roadmap.md`): o Marquo passa a cadastrar, dar trial e cobrar
 sozinho (Stripe direto), e o Admin-TotalSoftware vira só back-office.
 
 - **Preço e limite de cada plano: UMA definição só** — `PLAN_CATALOG` em `packages/shared-types/src/index.ts`
@@ -124,9 +128,9 @@ sozinho (Stripe direto), e o Admin-TotalSoftware vira só back-office.
   gravada, então eventos repetidos, fora de ordem ou atrasados convergem. O plano vem do Price, nunca
   do nome. `metadata.product=totalagenda` + `metadata.tenantId` isolam do TotalPousada na mesma conta do
   Stripe (o webhook do Admin, por sua vez, ignora tudo sem `clienteId`: **nunca** ponha `clienteId` na
-  metadata do TotalAgenda). `StripeEvent` é gravado só depois de processar, para o Stripe reentregar uma
+  metadata do Marquo). `StripeEvent` é gravado só depois de processar, para o Stripe reentregar uma
   falha. Em dev sem `STRIPE_*` as rotas respondem 503; em produção o boot exige todas as variáveis.
-- **O Admin-TotalSoftware não provisiona mais tenants do TotalAgenda:** o webhook `/webhooks/totalsoftware`,
+- **O Admin-TotalSoftware não provisiona mais tenants do Marquo:** o webhook `/webhooks/totalsoftware`,
   o `WebhookSecretGuard`, as variáveis `TOTALAGENDA_*` e `Tenant.externalCustomerId` foram removidos. O
   Admin só fala com este backend pela API interna de suporte (`src/internal`, HMAC — ver abaixo). A
   cobrança do TotalPousada continua no Admin e na mesma conta do Stripe.

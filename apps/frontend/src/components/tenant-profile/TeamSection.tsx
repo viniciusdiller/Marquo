@@ -1,4 +1,4 @@
-import type { PublicProfessional } from "@totalagenda/shared-types";
+import type { PublicProfessional } from "@marquo/shared-types";
 import { Container } from "../ui/Container";
 import { Reveal } from "../ui/Reveal";
 import { SectionHeading } from "../ui/SectionHeading";

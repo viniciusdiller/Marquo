@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CaretLeft } from "@phosphor-icons/react/dist/ssr";
-import type { AdminProduct, Ticket } from "@totalagenda/shared-types";
+import type { AdminProduct, Ticket } from "@marquo/shared-types";
 import { authedFetch } from "@/lib/api-server";
 import { ApiError } from "@/lib/api";
 import { TicketPdv } from "./TicketPdv";

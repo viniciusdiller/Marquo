@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { CashFlowReport, DreReport } from "@totalagenda/shared-types";
+import type { CashFlowReport, DreReport } from "@marquo/shared-types";
 import { authedFetch } from "@/lib/api-server";
 import { ApiError } from "@/lib/api";
 import { moneyToCents } from "@/lib/masks";

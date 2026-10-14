@@ -5,7 +5,7 @@ import clsx from "clsx";
 import { ArrowRight, CalendarCheck, Check, CheckCircle, Clock, CreditCard, Gift } from "@phosphor-icons/react/dist/ssr";
 import { Button } from "@/components/ui/Button";
 import { type PlanInfo, type PlanTier, formatBRL } from "@/lib/billing";
-import { planCatalogEntry } from "@totalagenda/shared-types";
+import { planCatalogEntry } from "@marquo/shared-types";
 import { INCLUDED_IN_ALL_PLANS, TRIAL_DAYS_LABEL, teamLabel } from "@/lib/signup-plan";
 import { SignupForm } from "./SignupForm";
 

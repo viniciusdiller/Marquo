@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { Role } from "@totalagenda/database";
+import { Role } from "@marquo/database";
 import { ROLES_KEY } from "../decorators/roles.decorator";
 import { AuthenticatedUser } from "../../auth/types/auth-user";
 

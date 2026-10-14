@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { CashMovementKind, CashRegisterStatus, PaymentMethod, Prisma } from "@totalagenda/database";
+import { CashMovementKind, CashRegisterStatus, PaymentMethod, Prisma } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { OpenCashRegisterDto } from "./dto/open-cash-register.dto";
 import { CashMovementDto, CloseCashRegisterDto } from "./dto/cash-movement.dto";

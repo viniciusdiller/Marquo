@@ -15,7 +15,7 @@ const variantClasses: Record<Variant, string> = {
   ghost:
     "bg-transparent text-zinc-900 ring-1 ring-inset ring-zinc-300 hover:bg-zinc-900/5 dark:text-white dark:ring-white/20 dark:hover:bg-white/10",
   // Cor de destaque escopada ao tenant (ver app/[slug]/layout.tsx), não a marca fixa do
-  // TotalAgenda — usado só dentro da página pública do salão/wizard/conta do cliente.
+  // Marquo — usado só dentro da página pública do salão/wizard/conta do cliente.
   tenant: "bg-(--tenant-accent) text-white shadow-lg hover:brightness-90",
 };
 

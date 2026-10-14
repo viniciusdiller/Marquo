@@ -1,5 +1,5 @@
 import { ConflictException, NotFoundException } from "@nestjs/common";
-import { PlanTier } from "@totalagenda/database";
+import { PlanTier } from "@marquo/database";
 import { PlanLimitService } from "./plan-limit.service";
 import { PrismaService } from "../prisma/prisma.service";
 

@@ -1,5 +1,5 @@
 import { MapPin, Clock, WhatsappLogo, ArrowUpRight } from "@phosphor-icons/react/dist/ssr";
-import type { PublicTenant } from "@totalagenda/shared-types";
+import type { PublicTenant } from "@marquo/shared-types";
 import { Container } from "../ui/Container";
 import { Reveal } from "../ui/Reveal";
 import { SectionHeading } from "../ui/SectionHeading";

@@ -83,7 +83,7 @@ export function Footer({ isHome = false }: { isHome?: boolean }) {
 
         <div className="mt-14 flex flex-col gap-3 border-t border-zinc-200 pt-6 text-sm text-zinc-500 sm:flex-row sm:items-center sm:justify-between dark:border-white/10 dark:text-stone-400">
           <p>
-            © {new Date().getFullYear()} TotalAgenda. Todos os direitos
+            © {new Date().getFullYear()} Marquo. Todos os direitos
             reservados.
           </p>
           <div className="flex gap-5">

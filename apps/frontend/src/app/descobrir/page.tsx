@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CaretLeft } from "@phosphor-icons/react/dist/ssr";
-import type { MarketplaceCategory } from "@totalagenda/shared-types";
+import type { MarketplaceCategory } from "@marquo/shared-types";
 import { DiscoverSearch } from "./DiscoverSearch";
 import { Footer } from "@/components/marketing/Footer";
 import { SiteHeader } from "@/components/account/SiteHeader";
@@ -10,7 +10,7 @@ import { BrandPattern } from "@/components/brand/BrandPattern";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export const metadata: Metadata = {
-  title: "Descobrir salões e barbearias | TotalAgenda",
+  title: "Descobrir salões e barbearias | Marquo",
   description:
     "Encontre salões de beleza e barbearias perto de você, veja avaliações e agende online.",
 };

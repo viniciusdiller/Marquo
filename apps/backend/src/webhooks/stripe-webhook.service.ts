@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { Prisma, SubscriptionStatus } from "@totalagenda/database";
+import { Prisma, SubscriptionStatus } from "@marquo/database";
 import type Stripe from "stripe";
 import { PrismaService } from "../prisma/prisma.service";
 import { StripeService } from "../billing/stripe.service";

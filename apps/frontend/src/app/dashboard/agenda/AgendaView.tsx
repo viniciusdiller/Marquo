@@ -10,7 +10,7 @@ import type {
   CalendarResponse,
   PublicBooking,
   StaffRole,
-} from "@totalagenda/shared-types";
+} from "@marquo/shared-types";
 import { fetchCalendarAction } from "./actions";
 import { AppointmentPanel } from "./AppointmentPanel";
 import { CreateAppointmentDialog } from "./CreateAppointmentDialog";

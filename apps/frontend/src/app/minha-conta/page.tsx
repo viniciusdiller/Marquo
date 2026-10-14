@@ -8,7 +8,7 @@ import type {
   ConsumerMe,
   Paginated,
   PublicBooking,
-} from "@totalagenda/shared-types";
+} from "@marquo/shared-types";
 import { consumerAuthedFetch } from "@/lib/consumer-session";
 import { formatPhoneBR } from "@/lib/masks";
 import { parsePageParam, type SearchParams } from "@/lib/pagination";
@@ -22,7 +22,7 @@ import { PasswordForm, ProfileForm } from "@/components/consumer-account/Profile
 import { SessionsList } from "@/components/consumer-account/SessionsList";
 import { logoutConsumerAction } from "./actions";
 
-export const metadata: Metadata = { title: "Minha conta - TotalAgenda" };
+export const metadata: Metadata = { title: "Minha conta - Marquo" };
 
 const TIMEZONE = "America/Sao_Paulo";
 const PATHNAME = "/minha-conta";

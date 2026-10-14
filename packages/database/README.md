@@ -1,6 +1,6 @@
-# @totalagenda/database
+# @marquo/database
 
-Pacote compartilhado de persistência do TotalAgenda, responsável pelo schema, migrations, seed e Prisma Client.
+Pacote compartilhado de persistência do Marquo, responsável pelo schema, migrations, seed e Prisma Client.
 
 ## Configuração local
 
@@ -27,7 +27,7 @@ pnpm db:studio
 Ou diretamente neste pacote:
 
 ```bash
-pnpm --filter @totalagenda/database db:studio
+pnpm --filter @marquo/database db:studio
 ```
 
 O script usa um launcher Node multiplataforma: ele localiza o binário local do Prisma, funciona no Windows, macOS e Linux, informa explicitamente o schema e fornece uma URL local apenas quando `DATABASE_URL` não foi carregada. Em produção ou ambientes compartilhados, defina sempre uma URL real por variável de ambiente; o fallback não substitui configuração de deploy.

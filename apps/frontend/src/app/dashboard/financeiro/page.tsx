@@ -2,7 +2,7 @@ import type {
   FinanceOverview,
   FinancialCategory,
   FinancialEntry,
-} from "@totalagenda/shared-types";
+} from "@marquo/shared-types";
 import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
 import { requireRole } from "@/lib/guards";

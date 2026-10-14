@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { AppointmentStatus, ReviewStatus } from "@totalagenda/database";
+import { AppointmentStatus, ReviewStatus } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateReviewDto, ReportReviewDto } from "./dto/review-dtos";
 import { AuthenticatedConsumer } from "../consumer-auth/types/consumer-auth-user";

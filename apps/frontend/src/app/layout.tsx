@@ -26,7 +26,7 @@ const brand = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "TotalAgenda - Agenda online para salões e barbearias",
+  title: "Marquo - Agenda online para salões e barbearias",
   description:
     "Cada profissional com sua própria agenda online. Cliente marca pelo link, sem criar conta. Teste grátis por 14 dias, sem cartão.",
   keywords: [
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     "software para salão de beleza",
   ],
   openGraph: {
-    title: "TotalAgenda - Agenda online para salões e barbearias",
+    title: "Marquo - Agenda online para salões e barbearias",
     description:
       "Cada profissional com sua própria agenda online. Cliente marca pelo link, sem criar conta.",
   },
@@ -55,7 +55,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       lang="pt-BR"
       className={`${display.variable} ${body.variable} ${brand.variable}${theme === "dark" ? " dark" : ""}`}
     >
-      <body className="min-h-dvh bg-stone-50 font-body text-zinc-900 antialiased dark:bg-zinc-950 dark:text-stone-100">
+      {/* suppressHydrationWarning: extensões do navegador (ex.: ColorZilla injeta cz-shortcut-listen)
+          alteram atributos do <body> antes do React hidratar; só silencia o <body>, não os filhos. */}
+      <body
+        suppressHydrationWarning
+        className="min-h-dvh bg-stone-50 font-body text-zinc-900 antialiased dark:bg-zinc-950 dark:text-stone-100"
+      >
         <ThemeProvider initialTheme={theme}>
           {children}
           <FloatingThemeToggle />

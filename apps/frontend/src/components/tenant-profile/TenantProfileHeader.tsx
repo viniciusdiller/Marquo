@@ -5,7 +5,7 @@ import {
   Star,
   WhatsappLogo,
 } from "@phosphor-icons/react/dist/ssr";
-import type { MarketplaceRating, PublicTenant } from "@totalagenda/shared-types";
+import type { MarketplaceRating, PublicTenant } from "@marquo/shared-types";
 import { Container } from "../ui/Container";
 import { Reveal } from "../ui/Reveal";
 import { TenantTopBar } from "./TenantTopBar";

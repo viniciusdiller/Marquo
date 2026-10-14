@@ -1,6 +1,6 @@
-# TotalAgenda - Regras do Sistema, Segurança e Data-Layers
+# Marquo - Regras do Sistema, Segurança e Data-Layers
 
-Este documento consolida as regras de negócio, funcionamento dos data-layers e padrões de segurança inflexíveis do sistema TotalAgenda. Este arquivo funciona como regras base para agentes de IA interagindo com este repositório, garantindo que nenhum padrão seja esquecido durante manutenções ou novas implementações.
+Este documento consolida as regras de negócio, funcionamento dos data-layers e padrões de segurança inflexíveis do sistema Marquo. Este arquivo funciona como regras base para agentes de IA interagindo com este repositório, garantindo que nenhum padrão seja esquecido durante manutenções ou novas implementações.
 
 ## 1. Stack e Camadas (Data-Layers)
 - **Monorepo**: Turborepo + pnpm workspaces.

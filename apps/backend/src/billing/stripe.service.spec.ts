@@ -1,6 +1,6 @@
 import { ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { PlanTier } from "@totalagenda/database";
+import { PlanTier } from "@marquo/database";
 import { StripeService } from "./stripe.service";
 
 function build(values: Record<string, string | undefined>) {
@@ -48,7 +48,7 @@ describe("StripeService", () => {
   });
 
   it("frontendUrl usa FRONTEND_URL sem barra final e cai em localhost só em desenvolvimento", () => {
-    expect(build({ FRONTEND_URL: "https://totalagenda.com.br/" }).frontendUrl()).toBe("https://totalagenda.com.br");
+    expect(build({ FRONTEND_URL: "https://marquo.com.br/" }).frontendUrl()).toBe("https://marquo.com.br");
     expect(build({}).frontendUrl()).toBe("http://localhost:3000");
   });
 });

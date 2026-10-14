@@ -8,7 +8,7 @@ import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatCentsBRL } from "@/lib/masks";
 import { riseIn } from "@/lib/stagger";
 import { brl } from "@/lib/money";
-import type { CommissionRule } from "@totalagenda/shared-types";
+import type { CommissionRule } from "@marquo/shared-types";
 import {
   createCommissionRuleAction,
   deleteCommissionRuleAction,

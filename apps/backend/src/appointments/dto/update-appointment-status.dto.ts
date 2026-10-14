@@ -1,5 +1,5 @@
 import { IsIn } from "class-validator";
-import { AppointmentStatus } from "@totalagenda/database";
+import { AppointmentStatus } from "@marquo/database";
 
 // Só os estados que a recepção seta manualmente. CANCELED tem endpoint próprio
 // (mantém o mesmo caminho do fluxo por token) e SCHEDULED/PUBLIC não são destino manual.

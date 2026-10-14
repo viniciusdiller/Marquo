@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Prisma, Role } from "@totalagenda/database";
+import { Prisma, Role } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { resolvePagination, toPage } from "../common/pagination/paginate";
 import { hashPasswordSetToken } from "../common/utils/password-set-token.util";

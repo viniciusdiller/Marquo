@@ -1,5 +1,5 @@
 import { IsEnum } from "class-validator";
-import { WaitlistStatus } from "@totalagenda/database";
+import { WaitlistStatus } from "@marquo/database";
 
 export class UpdateWaitlistStatusDto {
   @IsEnum(WaitlistStatus)

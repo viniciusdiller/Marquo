@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@totalagenda/database";
+import { Prisma } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { isValidCpf, normalizeCpf } from "../common/utils/cpf.util";
 import { isPlausibleBrazilianPhone, normalizePhone } from "../common/utils/phone.util";

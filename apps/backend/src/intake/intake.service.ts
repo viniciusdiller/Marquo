@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, Role } from "@totalagenda/database";
+import { Prisma, Role } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { IntakeFieldDto, UpsertIntakeFormDto } from "./dto/upsert-intake-form.dto";
 import { SubmitIntakeResponseDto } from "./dto/submit-intake-response.dto";

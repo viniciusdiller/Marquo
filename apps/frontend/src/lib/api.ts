@@ -4,7 +4,7 @@ import type {
   PublicProfessional,
   PublicService,
   PublicTenant,
-} from "@totalagenda/shared-types";
+} from "@marquo/shared-types";
 
 import { assertSafeApiPath } from "./api-path";
 

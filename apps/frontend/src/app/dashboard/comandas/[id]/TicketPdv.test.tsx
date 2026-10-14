@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Ticket } from "@totalagenda/shared-types";
+import type { Ticket } from "@marquo/shared-types";
 import { TicketPdv } from "./TicketPdv";
 import { cancelTicketAction, removeItemAction, searchClientsAction, setTicketClientAction } from "../actions";
 

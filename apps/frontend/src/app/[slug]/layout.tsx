@@ -33,9 +33,9 @@ export default async function TenantLayout({
 
   return (
     <div
-      // Paleta fixa da marca TotalAgenda (roxo + coral, ver components/brand/palette.ts) —
+      // Paleta fixa da marca Marquo (roxo + coral, ver components/brand/palette.ts) —
       // decisão consciente de não usar mais tenant.accentColor aqui: a página pública do
-      // salão segue a identidade visual do TotalAgenda em vez de customização por tenant.
+      // salão segue a identidade visual do Marquo em vez de customização por tenant.
       // O campo "Cor de destaque" em dashboard/configuracoes continua salvando no banco,
       // mas não é mais lido nesta página.
       style={

@@ -5,7 +5,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { PlanTier } from "@totalagenda/database";
+import { PlanTier } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { PlanChangeService } from "./plan-change.service";
 import { StripeService } from "./stripe.service";

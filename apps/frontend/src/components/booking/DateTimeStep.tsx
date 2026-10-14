@@ -3,7 +3,7 @@
 import { DateTime } from "luxon";
 import clsx from "clsx";
 import { motion } from "motion/react";
-import type { AvailableSlot } from "@totalagenda/shared-types";
+import type { AvailableSlot } from "@marquo/shared-types";
 
 const TIMEZONE = "America/Sao_Paulo";
 const DAYS_AHEAD = 14;

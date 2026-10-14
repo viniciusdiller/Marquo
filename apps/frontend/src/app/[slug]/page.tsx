@@ -37,7 +37,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const tenant = await getTenant(slug);
-  return { title: tenant ? `${tenant.name} - TotalAgenda` : "Negócio não encontrado" };
+  return { title: tenant ? `${tenant.name} - Marquo` : "Negócio não encontrado" };
 }
 
 export default async function TenantProfilePage({

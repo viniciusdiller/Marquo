@@ -10,7 +10,7 @@ import type {
   PublicBooking,
   PublicProfessional,
   PublicService,
-} from "@totalagenda/shared-types";
+} from "@marquo/shared-types";
 import { publicApi } from "@/lib/api";
 import { createBookingAction, joinWaitlistAction } from "@/app/[slug]/agendar/actions";
 import { StepIndicator } from "./StepIndicator";

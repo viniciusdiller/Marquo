@@ -7,7 +7,7 @@ import { BackLink } from "@/components/ui/BackLink";
 import { BrandPattern } from "@/components/brand/BrandPattern";
 import { backendFetch } from "@/lib/backend-fetch";
 
-export const metadata: Metadata = { title: "Definir senha - TotalAgenda" };
+export const metadata: Metadata = { title: "Definir senha - Marquo" };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 

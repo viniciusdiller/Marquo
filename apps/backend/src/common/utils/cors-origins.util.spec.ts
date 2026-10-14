@@ -6,8 +6,8 @@ describe("corsOrigins", () => {
   });
 
   it("acrescenta o site institucional e reduz cada URL à origem (sem barra final nem caminho)", () => {
-    expect(corsOrigins({ FRONTEND_URL: "https://app.totalagenda.com.br/", SITE_URL: "https://totalsoftware.com.br/planos" })).toEqual([
-      "https://app.totalagenda.com.br",
+    expect(corsOrigins({ FRONTEND_URL: "https://app.marquo.com.br/", SITE_URL: "https://totalsoftware.com.br/planos" })).toEqual([
+      "https://app.marquo.com.br",
       "https://totalsoftware.com.br",
     ]);
   });

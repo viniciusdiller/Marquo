@@ -1,4 +1,4 @@
-import type { AppointmentStatus } from "@totalagenda/shared-types";
+import type { AppointmentStatus } from "@marquo/shared-types";
 
 // Fonte única de verdade pra cor/label de status de agendamento — antes AgendaView.tsx
 // (cor do bloco) e AppointmentPanel.tsx (label, sem cor nenhuma) reinventavam isso cada

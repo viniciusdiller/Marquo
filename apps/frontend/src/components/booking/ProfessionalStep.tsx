@@ -1,5 +1,5 @@
 import { UserCircle } from "@phosphor-icons/react/dist/ssr";
-import type { PublicProfessional } from "@totalagenda/shared-types";
+import type { PublicProfessional } from "@marquo/shared-types";
 import { RadioCard } from "../ui/RadioCard";
 
 export function ProfessionalStep({

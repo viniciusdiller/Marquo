@@ -1,7 +1,7 @@
 import { ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { PlanTier } from "@totalagenda/database";
-import { PLAN_CATALOG, PLAN_CURRENCY, PLAN_INTERVAL, planCatalogEntry } from "@totalagenda/shared-types";
+import { PlanTier } from "@marquo/database";
+import { PLAN_CATALOG, PLAN_CURRENCY, PLAN_INTERVAL, planCatalogEntry } from "@marquo/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { PlanCatalogService } from "./plan-catalog.service";
 import { PLAN_PRICE_MISMATCH_MESSAGE, StripeService } from "./stripe.service";
