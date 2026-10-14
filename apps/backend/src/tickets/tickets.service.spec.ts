@@ -40,6 +40,7 @@ function build(over: Record<string, unknown> = {}) {
   const models = {
     ticket: {
       findFirst: jest.fn().mockResolvedValue(ticket()),
+      findMany: jest.fn().mockResolvedValue([ticket()]),
       create: jest.fn().mockResolvedValue(ticket()),
       update: jest.fn().mockImplementation(({ data }) => ticket({ ...data, items: ticket().items })),
     },
@@ -218,4 +219,35 @@ describe("TicketsService", () => {
     ).rejects.toThrow(BadRequestException);
     expect(prisma.payment.create).not.toHaveBeenCalled();
   });
+
+  describe("findOpen", () => {
+    it("filtra estritamente por tenantId e status OPEN", async () => {
+      const { service, prisma } = build();
+
+      const result = await service.findOpen("tenant-A");
+
+      expect(prisma.ticket.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId: "tenant-A", status: "OPEN" },
+          orderBy: { openedAt: "asc" },
+        }),
+      );
+      expect(result).toHaveLength(1);
+    });
+
+    it("aplica skip e take quando informados na query de paginação", async () => {
+      const { service, prisma } = build();
+
+      await service.findOpen("tenant-A", { page: 3, pageSize: 15 });
+
+      expect(prisma.ticket.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId: "tenant-A", status: "OPEN" },
+          skip: 30,
+          take: 15,
+        }),
+      );
+    });
+  });
 });
+
