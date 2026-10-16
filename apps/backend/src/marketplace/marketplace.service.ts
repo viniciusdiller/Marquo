@@ -6,6 +6,25 @@ import { PrismaService } from "../prisma/prisma.service";
 // aproximada (equiretangular) — suficiente para "perto de mim" sem PostGIS.
 const KM_PER_DEG_LAT = 111;
 
+// Teto de candidatos lidos do banco antes de ordenar em memória. A ordenação por nota/distância
+// precisa ver todos os candidatos: aplicar `take` antes de ordenar devolvia 50 negócios
+// arbitrários, não os 50 melhores.
+const MAX_CANDIDATES = 500;
+
+// Nota "suavizada" (média bayesiana): um negócio com 1 avaliação 5,0 não ultrapassa um com
+// 4,8 em 120 avaliações. PRIOR_WEIGHT = nº de avaliações "virtuais" na média PRIOR_MEAN.
+// Sem avaliação, o negócio vale a média-prior: fica abaixo dos bem avaliados e acima dos mal
+// avaliados, em vez de ser tratado como nota zero.
+const PRIOR_MEAN = 4;
+const PRIOR_WEIGHT = 3;
+
+export type MarketplaceSort = "rating" | "distance";
+
+function ratingScore(rating: { average: number | null; count: number }): number {
+  const sum = (rating.average ?? 0) * rating.count;
+  return (sum + PRIOR_MEAN * PRIOR_WEIGHT) / (rating.count + PRIOR_WEIGHT);
+}
+
 @Injectable()
 export class MarketplaceService {
   constructor(private readonly prisma: PrismaService) {}
@@ -15,7 +34,7 @@ export class MarketplaceService {
   // sem nenhum negócio real usando ela virava um filtro morto (clicável, sempre vazio).
   listCategories() {
     return this.prisma.serviceCategory.findMany({
-      where: { tenants: { some: { tenant: { listedInMarketplace: true } } } },
+      where: { tenants: { some: { tenant: { listedInMarketplace: true, suspendedAt: null } } } },
       orderBy: { position: "asc" },
     });
   }
@@ -27,9 +46,11 @@ export class MarketplaceService {
     lat?: number;
     lng?: number;
     radiusKm?: number;
-    take?: number;
+    // "distance" só faz sentido com lat/lng; sem sort, usa distância se houver geo, senão nota.
+    sort?: MarketplaceSort;
+    limit?: number;
   }) {
-    const where: Prisma.TenantWhereInput = { listedInMarketplace: true };
+    const where: Prisma.TenantWhereInput = { listedInMarketplace: true, suspendedAt: null };
     if (params.city?.trim()) {
       where.city = { equals: params.city.trim(), mode: "insensitive" };
     }
@@ -55,7 +76,9 @@ export class MarketplaceService {
 
     const tenants = await this.prisma.tenant.findMany({
       where,
-      take: params.take ?? 50,
+      take: MAX_CANDIDATES,
+      // Ordem fixa só para o resultado ser determinístico quando o teto corta candidatos.
+      orderBy: { name: "asc" },
       select: {
         id: true,
         name: true,
@@ -93,16 +116,22 @@ export class MarketplaceService {
       };
     });
 
+    const byDistance = (params.sort ?? (hasGeo ? "distance" : "rating")) === "distance" && hasGeo;
     results.sort((a, b) => {
-      if (a.distanceKm != null && b.distanceKm != null) return a.distanceKm - b.distanceKm;
-      return (b.rating.average ?? 0) - (a.rating.average ?? 0);
+      if (byDistance && a.distanceKm != null && b.distanceKm != null && a.distanceKm !== b.distanceKm) {
+        return a.distanceKm - b.distanceKm;
+      }
+      const byScore = ratingScore(b.rating) - ratingScore(a.rating);
+      if (byScore !== 0) return byScore;
+      if (b.rating.count !== a.rating.count) return b.rating.count - a.rating.count;
+      return a.name.localeCompare(b.name, "pt-BR");
     });
-    return results;
+    return results.slice(0, params.limit ?? 50);
   }
 
   async establishmentProfile(slug: string) {
     const tenant = await this.prisma.tenant.findFirst({
-      where: { slug, listedInMarketplace: true },
+      where: { slug, listedInMarketplace: true, suspendedAt: null },
       select: {
         id: true,
         name: true,
@@ -163,7 +192,7 @@ export class MarketplaceService {
   listCities() {
     return this.prisma.tenant
       .findMany({
-        where: { listedInMarketplace: true, city: { not: null } },
+        where: { listedInMarketplace: true, suspendedAt: null, city: { not: null } },
         distinct: ["city"],
         select: { city: true },
         orderBy: { city: "asc" },
