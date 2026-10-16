@@ -1,4 +1,3 @@
-import { randomBytes } from "crypto";
 import {
   AppointmentStatus,
   PlanTier,
@@ -23,7 +22,6 @@ const plans = PLAN_CATALOG.map((entry) => ({
   name: entry.name,
   priceCents: entry.priceCents,
   maxProfessionals: entry.maxProfessionals,
-  stripePriceId: process.env[`STRIPE_PRICE_${entry.tier}`] ?? `price_${entry.tier.toLowerCase()}_placeholder`,
 }));
 
 const WEEKDAYS_MON_TO_FRI: Weekday[] = [
@@ -49,7 +47,6 @@ async function seedPlans() {
         name: plan.name,
         priceCents: plan.priceCents,
         maxProfessionals: plan.maxProfessionals,
-        stripePriceId: plan.stripePriceId,
       },
       create: plan,
     });
@@ -103,8 +100,8 @@ async function seedDemoTenant() {
     data: {
       tenantId: tenant.id,
       planId: profissionalPlan.id,
-      stripeCustomerId: `cus_demo_${randomBytes(6).toString("hex")}`,
-      stripeSubscriptionId: `sub_demo_${randomBytes(6).toString("hex")}`,
+      // Sem provedor de pagamento no momento: a demo usa uma cortesia (concedida pela plataforma).
+      courtesy: true,
       status: SubscriptionStatus.ACTIVE,
       currentPeriodEnd: atHour(now, 30, 12),
     },
@@ -116,6 +113,7 @@ async function seedDemoTenant() {
       email: "dono@salaodemo.com",
       passwordHash,
       name: "Dona Marta",
+      phone: "11999990001",
       role: Role.OWNER,
     },
   });
@@ -614,6 +612,8 @@ async function seedMarketplaceDemoTenant(def: MarketplaceDemoDef, consumerId: st
       email: def.ownerEmail,
       passwordHash,
       name: def.ownerName,
+      // Telefone fictício estável (só para a demo mostrar o contato no painel da plataforma).
+      phone: `1198888${String(def.slug.length * 137 % 10000).padStart(4, "0")}`,
       role: Role.OWNER,
     },
   });

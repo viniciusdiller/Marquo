@@ -62,6 +62,8 @@ export interface PublicProfessional {
   id: string;
   name: string;
   bio: string | null;
+  // Caminho servido pelo backend (prefixar com a origem da API); nulo = sem foto.
+  photoUrl: string | null;
 }
 
 export interface AvailableSlot {
@@ -569,10 +571,10 @@ export interface ApiErrorBody {
 
 // CATÁLOGO DE PLANOS — a ÚNICA definição de preço e limite do Marquo.
 //
-// Para mudar um preço ou limite: edite AQUI, faça o deploy, e crie o Price novo no Stripe (o valor de um Price é
-// imutável) apontando STRIPE_PRICE_<TIER> para ele. Quem consome este arquivo:
-//   - backend: PlanCatalogService grava a tabela `Plan` a partir dele a cada boot, e confere que o Price do Stripe
-//     tem o mesmo valor antes de cobrar (checkout e troca de plano falham fechado se divergir);
+// Para mudar um preço ou limite: edite AQUI e faça o deploy. Quem já assina segue no valor antigo até o provedor
+// de pagamento (Mercado Pago, a integrar) ser atualizado: com clientes reais, reajuste com migração deliberada.
+// Quem consome este arquivo:
+//   - backend: PlanCatalogService grava a tabela `Plan` a partir dele a cada boot;
 //   - seed do banco (packages/database/prisma/seed.ts);
 //   - frontend: só o texto de apresentação (`audience`); os PREÇOS o app lê de GET /plans, nunca daqui;
 //   - site institucional (outro repo): lê GET /plans e usa uma cópia como fallback offline, só para quando a API
@@ -616,7 +618,7 @@ export const PLAN_CATALOG: readonly PlanCatalogEntry[] = [
   },
 ];
 
-// O Price do Stripe tem que ser exatamente isto para o valor cobrado ser o valor mostrado.
+// Moeda e recorrência dos planos (o valor cobrado tem que ser o valor mostrado).
 export const PLAN_CURRENCY = "brl";
 export const PLAN_INTERVAL = "month";
 
