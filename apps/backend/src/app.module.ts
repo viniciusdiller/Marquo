@@ -20,7 +20,6 @@ import { TimeBlocksModule } from "./time-blocks/time-blocks.module";
 import { AppointmentsModule } from "./appointments/appointments.module";
 import { WaitlistModule } from "./waitlist/waitlist.module";
 import { BillingModule } from "./billing/billing.module";
-import { WebhooksModule } from "./webhooks/webhooks.module";
 import { ClientsModule } from "./clients/clients.module";
 import { IntakeModule } from "./intake/intake.module";
 import { ProductsModule } from "./products/products.module";
@@ -33,6 +32,7 @@ import { MarketplaceModule } from "./marketplace/marketplace.module";
 import { ReviewsModule } from "./reviews/reviews.module";
 import { SignupModule } from "./signup/signup.module";
 import { InternalModule } from "./internal/internal.module";
+import { PlatformAdminModule } from "./platform-admin/platform-admin.module";
 import { ReportsModule } from './reports/reports.module';
 
 @Module({
@@ -51,7 +51,6 @@ import { ReportsModule } from './reports/reports.module';
     AppointmentsModule,
     WaitlistModule,
     BillingModule,
-    WebhooksModule,
     ClientsModule,
     IntakeModule,
     ProductsModule,
@@ -64,6 +63,7 @@ import { ReportsModule } from './reports/reports.module';
     ReviewsModule,
     SignupModule,
     InternalModule,
+    PlatformAdminModule,
     ReportsModule,
   ],
   providers: [

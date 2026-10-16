@@ -133,18 +133,19 @@ model Tenant {
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @db.Timestamptz(6)
 
-  // Customer do Stripe deste tenant, criado na primeira vez que o dono abre o checkout. É por ele que o
-  // webhook do Stripe acha o tenant; nunca vem de body/query.
-  stripeCustomerId String? @unique
+  // Suspensão manual feita pela plataforma (painel de admin). Não nula = acesso bloqueado e fora do
+  // marketplace, sem apagar dado nenhum; vence qualquer estado de cobrança (ver computeBillingStatus).
+  suspendedAt     DateTime? @db.Timestamptz(6)
+  suspendedReason String?
 
   // Perfil público exibido em /[slug] — todos opcionais, editados pelo dono no dashboard.
-  description     String?
-  address         String?
-  businessHours   String? // texto livre (ex: "Seg-Sex 9h-19h"), não agregado automaticamente
-  logoUrl         String? // caminho servido pelo backend, ex: /uploads/tenants/<id>/logo.webp
-  accentColor     String? // hex "#RRGGBB"; nulo usa o roxo padrão do Marquo
-  whatsappNumber  String? // só dígitos, com DDI (ex: 5511912345678) — vira link wa.me
-  instagramUrl    String?
+  description    String?
+  address        String?
+  businessHours  String? // texto livre (ex: "Seg-Sex 9h-19h"), não agregado automaticamente
+  logoUrl        String? // caminho servido pelo backend, ex: /uploads/tenants/<id>/logo.webp
+  accentColor    String? // hex "#RRGGBB"; nulo usa o roxo padrão do Marquo
+  whatsappNumber String? // só dígitos, com DDI (ex: 5511912345678) — vira link wa.me
+  instagramUrl   String?
 
   // Cada seção aparece automaticamente se tiver conteúdo (serviços cadastrados, fotos na
   // galeria, etc.) — esses toggles deixam o dono escondê-la mesmo assim.
@@ -160,31 +161,33 @@ model Tenant {
   neighborhood        String?
   latitude            Float?
   longitude           Float?
-  priceRange          Int?   // 1..4 ($ a $$$$)
+  priceRange          Int? // 1..4 ($ a $$$$)
 
   // Limites de agendamento público (antecedência e horizonte máximo)
   minSchedulingLeadTimeMinutes Int @default(120) // mínimo de 2 horas de antecedência
-  maxSchedulingLeadTimeDays    Int @default(60)  // agenda aberta por no máximo 60 dias
+  maxSchedulingLeadTimeDays    Int @default(60) // agenda aberta por no máximo 60 dias
 
-  users         User[]
-  professionals Professional[]
-  services      Service[]
-  appointments  Appointment[]
-  timeBlocks    TimeBlock[]
-  waitlist      WaitlistEntry[]
-  subscription  Subscription?
-  clients       Client[]
-  galleryImages TenantGalleryImage[]
-  intakeForms     IntakeForm[]
-  intakeResponses IntakeResponse[]
-  products        Product[]
-  stockMovements  StockMovement[]
-  tickets         Ticket[]
-  payments        Payment[]
-  commissionRules CommissionRule[]
-  commissionEntries CommissionEntry[]
-  commissionPayouts CommissionPayout[]
-  cashRegisters   CashRegister[]
+  users               User[]
+  professionals       Professional[]
+  services            Service[]
+  appointments        Appointment[]
+  timeBlocks          TimeBlock[]
+  waitlist            WaitlistEntry[]
+  subscription        Subscription?
+  couponRedemptions   CouponRedemption[]
+  billingAttempts     BillingAttempt[]
+  clients             Client[]
+  galleryImages       TenantGalleryImage[]
+  intakeForms         IntakeForm[]
+  intakeResponses     IntakeResponse[]
+  products            Product[]
+  stockMovements      StockMovement[]
+  tickets             Ticket[]
+  payments            Payment[]
+  commissionRules     CommissionRule[]
+  commissionEntries   CommissionEntry[]
+  commissionPayouts   CommissionPayout[]
+  cashRegisters       CashRegister[]
   financialCategories FinancialCategory[]
   financialEntries    FinancialEntry[]
   categories          TenantCategory[]
@@ -220,6 +223,11 @@ model User {
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @db.Timestamptz(6)
 
+  // Telefone de contato do usuário (normalizado: só dígitos, sem DDI 55). Hoje é pedido ao DONO no
+  // cadastro e serve ao contato comercial da plataforma (ex.: falar com quem cancelou). Nulo em contas
+  // anteriores ao campo e em quem não o informou. Nunca é identidade de login.
+  phone String?
+
   // Link de "definir senha" (/auth/set-password): usado para redefinir a senha de um dono pelo
   // suporte (Admin). Guardamos o hash, nunca o token em claro (mesmo padrão do passwordHash), com
   // validade e uso único.
@@ -248,13 +256,13 @@ model User {
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime? @db.Timestamptz(6)
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  professional Professional?
-  openedTickets Ticket[]
-  cashRegisters CashRegister[]
-  financialEntries FinancialEntry[]
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professional      Professional?
+  openedTickets     Ticket[]
+  cashRegisters     CashRegister[]
+  financialEntries  FinancialEntry[]
   commissionPayouts CommissionPayout[]
-  refreshTokens RefreshToken[]
+  refreshTokens     RefreshToken[]
 
   @@index([tenantId])
 }
@@ -268,6 +276,9 @@ model Professional {
   tenantId               String
   userId                 String   @unique
   bio                    String?
+  // Foto do profissional (caminho servido pelo backend, ex.: /uploads/tenants/<id>/professionals/<id>-<v>.webp).
+  // Só o servidor grava (upload reprocessado em WebP quadrado); nunca vem de URL do cliente.
+  photoUrl               String?
   isActive               Boolean  @default(true)
   slotGranularityMinutes Int      @default(15)
   createdAt              DateTime @default(now()) @db.Timestamptz(6)
@@ -369,48 +380,48 @@ model ProfessionalService {
 // [startAt, endAt] é o intervalo total (span dos itens) e é o que a constraint EXCLUDE
 // usa para impedir sobreposição do mesmo profissional.
 model Appointment {
-  id       String @id @default(uuid())
-  tenantId String
+  id               String            @id @default(uuid())
+  tenantId         String
   // Profissional responsável pelo atendimento. Na M0 todos os itens são desse profissional;
   // comanda multiprofissional fica para a M3.
-  professionalId String
+  professionalId   String
   // Snapshot do momento da marcação (auditoria) — não editado depois. A identidade "viva"
   // do cliente é a relação clientId.
-  clientName String
-  clientPhone String
-  clientId    String?
-  startAt     DateTime          @db.Timestamptz(6)
-  endAt       DateTime          @db.Timestamptz(6)
-  status      AppointmentStatus @default(CONFIRMED)
-  source      AppointmentSource @default(PUBLIC)
-  notes       String?
-  canceledAt  DateTime?         @db.Timestamptz(6)
-  noShowAt    DateTime?         @db.Timestamptz(6)
-  rescheduledCount Int          @default(0)
-  createdAt   DateTime          @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime          @updatedAt @db.Timestamptz(6)
+  clientName       String
+  clientPhone      String
+  clientId         String?
+  startAt          DateTime          @db.Timestamptz(6)
+  endAt            DateTime          @db.Timestamptz(6)
+  status           AppointmentStatus @default(CONFIRMED)
+  source           AppointmentSource @default(PUBLIC)
+  notes            String?
+  canceledAt       DateTime?         @db.Timestamptz(6)
+  noShowAt         DateTime?         @db.Timestamptz(6)
+  rescheduledCount Int               @default(0)
+  createdAt        DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(6)
 
-  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  professional Professional      @relation(fields: [professionalId], references: [id], onDelete: Restrict)
-  client       Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  items        AppointmentItem[]
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professional    Professional      @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  client          Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  items           AppointmentItem[]
   intakeResponses IntakeResponse[]
-  ticket       Ticket?
-  review       Review?
+  ticket          Ticket?
+  review          Review?
+  // Constraint EXCLUDE anti-overlap (professionalId + tstzrange) adicionada manualmente na
+  // migration SQL, parcial em status IN (SCHEDULED, CONFIRMED, IN_SERVICE).
 
   @@index([tenantId, startAt])
   @@index([professionalId, startAt])
   @@index([clientId])
-  // Constraint EXCLUDE anti-overlap (professionalId + tstzrange) adicionada manualmente na
-  // migration SQL, parcial em status IN (SCHEDULED, CONFIRMED, IN_SERVICE).
 }
 
 model AppointmentItem {
-  id            String @id @default(uuid())
-  appointmentId String
-  serviceId     String
+  id                 String   @id @default(uuid())
+  appointmentId      String
+  serviceId          String
   // Ordem do item dentro do atendimento (define a sequência dos serviços).
-  position Int @default(0)
+  position           Int      @default(0)
   // Snapshots do catálogo no momento da marcação (ProfessionalService override > Service).
   durationMinutes    Int
   priceCentsSnapshot Int
@@ -453,7 +464,7 @@ model WaitlistEntry {
 // prévio: o primeiro agendamento já cria a conta. v1 não tem verificação (OTP) — ver
 // ClientAuthService no backend para o racional e o ponto de extensão futuro.
 model Client {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   tenantId  String
   phone     String // normalizado: só dígitos, sem DDI 55
   name      String
@@ -463,10 +474,10 @@ model Client {
   cpf       String? // só dígitos
   notes     String? // observações livres da equipe (preferências, alergias, histórico)
   tags      String[]  @default([]) // rótulos livres para segmentação (ex.: "VIP", "coloração")
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
 
-  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   appointments    Appointment[]
   waitlistEntries WaitlistEntry[]
   intakeResponses IntakeResponse[]
@@ -566,25 +577,25 @@ model StockMovement {
 // Comanda: 1..1 opcional com um Appointment (aberta a partir dele) ou avulsa. Fechamento
 // exige soma de pagamentos >= total e gera as baixas de estoque + lançamentos de comissão.
 model Ticket {
-  id            String       @id @default(uuid())
-  tenantId      String
-  appointmentId String?      @unique
-  clientId      String?
+  id             String       @id @default(uuid())
+  tenantId       String
+  appointmentId  String?      @unique
+  clientId       String?
   openedByUserId String
-  status        TicketStatus @default(OPEN)
-  discountCents Int          @default(0)
-  note          String?
-  openedAt      DateTime     @default(now()) @db.Timestamptz(6)
-  closedAt      DateTime?    @db.Timestamptz(6)
-  canceledAt    DateTime?    @db.Timestamptz(6)
-  updatedAt     DateTime     @updatedAt @db.Timestamptz(6)
+  status         TicketStatus @default(OPEN)
+  discountCents  Int          @default(0)
+  note           String?
+  openedAt       DateTime     @default(now()) @db.Timestamptz(6)
+  closedAt       DateTime?    @db.Timestamptz(6)
+  canceledAt     DateTime?    @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  appointment  Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  client       Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  openedBy     User         @relation(fields: [openedByUserId], references: [id], onDelete: Restrict)
-  items        TicketItem[]
-  payments     Payment[]
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment       Appointment?      @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  client            Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  openedBy          User              @relation(fields: [openedByUserId], references: [id], onDelete: Restrict)
+  items             TicketItem[]
+  payments          Payment[]
   commissionEntries CommissionEntry[]
   financialEntry    FinancialEntry?
 
@@ -605,11 +616,11 @@ model TicketItem {
   unitPriceCents Int
   createdAt      DateTime       @default(now()) @db.Timestamptz(6)
 
-  ticket         Ticket            @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  service        Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  product        Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
-  professional   Professional?     @relation(fields: [professionalId], references: [id], onDelete: SetNull)
-  stockMovement  StockMovement?
+  ticket            Ticket            @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  service           Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  product           Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  professional      Professional?     @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+  stockMovement     StockMovement?
   commissionEntries CommissionEntry[]
 
   @@index([ticketId])
@@ -700,15 +711,15 @@ model CommissionPayout {
 
 // Sessão de caixa. Só um OPEN por tenant de cada vez (garantido no service).
 model CashRegister {
-  id                 String             @id @default(uuid())
-  tenantId           String
-  openedByUserId     String
-  status             CashRegisterStatus @default(OPEN)
-  openingFloatCents  Int                @default(0)
+  id                  String             @id @default(uuid())
+  tenantId            String
+  openedByUserId      String
+  status              CashRegisterStatus @default(OPEN)
+  openingFloatCents   Int                @default(0)
   closingCountedCents Int?
-  openedAt           DateTime           @default(now()) @db.Timestamptz(6)
-  closedAt           DateTime?          @db.Timestamptz(6)
-  note               String?
+  openedAt            DateTime           @default(now()) @db.Timestamptz(6)
+  closedAt            DateTime?          @db.Timestamptz(6)
+  note                String?
 
   tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   openedBy  User           @relation(fields: [openedByUserId], references: [id], onDelete: Restrict)
@@ -774,28 +785,28 @@ model FinancialCategory {
 }
 
 model FinancialEntry {
-  id            String               @id @default(uuid())
-  tenantId      String
-  direction     FinancialDirection
-  status        FinancialEntryStatus @default(PENDING)
-  source        FinancialEntrySource @default(MANUAL)
-  description   String
-  amountCents   Int
-  categoryId    String?
-  counterparty  String? // fornecedor / cliente / profissional (texto livre na v1)
-  ticketId      String?              @unique // quando source = TICKET
-  dueDate       DateTime             @db.Date
-  paidAt        DateTime?            @db.Timestamptz(6)
-  paymentMethod PaymentMethod?
-  notes         String?
+  id              String               @id @default(uuid())
+  tenantId        String
+  direction       FinancialDirection
+  status          FinancialEntryStatus @default(PENDING)
+  source          FinancialEntrySource @default(MANUAL)
+  description     String
+  amountCents     Int
+  categoryId      String?
+  counterparty    String? // fornecedor / cliente / profissional (texto livre na v1)
+  ticketId        String?              @unique // quando source = TICKET
+  dueDate         DateTime             @db.Date
+  paidAt          DateTime?            @db.Timestamptz(6)
+  paymentMethod   PaymentMethod?
+  notes           String?
   createdByUserId String
-  createdAt     DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime             @updatedAt @db.Timestamptz(6)
+  createdAt       DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime             @updatedAt @db.Timestamptz(6)
 
-  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  category  FinancialCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  ticket    Ticket?            @relation(fields: [ticketId], references: [id], onDelete: SetNull)
-  createdBy User               @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category         FinancialCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  ticket           Ticket?            @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  createdBy        User               @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   commissionPayout CommissionPayout?
 
   @@index([tenantId, dueDate])
@@ -818,22 +829,22 @@ enum ReviewStatus {
 }
 
 model Consumer {
-  id            String   @id @default(uuid())
-  phone         String   @unique // normalizado, sem DDI 55
-  name          String
+  id                  String    @id @default(uuid())
+  phone               String    @unique // normalizado, sem DDI 55
+  name                String
   // Único (minúsculo, normalizado no service) pra permitir login por e-mail. Sem verificação
   // de posse ainda: o telefone segue sendo a chave de identidade cross-salão. NULL repetido é
   // permitido pelo Postgres (contas antigas sem e-mail).
-  email         String?   @unique
+  email               String?   @unique
   // null = conta do fluxo antigo (só telefone) ainda não migrada; preenchido no cadastro
   // novo e na etapa de "crie sua senha" do primeiro login (ver ConsumerAuthService). Sem
   // campos de token de convite como em User: aqui o fluxo é síncrono, não por link.
   passwordHash        String?
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime? @db.Timestamptz(6)
-  consentedAt   DateTime @db.Timestamptz(6) // aceite dos termos/privacidade
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  consentedAt         DateTime  @db.Timestamptz(6) // aceite dos termos/privacidade
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
 
   tenantLinks ConsumerTenantLink[]
   reviews     Review[]
@@ -877,10 +888,10 @@ model ConsumerTenantLink {
 
 // Taxonomia global de categorias de estabelecimento (semeada). slug estável para URL.
 model ServiceCategory {
-  id       String  @id @default(uuid())
-  slug     String  @unique
+  id       String @id @default(uuid())
+  slug     String @unique
   name     String
-  position Int     @default(0)
+  position Int    @default(0)
 
   tenants TenantCategory[]
 }
@@ -919,10 +930,10 @@ model Review {
 // ─────────────────────────────────────────────
 // Billing
 // ─────────────────────────────────────────────
-// A cobrança real (checkout, portal, ciclo do Stripe) vive no Admin-TotalSoftware.
-// Este backend só mantém o "espelho" necessário para aplicar limites por plano
-// (PlanLimitService) e liberar/bloquear acesso (TenantBillingGuard), atualizado pelos
-// webhooks de provisionamento/sincronização em src/webhooks.
+// Sem provedor de pagamento ligado por enquanto (o Stripe foi removido; o Mercado Pago entra depois).
+// Este backend mantém o estado necessário para aplicar limites por plano (PlanLimitService) e
+// liberar/bloquear acesso (TenantBillingGuard). Hoje o único jeito de um negócio ter Subscription é a
+// CORTESIA concedida pelo painel da plataforma (courtesy = true).
 
 model Plan {
   id               String   @id @default(uuid())
@@ -930,40 +941,130 @@ model Plan {
   name             String
   priceCents       Int
   maxProfessionals Int?
-  stripePriceId    String   @unique
   createdAt        DateTime @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @db.Timestamptz(6)
 
   subscriptions Subscription[]
+  attempts      BillingAttempt[]
 }
 
 model Subscription {
-  id                   String             @id @default(uuid())
-  tenantId             String             @unique
-  planId               String
-  stripeCustomerId     String
-  stripeSubscriptionId String             @unique
-  status               SubscriptionStatus
-  // Nula quando a origem (provisionamento) não informa a próxima cobrança; preenchida a
-  // partir de "proximaCobranca" pelo webhook de sincronização de status.
-  currentPeriodEnd     DateTime?          @db.Timestamptz(6)
-  cancelAtPeriodEnd    Boolean            @default(false)
-  createdAt            DateTime           @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime           @updatedAt @db.Timestamptz(6)
+  id                     String             @id @default(uuid())
+  tenantId               String             @unique
+  planId                 String
+  status                 SubscriptionStatus
+  // Forma de pagamento da assinatura PAGA (nulo = cortesia). Cartão: o provedor cobra todo mês e o
+  // currentPeriodEnd acompanha a próxima cobrança. Pix: cada mês é um pagamento; o acesso vai até currentPeriodEnd.
+  method                 BillingMethod?
+  // Id da assinatura recorrente no provedor (preapproval do Mercado Pago). Só no cartão.
+  providerSubscriptionId String?            @unique
+  // Cortesia concedida pela plataforma (sem cobrança). Fim em currentPeriodEnd (nulo = sem data de fim).
+  // Vencida a cortesia, o acesso bloqueia (ver computeBillingStatus). Não é substituída por um pagamento
+  // sem decisão explícita: uma cortesia nunca é confundida com assinatura paga.
+  courtesy               Boolean            @default(false)
+  // Fim do período pago/da cortesia. Nulo = sem data de fim.
+  currentPeriodEnd       DateTime?          @db.Timestamptz(6)
+  cancelAtPeriodEnd      Boolean            @default(false)
+  createdAt              DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime           @updatedAt @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   plan   Plan   @relation(fields: [planId], references: [id], onDelete: Restrict)
 }
 
-// Eventos do Stripe já processados (POST /webhooks/stripe): evita reprocessar a mesma entrega. O estado
-// da assinatura é sempre relido na API do Stripe, então isto é otimização + trilha, não a garantia de
-// correção. Gravado DEPOIS de processar com sucesso, para uma falha no meio ser reentregue pelo Stripe.
-model StripeEvent {
-  id          String   @id // event.id do Stripe (evt_...)
-  type        String
-  processedAt DateTime @default(now()) @db.Timestamptz(6)
+// ─────────────────────────────────────────────
+// Cupons (campanhas para novos clientes). Criados no painel da plataforma, resgatados no cadastro.
+// TRIAL_DAYS soma dias ao período de teste na hora. PERCENT/FIXED_CENTS ficam registrados no resgate
+// e valem na primeira cobrança quando houver provedor de pagamento (hoje não há).
+// ─────────────────────────────────────────────
+// Como o dono paga: cartão com cobrança recorrente automática, ou Pix mensal (cada mês é um pagamento novo; sem
+// pagamento no mês seguinte o acesso termina em currentPeriodEnd).
+enum BillingMethod {
+  CARD_RECURRING
+  PIX_MONTHLY
+}
 
-  @@index([processedAt])
+enum BillingAttemptStatus {
+  PENDING
+  APPROVED
+  FAILED
+  EXPIRED
+}
+
+enum CouponKind {
+  TRIAL_DAYS
+  PERCENT
+  FIXED_CENTS
+}
+
+model Coupon {
+  id              String     @id @default(uuid())
+  // Sempre maiúsculo, sem espaços (normalizado no servidor): é único e comparado exatamente.
+  code            String     @unique
+  kind            CouponKind
+  // TRIAL_DAYS: dias; PERCENT: 1..100; FIXED_CENTS: centavos.
+  value           Int
+  description     String?
+  // Nulo = ilimitado.
+  maxRedemptions  Int?
+  redemptionCount Int        @default(0)
+  validFrom       DateTime?  @db.Timestamptz(6)
+  validUntil      DateTime?  @db.Timestamptz(6)
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime   @updatedAt @db.Timestamptz(6)
+
+  redemptions CouponRedemption[]
+
+  @@index([isActive, createdAt])
+}
+
+model CouponRedemption {
+  id        String    @id @default(uuid())
+  couponId  String
+  tenantId  String
+  // Quando o desconto (PERCENT/FIXED_CENTS) foi de fato abatido de uma cobrança. Nulo = resgatado e ainda não
+  // usado (ex.: cupom digitado no cadastro, valendo na primeira cobrança).
+  appliedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Um negócio resgata o mesmo cupom no máximo uma vez (e a contagem é decidida pelo banco).
+  @@unique([couponId, tenantId])
+  @@index([tenantId])
+}
+
+// Uma tentativa de pagamento iniciada pelo dono (checkout de cartão ou cobrança Pix). O `id` desta linha é o
+// `external_reference` enviado ao Mercado Pago: é por ele que o pagamento/assinatura volta ao negócio certo, nunca
+// por algo vindo do corpo de um webhook. Valores (lista, desconto, cobrado) são SEMPRE derivados no servidor.
+model BillingAttempt {
+  id                 String               @id @default(uuid())
+  tenantId           String
+  planId             String
+  method             BillingMethod
+  status             BillingAttemptStatus @default(PENDING)
+  listPriceCents     Int
+  discountCents      Int                  @default(0)
+  // O que foi cobrado nesta tentativa (preço de lista − desconto do cupom). Meses seguintes: preço cheio.
+  chargeCents        Int
+  // Cupom aplicado (CouponRedemption). `couponReserved` = esta tentativa consumiu um uso NOVO do cupom, que volta
+  // se ela falhar/expirar; um resgate antigo (do cadastro) não é devolvido.
+  couponRedemptionId String?
+  couponReserved     Boolean              @default(false)
+  // Id no provedor: assinatura (preapproval) no cartão, pagamento no Pix.
+  providerRef        String?              @unique
+  expiresAt          DateTime?            @db.Timestamptz(6)
+  approvedAt         DateTime?            @db.Timestamptz(6)
+  createdAt          DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+  @@index([status, expiresAt])
 }
 
 // Refresh token de staff com ROTAÇÃO. Cada token (JWT com jti = id desta linha e fid = familyId) só vale uma
@@ -992,10 +1093,13 @@ model RefreshToken {
 model AdminAuditLog {
   id           String   @id @default(uuid())
   action       String // ex.: PASSWORD_RESET_LINK
-  actor        String // e-mail do admin, vindo assinado do Admin
+  actor        String // e-mail do admin (Admin-TotalSoftware ou conta da plataforma)
   tenantId     String?
   targetUserId String?
+  // Contexto curto da ação (ex.: "+14 dias", motivo da suspensão). Nunca token nem segredo.
+  detail       String?
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([tenantId, createdAt])
+  @@index([createdAt])
 }

@@ -16,7 +16,13 @@ const MAX_INPUT_PIXELS = 40_000_000;
 // embutido e metadados (EXIF/GPS).
 export async function convertToWebp(
   buffer: Buffer,
-  opts: { maxDimension: number; quality: number; outPath: string },
+  opts: {
+    maxDimension: number;
+    quality: number;
+    outPath: string;
+    // "square": recorta no centro para um quadrado maxDimension × maxDimension (avatar). Padrão: cabe dentro.
+    crop?: "square";
+  },
 ): Promise<void> {
   const open = () => sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS, failOn: "error" });
 
@@ -32,7 +38,14 @@ export async function convertToWebp(
 
   try {
     await open()
-      .resize(opts.maxDimension, opts.maxDimension, { fit: "inside", withoutEnlargement: true })
+      .rotate() // respeita a orientação do EXIF antes de descartar os metadados (foto de celular não sai deitada)
+      .resize(
+        opts.maxDimension,
+        opts.maxDimension,
+        opts.crop === "square"
+          ? { fit: "cover", position: "attention" }
+          : { fit: "inside", withoutEnlargement: true },
+      )
       .webp({ quality: opts.quality })
       .toFile(opts.outPath);
   } catch {

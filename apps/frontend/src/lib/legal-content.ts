@@ -36,7 +36,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
     title: "4. Período de teste, planos e pagamento",
     paragraphs: [
       "Novos cadastros têm 14 dias de teste gratuito, sem necessidade de cartão de crédito. Terminado o teste sem uma assinatura ativa, o acesso ao painel é bloqueado e a página pública deixa de aceitar novos agendamentos até a contratação de um plano.",
-      "Os planos, limites (como o número de profissionais) e valores mensais são os exibidos na página de planos no momento da contratação. O pagamento é feito por cartão, processado pela Stripe; o Marquo não recebe nem armazena os dados do seu cartão.",
+      "Os planos, limites (como o número de profissionais) e valores mensais são os exibidos na página de planos no momento da contratação. O pagamento é processado por um provedor de pagamentos parceiro [REVISAR: confirmar o provedor e as formas de pagamento aceitas]; o Marquo não recebe nem armazena os dados do seu cartão.",
       "A assinatura é renovada mensalmente até ser cancelada. Você pode cancelar a qualquer momento; o acesso segue até o fim do período já pago. Política de reembolso: [DECIDIR: reembolso proporcional, nenhum reembolso ou prazo de arrependimento].",
       "Reajustes de preço: [DECIDIR: regra e prazo de aviso prévio para reajuste].",
     ],
@@ -110,7 +110,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "Conta de cliente do Marquo: nome, telefone, e-mail, senha (em hash), avaliações, histórico de agendamentos e os dispositivos/navegadores com sessão aberta.",
       "Clientes dos Estabelecimentos: nome, telefone, e-mail, histórico de atendimentos e pagamentos registrados, observações, etiquetas e fichas de anamnese, que podem conter dados de saúde (dados pessoais sensíveis). [REVISAR: tratamento de dados sensíveis, art. 11 da LGPD.]",
       "Dados técnicos: cookies de sessão e de preferência (tema), e registros de acesso do servidor, que incluem endereço IP. Contadores de tentativas de login são mantidos temporariamente. [PREENCHER: confirmar quais logs a hospedagem/proxy guardam e por quanto tempo.]",
-      "Pagamentos: o cartão é processado pela Stripe. O Marquo não recebe nem armazena número, validade ou código do cartão; guarda apenas identificadores da assinatura e o status de cobrança.",
+      "Pagamentos: o pagamento é processado por um provedor de pagamentos parceiro [REVISAR: confirmar o provedor]. O Marquo não recebe nem armazena número, validade ou código do cartão; guarda apenas identificadores da assinatura e o status de cobrança.",
     ],
   },
   {
@@ -125,9 +125,9 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     title: "4. Com quem compartilhamos",
     paragraphs: [
-      "Compartilhamos dados com fornecedores que nos ajudam a operar o serviço: hospedagem e infraestrutura ([PREENCHER: provedor de hospedagem/VPS]), processamento de pagamentos (Stripe) e [PREENCHER: outros fornecedores, como e-mail transacional ou análise de uso, se houver].",
+      "Compartilhamos dados com fornecedores que nos ajudam a operar o serviço: hospedagem e infraestrutura ([PREENCHER: provedor de hospedagem/VPS]), processamento de pagamentos ([REVISAR: provedor de pagamentos]) e [PREENCHER: outros fornecedores, como e-mail transacional ou análise de uso, se houver].",
       "Os dados de clientes de um Estabelecimento só são visíveis para esse Estabelecimento. A página pública do Estabelecimento (nome, serviços, equipe, avaliações, contato) é visível a qualquer pessoa, e o Estabelecimento pode optar por aparecer na busca de descoberta.",
-      "Transferência internacional: alguns fornecedores, como a Stripe, podem tratar dados fora do Brasil. [REVISAR: mecanismo de transferência internacional, art. 33 da LGPD.]",
+      "Transferência internacional: alguns fornecedores, como o provedor de pagamentos, podem tratar dados fora do Brasil. [REVISAR: mecanismo de transferência internacional, art. 33 da LGPD.]",
     ],
   },
   {

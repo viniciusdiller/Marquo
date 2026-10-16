@@ -1,0 +1,203 @@
+import { Transform } from "class-transformer";
+import {
+  IsBoolean,
+  IsDateString,
+  IsEmail,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from "class-validator";
+import { CouponKind, PlanTier, Role, SubscriptionStatus } from "@marquo/database";
+import { PaginationQueryDto } from "../../common/pagination/pagination-query.dto";
+import { NormalizeEmail } from "../../common/decorators/normalize-email.decorator";
+import { IsBrazilianPhone } from "../../common/validators/br-validators";
+
+const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
+
+export class PlatformLoginDto {
+  @Transform(trim)
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
+
+  // 72 = limite do bcrypt (o resto seria ignorado em silêncio).
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(72)
+  password!: string;
+}
+
+// Filtros de estado de cobrança da lista de negócios. "SUSPENDED" e os estados calculados
+// (TRIALING/TRIAL_EXPIRED) não existem como coluna: o service os traduz em cláusulas WHERE.
+export const TENANT_STATUS_FILTERS = [
+  "TRIALING",
+  "TRIAL_EXPIRED",
+  "SUSPENDED",
+  ...Object.values(SubscriptionStatus),
+] as const;
+export type TenantStatusFilter = (typeof TENANT_STATUS_FILTERS)[number];
+
+export class PlatformTenantsQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsIn(TENANT_STATUS_FILTERS)
+  status?: TenantStatusFilter;
+}
+
+export class PlatformUsersQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsEnum(Role)
+  role?: Role;
+}
+
+export class PlatformSubscriptionsQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @IsEnum(SubscriptionStatus)
+  status?: SubscriptionStatus;
+}
+
+export class PlatformAuditQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @IsUUID()
+  tenantId?: string;
+}
+
+export class SuspendTenantDto {
+  // Motivo obrigatório: vai para a trilha de auditoria e para o suporte entender o bloqueio depois.
+  @Transform(trim)
+  @IsString()
+  @MinLength(3)
+  @MaxLength(300)
+  reason!: string;
+}
+
+export class ExtendTrialDto {
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  days!: number;
+}
+
+// Cadastro de um negócio feito pela plataforma. NÃO há campo de senha, papel, plano, trial nem tenantId:
+// o dono recebe um link para definir a própria senha (o admin nunca a conhece) e o servidor fixa o resto.
+export class CreatePlatformTenantDto {
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  businessName!: string;
+
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  ownerName!: string;
+
+  @NormalizeEmail()
+  @IsEmail()
+  @MaxLength(254)
+  ownerEmail!: string;
+
+  @IsBrazilianPhone()
+  ownerPhone!: string;
+}
+
+// Cortesia: o plano é liberado sem cobrança. Sem `days` = sem data de fim (até a plataforma remover).
+export class GrantCourtesyDto {
+  @IsEnum(PlanTier)
+  tier!: PlanTier;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(730)
+  days?: number;
+}
+
+export class CreateCouponDto {
+  // Normalizado (maiúsculo) e validado no service: TRIM + upper antes do padrão.
+  @Transform(({ value }) => (typeof value === "string" ? value.trim().toUpperCase() : value))
+  @IsString()
+  @MinLength(3)
+  @MaxLength(32)
+  code!: string;
+
+  @IsEnum(CouponKind)
+  kind!: CouponKind;
+
+  // A faixa depende do tipo (dias / % / centavos): conferida no service (couponValueError).
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  value!: number;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(200)
+  description?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  maxRedemptions?: number;
+
+  @IsOptional()
+  @IsDateString()
+  validFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  validUntil?: string;
+}
+
+export class UpdateCouponDto {
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(200)
+  description?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  maxRedemptions?: number;
+
+  // Novo fim de validade (o início e o tipo/valor NÃO mudam depois de criado: quem já resgatou contou
+  // com aquelas condições).
+  @IsOptional()
+  @IsDateString()
+  validUntil?: string;
+}
+
+export class PlatformCouponsQueryDto extends PaginationQueryDto {}
+
+export class UpdateOwnerPhoneDto {
+  @IsBrazilianPhone()
+  phone!: string;
+}

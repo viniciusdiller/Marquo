@@ -1,12 +1,7 @@
 import { Nav } from "@/components/marketing/Nav";
 import { Hero } from "@/components/marketing/Hero";
-import { OwnerCta } from "@/components/marketing/OwnerCta";
-import { ProblemSolution } from "@/components/marketing/ProblemSolution";
-import { HowItWorks } from "@/components/marketing/HowItWorks";
-import { Features } from "@/components/marketing/Features";
-import { RegisteredPlaces } from "@/components/marketing/RegisteredPlaces";
-import { Faq } from "@/components/marketing/Faq";
-import { FinalCta } from "@/components/marketing/FinalCta";
+import { NearbyPlaces } from "@/components/marketing/NearbyPlaces";
+import { TopRatedPlaces } from "@/components/marketing/TopRatedPlaces";
 import { Footer } from "@/components/marketing/Footer";
 import { getNavSession } from "@/lib/nav-session";
 
@@ -23,26 +18,21 @@ async function getCities(): Promise<string[]> {
   }
 }
 
-// Home agora serve dois públicos, na mesma ordem que o Trinks usa: primeiro quem está
-// procurando um salão (Hero com busca), depois quem tem um salão e quer aparecer nessa
-// busca (OwnerCta) — só então o discurso de produto pro dono (ProblemSolution em diante).
+// A home é para quem procura um salão: busca, os mais próximos (com a localização do
+// visitante, só se ele permitir) e os mais bem avaliados. Quem tem um negócio e quer entrar
+// na plataforma vai pelo botão "Para donos" da barra, que leva a /para-donos.
 export default async function Home() {
   const [cities, session] = await Promise.all([getCities(), getNavSession()]);
 
   return (
-    <>
+    <div className="flex min-h-dvh flex-col">
       <Nav session={session} />
-      <main>
+      <main className="flex-1">
         <Hero cities={cities} />
-        <RegisteredPlaces />
-        <OwnerCta />
-        <ProblemSolution />
-        <HowItWorks />
-        <Features />
-        <Faq />
-        <FinalCta />
+        <NearbyPlaces />
+        <TopRatedPlaces />
       </main>
-      <Footer isHome />
-    </>
+      <Footer />
+    </div>
   );
 }

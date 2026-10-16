@@ -6,12 +6,14 @@ import { WorkingHoursEditor } from "./WorkingHoursEditor";
 import { ServiceLinks } from "./ServiceLinks";
 import { TimeBlocksManager } from "./TimeBlocksManager";
 import { ProfessionalProfileHeader } from "./ProfessionalProfileHeader";
+import { ProfessionalPhoto } from "./ProfessionalPhoto";
 import { HowItWorks, FieldHint } from "@/components/ui/HowItWorks";
 import type { WorkingHoursInterval } from "./actions";
 
 interface ProfessionalDetail {
   id: string;
   bio: string | null;
+  photoUrl: string | null;
   isActive: boolean;
   user: { name: string; email: string };
   workingHours: { weekday: string; startMinute: number; endMinute: number }[];
@@ -89,6 +91,8 @@ export default async function ProfessionalDetailPage({
         bio={professional.bio}
         canManage={canManage}
       />
+
+      <ProfessionalPhoto professionalId={id} name={professional.user.name} photoUrl={professional.photoUrl} />
 
       <div className="mt-6 grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
         <div className="flex flex-col gap-8 lg:col-span-5 xl:col-span-4">

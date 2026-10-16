@@ -6,11 +6,15 @@ import {
   HttpCode,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Put,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { Role } from "@marquo/database";
 import { ProfessionalsService } from "./professionals.service";
 import { CreateProfessionalDto } from "./dto/create-professional.dto";
@@ -21,6 +25,8 @@ import { Roles } from "../common/decorators/roles.decorator";
 import { Public } from "../common/decorators/public.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
+
+const MAX_PHOTO_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 @Controller("professionals")
 export class ProfessionalsController {
@@ -45,6 +51,32 @@ export class ProfessionalsController {
       throw new ForbiddenException("Você só pode ver os próprios dados.");
     }
     return this.professionalsService.findOneOrThrow(user.tenantId, id);
+  }
+
+  // O dono troca a foto de qualquer profissional do negócio; o PROFISSIONAL, só a própria.
+  private assertCanEditPhoto(user: AuthenticatedUser, id: string) {
+    if (user.role === Role.PROFESSIONAL && user.professionalId !== id) {
+      throw new ForbiddenException("Você só pode alterar a sua própria foto.");
+    }
+  }
+
+  @Roles(Role.OWNER, Role.PROFESSIONAL)
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_PHOTO_UPLOAD_BYTES } }))
+  @Post(":id/photo")
+  uploadPhoto(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    this.assertCanEditPhoto(user, id);
+    return this.professionalsService.updatePhoto(user.tenantId, id, file);
+  }
+
+  @Roles(Role.OWNER, Role.PROFESSIONAL)
+  @Delete(":id/photo")
+  removePhoto(@CurrentUser() user: AuthenticatedUser, @Param("id", ParseUUIDPipe) id: string) {
+    this.assertCanEditPhoto(user, id);
+    return this.professionalsService.removePhoto(user.tenantId, id);
   }
 
   @Roles(Role.OWNER)

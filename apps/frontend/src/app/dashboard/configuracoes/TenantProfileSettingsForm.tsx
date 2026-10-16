@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
 import { MaskedInput } from "@/components/ui/MaskedInput";
 import { Button } from "@/components/ui/Button";
+import { FilePicker } from "@/components/ui/FilePicker";
 import { compressImageFile } from "@/lib/image-compression";
 import {
   updateTenantProfileAction,
@@ -77,6 +78,7 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
   );
   const [removeLogoState, removeLogoFormAction] = useActionState(removeLogoAction, {});
   const [compressing, setCompressing] = useState(false);
+  const [logoChosen, setLogoChosen] = useState(false);
   const removeLogoFormRef = useRef<HTMLFormElement>(null);
   const [confirmingRemoveLogo, setConfirmingRemoveLogo] = useState(false);
 
@@ -114,18 +116,17 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
             <div className="h-16 w-16 rounded-xl bg-zinc-100 dark:bg-white/5" />
           )}
 
-          <form action={uploadFormAction} className="flex items-center gap-3">
-            <input
-              type="file"
-              name="file"
+          <form action={uploadFormAction} className="flex flex-wrap items-center gap-3">
+            <FilePicker
               accept="image/jpeg,image/png,image/webp"
               onChange={handleFileChange}
-              className="text-sm text-zinc-600 dark:text-stone-300"
+              onSelectionChange={(name) => setLogoChosen(name !== null)}
+              disabled={uploadPending || compressing}
             />
             <Button
               type="submit"
               variant="ghost"
-              disabled={uploadPending || compressing}
+              disabled={!logoChosen || uploadPending || compressing}
               className="text-sm"
             >
               {compressing ? "Comprimindo..." : uploadPending ? "Enviando..." : "Enviar"}

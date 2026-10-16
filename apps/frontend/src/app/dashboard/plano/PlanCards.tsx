@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import clsx from "clsx";
 import { Button } from "@/components/ui/Button";
 import {
@@ -8,16 +8,18 @@ import {
   type PlanInfo,
   type PlanTier,
   formatBRL,
-  planCardAction,
+  planActionFor,
 } from "@/lib/billing";
 import { riseIn } from "@/lib/stagger";
+import { CheckoutDialog } from "./CheckoutDialog";
 import { ChangePlanDialog } from "./ChangePlanDialog";
-import { startCheckoutAction } from "./actions";
 
 function limitText(plan: PlanInfo): string {
   return plan.maxProfessionals === null ? "Profissionais ilimitados" : `Até ${plan.maxProfessionals} profissionais`;
 }
 
+// O botão de cada plano depende só do estado de cobrança (planActionFor, testado). Quem decide o que vale é o
+// backend: a tela só evita oferecer o que ele recusaria.
 export function PlanCards({
   plans,
   billing,
@@ -29,41 +31,25 @@ export function PlanCards({
   isOwner: boolean;
   suggestedTier?: PlanTier | null;
 }) {
-  const [error, setError] = useState<string | null>(null);
-  const [changeTier, setChangeTier] = useState<PlanTier | null>(null);
-  const [pendingTier, setPendingTier] = useState<PlanTier | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  function subscribe(tier: PlanTier) {
-    setError(null);
-    setPendingTier(tier);
-    startTransition(async () => {
-      const result = await startCheckoutAction(tier);
-      if ("error" in result) {
-        setError(result.error);
-        setPendingTier(null);
-        return;
-      }
-      // O pagamento acontece na página do Stripe; ele devolve o dono para /dashboard/plano.
-      window.location.assign(result.url);
-    });
-  }
-
-  const changePlan = plans.find((plan) => plan.tier === changeTier);
+  const [open, setOpen] = useState<{ plan: PlanInfo; mode: "new" | "renew" } | null>(null);
+  const [changeTo, setChangeTo] = useState<PlanInfo | null>(null);
 
   return (
     <div>
       <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
         {plans.map((plan, i) => {
-          const action = planCardAction(billing, plan.tier);
-          const isSuggested = plan.tier === suggestedTier && action !== "CURRENT";
+          const action = planActionFor(billing, plan.tier);
+          const isCurrent = billing.subscription?.plan.tier === plan.tier && billing.status !== "SUSPENDED" && !billing.subscription?.courtesy
+            ? action === "CURRENT" || action === "RENEW_PIX"
+            : false;
+          const isSuggested = plan.tier === suggestedTier && !isCurrent;
           return (
             <li
               key={plan.tier}
               style={riseIn(i)}
               className={clsx(
                 "animate-rise-in hover-lift flex flex-col rounded-2xl border p-5",
-                action === "CURRENT"
+                isCurrent
                   ? "border-accent-500 bg-accent-50/50 dark:border-accent-400 dark:bg-accent-500/10"
                   : isSuggested
                     ? "border-accent-300 bg-white ring-2 ring-accent-500/30 dark:border-accent-400/60 dark:bg-zinc-900"
@@ -83,43 +69,39 @@ export function PlanCards({
               <p className="mt-3 text-sm text-zinc-600 dark:text-stone-300">{limitText(plan)}</p>
 
               <div className="mt-5 flex-1 content-end">
-                {action === "CURRENT" ? (
+                {!isOwner ? null : action === "CURRENT" ? (
                   <span className="inline-block rounded-full bg-accent-100 px-3 py-1.5 text-sm font-semibold text-accent-700 dark:bg-accent-500/20 dark:text-accent-200">
                     Seu plano
                   </span>
-                ) : action === "MANAGE_PAYMENT" ? (
-                  <p className="text-sm text-zinc-500 dark:text-stone-400">
-                    Regularize o pagamento antes de trocar de plano.
-                  </p>
-                ) : !isOwner ? null : action === "CHANGE" ? (
-                  <Button type="button" variant="ghost" className="w-full" onClick={() => setChangeTier(plan.tier)}>
+                ) : action === "CHANGE" ? (
+                  <Button type="button" variant="ghost" className="w-full" onClick={() => setChangeTo(plan)}>
                     Trocar para este plano
                   </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    className="w-full disabled:opacity-60"
-                    disabled={isPending}
-                    onClick={() => subscribe(plan.tier)}
-                  >
-                    {isPending && pendingTier === plan.tier ? "Abrindo pagamento..." : `Assinar ${plan.name}`}
+                ) : action === "RENEW_PIX" ? (
+                  <Button type="button" className="w-full" onClick={() => setOpen({ plan, mode: "renew" })}>
+                    {isCurrent ? "Pagar o próximo mês" : `Assinar ${plan.name}`}
                   </Button>
-                )}
+                ) : action === "SUBSCRIBE" ? (
+                  <Button type="button" className="w-full" onClick={() => setOpen({ plan, mode: "new" })}>
+                    Assinar {plan.name}
+                  </Button>
+                ) : null}
               </div>
             </li>
           );
         })}
       </ul>
 
-      {error ? (
-        <p role="alert" className="mt-4 text-sm text-red-600 dark:text-red-400">
-          {error}
-        </p>
+      {changeTo && billing.subscription?.method ? (
+        <ChangePlanDialog
+          from={billing.subscription.plan}
+          to={changeTo}
+          method={billing.subscription.method}
+          onClose={() => setChangeTo(null)}
+        />
       ) : null}
 
-      {changePlan ? (
-        <ChangePlanDialog tier={changePlan.tier} planName={changePlan.name} onClose={() => setChangeTier(null)} />
-      ) : null}
+      {open ? <CheckoutDialog plan={open.plan} mode={open.mode} onClose={() => setOpen(null)} /> : null}
     </div>
   );
 }

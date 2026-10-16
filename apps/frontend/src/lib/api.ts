@@ -42,9 +42,13 @@ export interface SignupInput {
   businessName: string;
   ownerName: string;
   email: string;
+  // Telefone do dono (contato comercial da plataforma). O backend valida e normaliza.
+  phone: string;
   password: string;
   // Versão dos Termos/Privacidade que o usuário aceitou (LEGAL_DOCS_VERSION); o backend confere.
   acceptedTermsVersion: string;
+  // Cupom de campanha (opcional). Só o código: dias e desconto são sempre do servidor.
+  couponCode?: string;
 }
 
 export const publicApi = {

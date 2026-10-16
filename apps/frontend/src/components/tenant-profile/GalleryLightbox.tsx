@@ -13,11 +13,14 @@ export function GalleryLightbox({
   index,
   onClose,
   onNavigate,
+  label = "Galeria de fotos",
 }: {
   images: PublicGalleryImage[];
   index: number | null;
   onClose: () => void;
   onNavigate: (index: number) => void;
+  // Nome acessível do diálogo (a mesma janela serve para a logo, que não é "galeria").
+  label?: string;
 }) {
   const reduceMotion = useReducedMotion();
   const open = index != null;
@@ -51,7 +54,7 @@ export function GalleryLightbox({
         <motion.div
           role="dialog"
           aria-modal="true"
-          aria-label="Galeria de fotos"
+          aria-label={label}
           initial={reduceMotion ? undefined : { opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

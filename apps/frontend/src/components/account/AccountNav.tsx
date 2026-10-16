@@ -31,6 +31,17 @@ export function AccountNav({
     );
   }
 
+  if (session?.kind === "platform") {
+    return (
+      <Link
+        href="/plataforma"
+        className="rounded-full bg-accent-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent-500/20 transition-colors hover:bg-accent-600"
+      >
+        Plataforma
+      </Link>
+    );
+  }
+
   if (!session) {
     return (
       <Link

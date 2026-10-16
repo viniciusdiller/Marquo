@@ -29,7 +29,7 @@ não domínio.
 | `appointments` | Agregado `Appointment` (agenda pública + staff): criação, reagendamento, cancelamento, transições de status, calendário. |
 | `auth` | Login/refresh/definir-senha de staff (`User`), lockout progressivo, JWT. |
 | `availability` | Cálculo de horários livres de um profissional pra um serviço (`public/tenants/:slug/professionals/:id/availability`). |
-| `billing` | Cobrança pelo Stripe: checkout, portal, troca de plano (`CheckoutService`, `PlanChangeService`, `StripeService`), status e planos; `PlanLimitService`/`TenantBillingGuard` leem daqui. |
+| `billing` | Planos (`GET /plans`), estado de cobrança do negócio (`computeBillingStatus`, `GET /billing/status`) e limites por plano (`PlanLimitService`/`TenantBillingGuard`). Sem provedor de pagamento por enquanto (Stripe removido; Mercado Pago a integrar). |
 | `cash-register` | Abertura/fechamento de caixa, conferência de valor físico contra `Payment`/`CashMovement`. |
 | `clients` | CRUD de `Client` (ficha 360, intake) pelo staff. |
 | `commissions` | Regras de comissão por profissional/serviço, cálculo no fechamento de comanda e `earnings` (bruto/líquido/repasse/saldo por profissional, calculado na hora). |
@@ -47,7 +47,8 @@ não domínio.
 | `time-blocks` | Bloqueio manual de horário (folga/férias) na agenda de um profissional. |
 | `waitlist` | Lista de espera pública quando não há horário livre no dia. |
 | `internal` | API de suporte do Admin (`/internal/*`), só com HMAC (`InternalAuthGuard`): lista tenants e gera link de redefinição de senha do dono, com `AdminAuditLog`. |
-| `webhooks` | `POST /webhooks/stripe` (assinatura sobre o corpo cru, estado relido na API, dedupe). |
+| `coupons` | Regras e resgate atômico de cupons de campanha no cadastro (`CouponsService`); a gestão fica no painel da plataforma. |
+| `platform-admin` | Painel da empresa (`/platform/*`): conta definida no `.env`, métricas, negócios, cortesia, suspensão, cupons e auditoria. |
 
 ## Guards globais e ordem de execução
 

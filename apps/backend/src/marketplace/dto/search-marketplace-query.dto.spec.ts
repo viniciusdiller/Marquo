@@ -41,4 +41,20 @@ describe("SearchMarketplaceQueryDto", () => {
     const errors = await errorsFor({ q: "a".repeat(101) });
     expect(errors.some((e) => e.property === "q")).toBe(true);
   });
+
+  it("aceita sort válido e limit dentro da faixa", async () => {
+    expect(await errorsFor({ sort: "rating", limit: "8" })).toHaveLength(0);
+    expect(await errorsFor({ sort: "distance", lat: "-23.55", lng: "-46.63" })).toHaveLength(0);
+  });
+
+  it("rejeita sort desconhecido (vazaria direto para a ordenação)", async () => {
+    const errors = await errorsFor({ sort: "name; DROP TABLE" });
+    expect(errors.some((e) => e.property === "sort")).toBe(true);
+  });
+
+  it("rejeita limit fora de 1..50", async () => {
+    expect((await errorsFor({ limit: "0" })).some((e) => e.property === "limit")).toBe(true);
+    expect((await errorsFor({ limit: "51" })).some((e) => e.property === "limit")).toBe(true);
+    expect((await errorsFor({ limit: "2.5" })).some((e) => e.property === "limit")).toBe(true);
+  });
 });

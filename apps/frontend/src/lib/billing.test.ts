@@ -5,13 +5,13 @@ import {
   type BillingStatusResponse,
   type PlanInfo,
   bannerFor,
-  canOpenPortal,
   daysUntil,
   formatBRL,
   formatDate,
   hasBillingAccess,
   isPlanInfo,
-  planCardAction,
+  planActionFor,
+  type BillingMethod,
 } from "./billing.ts";
 
 const NOW = Date.parse("2026-09-24T12:00:00Z");
@@ -21,11 +21,21 @@ const iso = (offsetDays: number) => new Date(NOW + offsetDays * DAY).toISOString
 const PRO: PlanInfo = { tier: "PROFISSIONAL", name: "Profissional", priceCents: 7990, maxProfessionals: 5 };
 
 function billing(status: BillingStatus, extra: Partial<BillingStatusResponse> = {}): BillingStatusResponse {
-  return { status, trialEndsAt: iso(10), subscription: null, ...extra };
+  return { status, trialEndsAt: iso(10), paymentsEnabled: true, subscription: null, ...extra };
 }
-const withSub = (status: BillingStatus, over: { cancelAtPeriodEnd?: boolean } = {}) =>
+const withSub = (
+  status: BillingStatus,
+  over: { cancelAtPeriodEnd?: boolean; courtesy?: boolean; method?: BillingMethod | null; endInDays?: number } = {},
+) =>
   billing(status, {
-    subscription: { status, currentPeriodEnd: iso(20), cancelAtPeriodEnd: over.cancelAtPeriodEnd ?? false, plan: PRO },
+    subscription: {
+      status,
+      currentPeriodEnd: iso(over.endInDays ?? 20),
+      cancelAtPeriodEnd: over.cancelAtPeriodEnd ?? false,
+      courtesy: over.courtesy ?? false,
+      method: over.method === undefined ? "CARD_RECURRING" : over.method,
+      plan: PRO,
+    },
   });
 
 describe("hasBillingAccess (espelha o backend)", () => {
@@ -38,6 +48,9 @@ describe("hasBillingAccess (espelha o backend)", () => {
       CANCELED: false,
       INCOMPLETE: false,
       UNPAID: false,
+      SUSPENDED: false,
+      EXPIRED: false,
+      PERIOD_ENDED: false,
     };
     for (const [status, access] of Object.entries(expected)) {
       assert.equal(hasBillingAccess(status as BillingStatus), access, status);
@@ -56,6 +69,42 @@ describe("bannerFor", () => {
     assert.equal(bannerFor(billing("TRIALING", { trialEndsAt: iso(1) }), NOW)?.message, "Seu período de teste termina em 1 dia.");
     assert.equal(bannerFor(billing("TRIALING", { trialEndsAt: iso(0) }), NOW)?.message, "Seu período de teste termina hoje.");
     assert.equal(bannerFor(billing("TRIALING", { trialEndsAt: iso(2) }), NOW)?.tone, "warning");
+  });
+
+  // Suspensão manual pela plataforma: não pode ser confundida com "teste vencido" (o dono acharia que
+  // basta ativar um plano).
+  it("suspensão manual: mensagem própria e sem falar em teste", () => {
+    const banner = bannerFor(billing("SUSPENDED"), NOW);
+    assert.ok(banner);
+    assert.equal(banner.tone, "danger");
+    assert.match(banner.message, /suspensa/i);
+    assert.doesNotMatch(banner.message, /teste/i);
+  });
+
+  it("cortesia vencida: aviso próprio, sem falar em teste nem em assinar", () => {
+    const banner = bannerFor(billing("EXPIRED"), NOW);
+    assert.ok(banner);
+    assert.equal(banner.tone, "danger");
+    assert.match(banner.message, /cortesia/i);
+    assert.doesNotMatch(banner.message, /teste|assin/i);
+  });
+
+  it("Pix mensal vencido: aviso próprio que manda gerar o Pix do próximo mês", () => {
+    const banner = bannerFor(billing("PERIOD_ENDED"), NOW);
+    assert.ok(banner);
+    assert.equal(banner.tone, "danger");
+    assert.match(banner.message, /Pix do próximo mês/);
+    assert.match(banner.ctaLabel, /próximo mês/i);
+  });
+
+  it("estados bloqueados apontam uma ação de pagamento, não um beco sem saída", () => {
+    const states: BillingStatus[] = ["TRIAL_EXPIRED", "CANCELED", "UNPAID", "INCOMPLETE", "EXPIRED", "PERIOD_ENDED"];
+    for (const status of states) {
+      const banner = bannerFor(billing(status), NOW);
+      assert.ok(banner, status);
+      assert.ok(banner.ctaLabel.length > 0, status);
+      assert.doesNotMatch(banner.message, /stripe|portal/i, status);
+    }
   });
 
   it("cada estado bloqueado tem mensagem própria e tom de perigo, com chamada para agir", () => {
@@ -87,32 +136,40 @@ describe("bannerFor", () => {
   });
 });
 
-describe("planCardAction: o botão de cada plano", () => {
-  it("sem assinatura viva todo card é 'assinar'", () => {
-    for (const status of ["TRIALING", "TRIAL_EXPIRED", "CANCELED", "INCOMPLETE"] as const) {
-      assert.equal(planCardAction(billing(status), "PREMIUM"), "SUBSCRIBE", status);
+describe("planActionFor: o botão de cada plano", () => {
+  it("sem assinatura (teste, vencido) todo plano é 'assinar'", () => {
+    for (const status of ["TRIALING", "TRIAL_EXPIRED"] as const) {
+      assert.equal(planActionFor(billing(status), "PREMIUM", NOW), "SUBSCRIBE", status);
     }
   });
 
-  it("assinatura ativa: o plano atual é 'current' e os outros são 'trocar'", () => {
-    assert.equal(planCardAction(withSub("ACTIVE"), "PROFISSIONAL"), "CURRENT");
-    assert.equal(planCardAction(withSub("ACTIVE"), "ESSENCIAL"), "CHANGE");
-    assert.equal(planCardAction(withSub("ACTIVE"), "PREMIUM"), "CHANGE");
+  it("cortesia pode ser substituída por uma assinatura paga", () => {
+    assert.equal(planActionFor(withSub("ACTIVE", { courtesy: true, method: null }), "PREMIUM", NOW), "SUBSCRIBE");
+    assert.equal(planActionFor(billing("EXPIRED"), "PREMIUM", NOW), "SUBSCRIBE");
   });
 
-  // O backend recusa novo checkout e troca com assinatura em atraso/não paga (evitaria cobrar em dobro).
-  it("em atraso ou não paga só o portal resolve, em qualquer card", () => {
-    for (const status of ["PAST_DUE", "UNPAID"] as const) {
-      for (const tier of ["ESSENCIAL", "PROFISSIONAL", "PREMIUM"] as const) {
-        assert.equal(planCardAction(withSub(status), tier), "MANAGE_PAYMENT");
-      }
-    }
+  it("cartão ativo: o plano atual é 'seu plano' e os outros oferecem a TROCA", () => {
+    assert.equal(planActionFor(withSub("ACTIVE"), "PROFISSIONAL", NOW), "CURRENT");
+    assert.equal(planActionFor(withSub("ACTIVE"), "PREMIUM", NOW), "CHANGE");
+    assert.equal(planActionFor(withSub("ACTIVE"), "ESSENCIAL", NOW), "CHANGE");
   });
 
-  it("o portal só existe para quem já tem assinatura", () => {
-    assert.equal(canOpenPortal(billing("TRIALING")), false);
-    assert.equal(canOpenPortal(withSub("ACTIVE")), true);
-    assert.equal(canOpenPortal(withSub("CANCELED")), true);
+  it("sem troca quando a assinatura está cancelada ou em atraso (o backend recusa)", () => {
+    assert.equal(planActionFor(withSub("ACTIVE", { cancelAtPeriodEnd: true }), "PREMIUM", NOW), "BLOCKED");
+    assert.equal(planActionFor(withSub("PAST_DUE"), "PREMIUM", NOW), "BLOCKED");
+  });
+
+  // O requisito: no Pix o dono precisa poder pagar o mês seguinte quando o mês acaba.
+  it("Pix: longe do vencimento só mostra o atual; perto ou vencido libera pagar de novo", () => {
+    assert.equal(planActionFor(withSub("ACTIVE", { method: "PIX_MONTHLY", endInDays: 25 }), "PROFISSIONAL", NOW), "CURRENT");
+    assert.equal(planActionFor(withSub("ACTIVE", { method: "PIX_MONTHLY", endInDays: 25 }), "PREMIUM", NOW), "CHANGE");
+    assert.equal(planActionFor(withSub("ACTIVE", { method: "PIX_MONTHLY", endInDays: 4 }), "PROFISSIONAL", NOW), "RENEW_PIX");
+    assert.equal(planActionFor(withSub("PERIOD_ENDED", { method: "PIX_MONTHLY", endInDays: -2 }), "PROFISSIONAL", NOW), "RENEW_PIX");
+  });
+
+  it("sem provedor configurado ou suspenso: nenhum botão de pagar", () => {
+    assert.equal(planActionFor(billing("TRIAL_EXPIRED", { paymentsEnabled: false }), "PREMIUM", NOW), "BLOCKED");
+    assert.equal(planActionFor(billing("SUSPENDED"), "PREMIUM", NOW), "BLOCKED");
   });
 });
 

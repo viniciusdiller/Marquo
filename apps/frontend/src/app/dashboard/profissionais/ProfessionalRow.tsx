@@ -4,12 +4,14 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Avatar } from "@/components/ui/Avatar";
 import { riseIn } from "@/lib/stagger";
 import { toggleProfessionalActiveAction } from "./actions";
 
 export function ProfessionalRow({
   id,
   name,
+  photoUrl = null,
   email,
   isActive,
   canManage,
@@ -17,6 +19,7 @@ export function ProfessionalRow({
 }: {
   id: string;
   name: string;
+  photoUrl?: string | null;
   email?: string;
   isActive: boolean;
   canManage: boolean;
@@ -40,7 +43,9 @@ export function ProfessionalRow({
       className="animate-rise-in flex flex-col gap-1 py-4"
     >
       <div className="flex items-center justify-between gap-4">
-        <div>
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar name={name} photoUrl={photoUrl} size={44} tone="brand" />
+          <div className="min-w-0">
           <Link
             href={`/dashboard/profissionais/${id}`}
             className="font-medium text-zinc-900 hover:text-accent-600 dark:text-white dark:hover:text-accent-300"
@@ -48,6 +53,7 @@ export function ProfessionalRow({
             {name}
           </Link>
           {email ? <p className="text-sm text-zinc-500 dark:text-stone-400">{email}</p> : null}
+          </div>
         </div>
 
         <div className="flex items-center gap-3">

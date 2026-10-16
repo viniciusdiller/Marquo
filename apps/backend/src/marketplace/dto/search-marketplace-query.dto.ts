@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsLatitude, IsLongitude, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { IsIn, IsInt, IsLatitude, IsLongitude, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 
 // Endpoint público, sem auth — todo campo é opcional (busca vazia = lista tudo, até o teto de
 // `take` fixo no service), mas nenhum aceita valor arbitrário: strings têm teto de tamanho e
@@ -36,4 +36,18 @@ export class SearchMarketplaceQueryDto {
   @Min(1)
   @Max(200)
   radiusKm?: number;
+
+  // Ordenação explícita: "rating" (melhor avaliados primeiro) ou "distance" (mais perto primeiro,
+  // exige lat/lng). Omitido: distância quando há lat/lng, senão nota.
+  @IsOptional()
+  @IsIn(["rating", "distance"])
+  sort?: "rating" | "distance";
+
+  // Teto de itens devolvidos (a home pede só os 8 primeiros).
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number;
 }

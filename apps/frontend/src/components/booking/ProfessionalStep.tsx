@@ -1,4 +1,4 @@
-import { UserCircle } from "@phosphor-icons/react/dist/ssr";
+import { Avatar } from "../ui/Avatar";
 import type { PublicProfessional } from "@marquo/shared-types";
 import { RadioCard } from "../ui/RadioCard";
 
@@ -28,7 +28,7 @@ export function ProfessionalStep({
           onClick={() => onSelect(professional)}
         >
           <div className="flex items-center gap-3">
-            <UserCircle size={32} weight="light" className="shrink-0 text-(--tenant-accent)" />
+            <Avatar name={professional.name} photoUrl={professional.photoUrl} size={56} />
             <div>
               <p className="font-display font-semibold text-zinc-900 dark:text-white">
                 {professional.name}

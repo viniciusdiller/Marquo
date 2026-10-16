@@ -7,8 +7,8 @@ import { MagnifyingGlass, MapPin } from "@phosphor-icons/react/dist/ssr";
 import { Container } from "../ui/Container";
 import { BrandPattern } from "../brand/BrandPattern";
 
-// Hero de busca (estilo Trinks): a home vira o ponto de entrada de quem procura um
-// salão/barbearia, não só a página de venda pro dono. A busca por texto usa "contains" no
+// Hero de busca: a home é o ponto de entrada de quem procura um salão/barbearia (o discurso
+// pro dono vive em /para-donos). A busca por texto usa "contains" no
 // backend (livre), mas cidade é "equals" — por isso o campo de local é um <select> com as
 // cidades que realmente têm negócio cadastrado, em vez de texto livre que podia não bater
 // com nada.

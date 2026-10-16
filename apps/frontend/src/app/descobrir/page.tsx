@@ -36,10 +36,10 @@ export default async function DescobrirPage({
   ]);
 
   return (
-    <div className="relative isolate">
+    <div className="relative isolate flex min-h-dvh flex-col">
       <BrandPattern mask="linear-gradient(to bottom, black, transparent 420px)" />
       <SiteHeader loginNext="/descobrir" />
-      <main className="mx-auto max-w-3xl px-4 py-10">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
         <Link
           href="/"
           className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900 dark:text-stone-400 dark:hover:text-white"

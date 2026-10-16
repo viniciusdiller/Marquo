@@ -10,6 +10,7 @@ import { ProfessionalRow } from "./ProfessionalRow";
 interface AdminProfessional {
   id: string;
   isActive: boolean;
+  photoUrl: string | null;
   // email ausente quando quem pede é PROFESSIONAL (backend só devolve e-mail de colega pro
   // dono/recepção — ver professionals.service.ts findAllByTenant).
   user: { id: string; name: string; email?: string };
@@ -68,6 +69,7 @@ export default async function ProfessionalsPage() {
                   key={professional.id}
                   id={professional.id}
                   name={professional.user.name}
+                  photoUrl={professional.photoUrl}
                   email={professional.user.email}
                   isActive={professional.isActive}
                   canManage={isOwner}

@@ -3,19 +3,14 @@ import { Container } from "../ui/Container";
 import { Reveal } from "../ui/Reveal";
 import { SectionHeading } from "../ui/SectionHeading";
 
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? "";
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
-  return (first + last).toUpperCase();
-}
+import { Avatar } from "../ui/Avatar";
 
 export function TeamSection({ slug, team }: { slug: string; team: PublicProfessional[] }) {
   if (team.length === 0) return null;
 
   return (
     <Reveal>
-      <section className="border-t border-zinc-200 py-16 dark:border-white/10">
+      <section id="equipe" className="scroll-mt-32 border-t border-zinc-200 py-16 dark:border-white/10">
         <Container>
           <SectionHeading eyebrow="Quem cuida de você" title="Profissionais" />
 
@@ -25,9 +20,7 @@ export function TeamSection({ slug, team }: { slug: string; team: PublicProfessi
                 key={professional.id}
                 className="flex flex-col items-center gap-3 rounded-2xl border border-zinc-200 p-5 text-center dark:border-white/10"
               >
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-(--tenant-accent)/10 font-brand text-lg font-bold text-(--tenant-accent)">
-                  {initials(professional.name)}
-                </div>
+                <Avatar name={professional.name} photoUrl={professional.photoUrl} size={80} />
                 <div className="min-w-0">
                   <p className="font-brand font-semibold text-zinc-900 dark:text-white">
                     {professional.name}

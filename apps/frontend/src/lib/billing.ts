@@ -5,6 +5,9 @@
 export type BillingStatus =
   | "TRIALING"
   | "TRIAL_EXPIRED"
+  | "SUSPENDED" // suspensão manual pela plataforma: vence qualquer estado de cobrança
+  | "EXPIRED" // cortesia concedida pela plataforma que chegou ao fim
+  | "PERIOD_ENDED" // Pix mensal cujo mês acabou sem um novo pagamento
   | "ACTIVE"
   | "PAST_DUE"
   | "CANCELED"
@@ -35,31 +38,23 @@ export function isPlanInfo(value: unknown): value is PlanInfo {
   );
 }
 
+export type BillingMethod = "CARD_RECURRING" | "PIX_MONTHLY";
+
 export interface BillingStatusResponse {
   status: BillingStatus;
   trialEndsAt: string;
+  // Há provedor de pagamento configurado? Sem ele a tela só informa ("fale com a equipe").
+  paymentsEnabled: boolean;
   subscription: {
     status: string;
     currentPeriodEnd: string | null;
     cancelAtPeriodEnd: boolean;
+    // Acesso concedido pela plataforma, sem cobrança. Termina em currentPeriodEnd (nulo = sem data).
+    courtesy: boolean;
+    // Cartão recorrente ou Pix mensal; nulo na cortesia.
+    method: BillingMethod | null;
     plan: PlanInfo;
   } | null;
-}
-
-export interface PlanChangePreview {
-  currentTier: PlanTier;
-  newTier: PlanTier;
-  direction: "UPGRADE" | "DOWNGRADE";
-  newLimit: number | null;
-  activeCount: number;
-  excess: number;
-  professionals: {
-    id: string;
-    name: string;
-    email: string;
-    futureAppointments: number;
-    canDeactivate: boolean;
-  }[];
 }
 
 // Espelha billing-status.util.ts do backend (hasBillingAccess).
@@ -101,6 +96,24 @@ export function bannerFor(billing: BillingStatusResponse, now: number = Date.now
             ctaLabel: "Ver plano",
           }
         : null;
+    case "SUSPENDED":
+      return {
+        message: "Sua conta foi suspensa pela equipe do Marquo. Entre em contato com o suporte para reativar o acesso.",
+        tone: "danger",
+        ctaLabel: "Ver detalhes",
+      };
+    case "EXPIRED":
+      return {
+        message: "Seu acesso de cortesia terminou. Escolha um plano para continuar usando o Marquo.",
+        tone: "danger",
+        ctaLabel: "Escolher plano",
+      };
+    case "PERIOD_ENDED":
+      return {
+        message: "O mês do seu plano terminou. Gere o Pix do próximo mês para voltar a usar o Marquo.",
+        tone: "danger",
+        ctaLabel: "Pagar o próximo mês",
+      };
     case "TRIALING": {
       const left = daysUntil(billing.trialEndsAt, now);
       if (left > 3) return null;
@@ -132,9 +145,9 @@ export function bannerFor(billing: BillingStatusResponse, now: number = Date.now
     case "UNPAID":
       return {
         message:
-          "Não conseguimos processar o pagamento da sua assinatura. Atualize a forma de pagamento para reativar o acesso.",
+          "Não conseguimos confirmar o pagamento da sua assinatura. Regularize para reativar o acesso.",
         tone: "danger",
-        ctaLabel: "Atualizar pagamento",
+        ctaLabel: "Regularizar pagamento",
       };
     case "INCOMPLETE":
       return {
@@ -145,26 +158,41 @@ export function bannerFor(billing: BillingStatusResponse, now: number = Date.now
   }
 }
 
-// O que o botão de CADA card de plano faz, conforme o estado da cobrança:
-// - SUBSCRIBE: não há assinatura viva (teste, teste vencido, cancelada, checkout abandonado) -> checkout.
-// - CURRENT: é o plano da assinatura ativa.
-// - CHANGE: assinatura ativa em outro plano -> troca de plano (com o aviso e a escolha de excedentes).
-// - MANAGE_PAYMENT: em atraso/não paga, o backend recusa novo checkout e troca: só o portal resolve.
-export type PlanCardAction = "SUBSCRIBE" | "CURRENT" | "CHANGE" | "MANAGE_PAYMENT";
-
-export function planCardAction(billing: BillingStatusResponse, tier: PlanTier): PlanCardAction {
-  switch (billing.status) {
-    case "ACTIVE":
-      return billing.subscription?.plan.tier === tier ? "CURRENT" : "CHANGE";
-    case "PAST_DUE":
-    case "UNPAID":
-      return "MANAGE_PAYMENT";
-    default:
-      return "SUBSCRIBE";
-  }
+// Estados em que o dono pode (e precisa) pagar para continuar: abre o checkout direto na tela de plano.
+export function needsPayment(status: BillingStatus): boolean {
+  return (
+    status === "TRIAL_EXPIRED" ||
+    status === "EXPIRED" ||
+    status === "PERIOD_ENDED" ||
+    status === "CANCELED" ||
+    status === "UNPAID" ||
+    status === "INCOMPLETE" ||
+    status === "PAST_DUE"
+  );
 }
 
-// Verdadeiro quando já existe um customer no Stripe para abrir o portal (há assinatura, viva ou não).
-export function canOpenPortal(billing: BillingStatusResponse): boolean {
-  return billing.subscription !== null;
+// O que o dono pode fazer na tela de plano, conforme o estado e a forma de pagamento. Só apresentação: o backend
+// recusa o que não vale (ex.: pagar adiantado vários meses).
+export type PlanAction = "SUBSCRIBE" | "CURRENT" | "CHANGE" | "RENEW_PIX" | "BLOCKED";
+
+export function planActionFor(billing: BillingStatusResponse, tier: PlanTier, now: number = Date.now()): PlanAction {
+  if (!billing.paymentsEnabled || billing.status === "SUSPENDED") return "BLOCKED";
+  const sub = billing.subscription;
+  if (!sub || sub.courtesy) return "SUBSCRIBE";
+  const active = billing.status === "ACTIVE" || billing.status === "PAST_DUE";
+  // Troca de plano só com a assinatura em dia e sem cancelamento agendado (o backend recusa o resto).
+  const canChange = billing.status === "ACTIVE" && !sub.cancelAtPeriodEnd;
+  if (sub.method === "CARD_RECURRING" && active) {
+    if (sub.plan.tier === tier) return "CURRENT";
+    return canChange ? "CHANGE" : "BLOCKED";
+  }
+  if (sub.method === "PIX_MONTHLY") {
+    const end = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd).getTime() : null;
+    const nearEnd = end === null || end - now <= 10 * 24 * 60 * 60 * 1000;
+    // Mês acabando ou acabado: pagar o próximo mês (no plano que escolher) é o caminho.
+    if (billing.status !== "ACTIVE" || nearEnd) return "RENEW_PIX";
+    if (sub.plan.tier === tier) return "CURRENT";
+    return canChange ? "CHANGE" : "BLOCKED";
+  }
+  return "SUBSCRIBE";
 }

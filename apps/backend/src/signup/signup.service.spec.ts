@@ -8,6 +8,7 @@ import { LEGAL_DOCS_VERSION } from "@marquo/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { TRIAL_DAYS } from "../billing/trial.constants";
 import { computeBillingStatus, hasBillingAccess } from "../billing/billing-status.util";
+import { CouponsService } from "../coupons/coupons.service";
 import { SignupDto } from "./dto/signup.dto";
 import { EMAIL_TAKEN_MESSAGE, SignupService, TERMS_OUTDATED_MESSAGE } from "./signup.service";
 
@@ -24,6 +25,7 @@ const DTO: SignupDto = {
   businessName: "Barbearia do Zé",
   ownerName: "José Silva",
   email: "ze@barbearia.com",
+  phone: "(11) 91234-5678",
   password: "senha-forte-123",
   acceptedTermsVersion: LEGAL_DOCS_VERSION,
 };
@@ -41,6 +43,9 @@ function uniqueViolation(target: string[] | string) {
 function buildPrisma(overrides: { tenantSlugsTaken?: string[]; userCreate?: jest.Mock } = {}) {
   const taken = new Set(overrides.tenantSlugsTaken ?? []);
   const tx = {
+    coupon: { findUnique: jest.fn().mockResolvedValue(null) },
+    couponRedemption: { create: jest.fn().mockResolvedValue({}) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
     tenant: {
       findUnique: jest.fn().mockImplementation(({ where }) =>
         Promise.resolve(taken.has(where.slug) ? { id: "existing" } : null),
@@ -62,7 +67,7 @@ describe("SignupService", () => {
     const { prisma, tx } = buildPrisma();
     const before = Date.now();
 
-    const result = await new SignupService(prisma).signup(DTO);
+    const result = await new SignupService(prisma, new CouponsService()).signup(DTO);
 
     expect(result).toEqual({ slug: "barbearia-do-ze" });
     const tenantData = tx.tenant.create.mock.calls[0][0].data;
@@ -78,12 +83,14 @@ describe("SignupService", () => {
   it("papel OWNER e tenantId são definidos pelo servidor, e a senha é guardada em bcrypt", async () => {
     const { prisma, tx } = buildPrisma();
 
-    await new SignupService(prisma).signup(DTO);
+    await new SignupService(prisma, new CouponsService()).signup(DTO);
 
     const userData = tx.user.create.mock.calls[0][0].data;
     expect(userData.role).toBe(Role.OWNER);
     expect(userData.tenantId).toBe("t-1");
     expect(userData.email).toBe("ze@barbearia.com");
+    // Telefone do dono vai normalizado (só dígitos, sem DDI) para o contato comercial da plataforma.
+    expect(userData.phone).toBe("11912345678");
     expect(userData.passwordHash).not.toBe(DTO.password);
     await expect(bcrypt.compare(DTO.password, userData.passwordHash)).resolves.toBe(true);
     // emailVerifiedAt fica nulo: nada exige verificação na v1.
@@ -92,7 +99,7 @@ describe("SignupService", () => {
 
   it("um tenant recém-criado tem acesso (TRIALING) e, vencido o trial, é bloqueado", async () => {
     const { prisma, tx } = buildPrisma();
-    await new SignupService(prisma).signup(DTO);
+    await new SignupService(prisma, new CouponsService()).signup(DTO);
     const { trialEndsAt } = tx.tenant.create.mock.calls[0][0].data;
 
     const active = computeBillingStatus({ trialEndsAt }, null);
@@ -115,7 +122,7 @@ describe("SignupService", () => {
     async (name) => {
       const { prisma, tx } = buildPrisma();
 
-      const { slug } = await new SignupService(prisma).signup({ ...DTO, businessName: name });
+      const { slug } = await new SignupService(prisma, new CouponsService()).signup({ ...DTO, businessName: name });
 
       expect(slug).toMatch(/-2$/);
       expect(tx.tenant.create.mock.calls[0][0].data.slug).toBe(slug);
@@ -125,7 +132,7 @@ describe("SignupService", () => {
   it("slug já usado por outro tenant recebe sufixo", async () => {
     const { prisma } = buildPrisma({ tenantSlugsTaken: ["barbearia-do-ze", "barbearia-do-ze-2"] });
 
-    const { slug } = await new SignupService(prisma).signup(DTO);
+    const { slug } = await new SignupService(prisma, new CouponsService()).signup(DTO);
 
     expect(slug).toBe("barbearia-do-ze-3");
   });
@@ -135,7 +142,7 @@ describe("SignupService", () => {
       userCreate: jest.fn().mockRejectedValue(uniqueViolation(["email"])),
     });
 
-    const attempt = new SignupService(prisma).signup(DTO);
+    const attempt = new SignupService(prisma, new CouponsService()).signup(DTO);
 
     await expect(attempt).rejects.toBeInstanceOf(ConflictException);
     await expect(attempt).rejects.toMatchObject({ message: EMAIL_TAKEN_MESSAGE });
@@ -148,13 +155,13 @@ describe("SignupService", () => {
       .mockResolvedValue({ id: "u-1" });
     const { prisma } = buildPrisma({ userCreate });
 
-    await expect(new SignupService(prisma).signup(DTO)).resolves.toEqual({ slug: "barbearia-do-ze" });
+    await expect(new SignupService(prisma, new CouponsService()).signup(DTO)).resolves.toEqual({ slug: "barbearia-do-ze" });
     expect(userCreate).toHaveBeenCalledTimes(2);
 
     const alwaysSlug = buildPrisma({
       userCreate: jest.fn().mockRejectedValue(uniqueViolation(["slug"])),
     });
-    await expect(new SignupService(alwaysSlug.prisma).signup(DTO)).rejects.toBeInstanceOf(
+    await expect(new SignupService(alwaysSlug.prisma, new CouponsService()).signup(DTO)).rejects.toBeInstanceOf(
       Prisma.PrismaClientKnownRequestError,
     );
   });
@@ -163,7 +170,7 @@ describe("SignupService", () => {
     const boom = new Error("conexão perdida");
     const { prisma } = buildPrisma({ userCreate: jest.fn().mockRejectedValue(boom) });
 
-    await expect(new SignupService(prisma).signup(DTO)).rejects.toBe(boom);
+    await expect(new SignupService(prisma, new CouponsService()).signup(DTO)).rejects.toBe(boom);
   });
 
   it("hasheia a senha antes de tocar no banco (mesmo custo com e-mail novo ou repetido)", async () => {
@@ -174,7 +181,7 @@ describe("SignupService", () => {
     });
 
     // Mesmo no caminho de e-mail repetido (409) o bcrypt já rodou antes da transação.
-    await expect(new SignupService(prisma).signup(DTO)).rejects.toBeInstanceOf(ConflictException);
+    await expect(new SignupService(prisma, new CouponsService()).signup(DTO)).rejects.toBeInstanceOf(ConflictException);
 
     const hashOrder = hashMock.mock.invocationCallOrder[0];
     const dbOrder = (prisma.$transaction as jest.Mock).mock.invocationCallOrder[0];
@@ -188,7 +195,7 @@ describe("SignupService: aceite dos termos", () => {
     const { prisma, tx } = buildPrisma();
     const before = Date.now();
 
-    await new SignupService(prisma).signup(DTO);
+    await new SignupService(prisma, new CouponsService()).signup(DTO);
 
     const userData = tx.user.create.mock.calls[0][0].data;
     expect(userData.termsVersion).toBe(LEGAL_DOCS_VERSION);
@@ -205,7 +212,7 @@ describe("SignupService: aceite dos termos", () => {
       hashMock.mockClear();
       const { prisma } = buildPrisma();
 
-      const attempt = new SignupService(prisma).signup({ ...DTO, acceptedTermsVersion: version });
+      const attempt = new SignupService(prisma, new CouponsService()).signup({ ...DTO, acceptedTermsVersion: version });
 
       await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
       await expect(attempt).rejects.toMatchObject({ message: TERMS_OUTDATED_MESSAGE });
@@ -220,6 +227,7 @@ describe("SignupDto (fronteira pública)", () => {
     businessName: "Salão",
     ownerName: "Maria",
     email: "M@X.com",
+    phone: "11912345678",
     password: "12345678",
     acceptedTermsVersion: LEGAL_DOCS_VERSION,
   };
@@ -241,6 +249,10 @@ describe("SignupDto (fronteira pública)", () => {
     ["versão de termos ausente", { acceptedTermsVersion: undefined }],
     ["versão de termos que não é texto", { acceptedTermsVersion: true }],
     ["versão de termos gigante", { acceptedTermsVersion: "v".repeat(41) }],
+    ["telefone ausente", { phone: undefined }],
+    ["telefone inválido (DDD inexistente)", { phone: "0011912345678" }],
+    ["telefone só com zeros", { phone: "00000000000" }],
+    ["telefone com texto", { phone: "abc" }],
   ])("rejeita %s", async (_label, patch) => {
     const dto = plainToInstance(SignupDto, { ...valid, ...patch });
     expect((await validate(dto)).length).toBeGreaterThan(0);
@@ -255,4 +267,80 @@ describe("SignupDto (fronteira pública)", () => {
       expect(errors.some((e) => e.property === field)).toBe(true);
     },
   );
+});
+
+describe("SignupService: cupom", () => {
+  const COUPON = {
+    id: "c-1",
+    kind: "TRIAL_DAYS",
+    value: 30,
+    isActive: true,
+    validFrom: null,
+    validUntil: null,
+    maxRedemptions: null,
+    redemptionCount: 0,
+  };
+
+  function withCoupon(coupon: Record<string, unknown> | null, reserved = 1) {
+    const built = buildPrisma();
+    built.tx.coupon.findUnique.mockResolvedValue(coupon);
+    built.tx.$executeRaw.mockResolvedValue(reserved);
+    return built;
+  }
+
+  it("cupom de dias soma ao trial e registra o resgate no mesmo cadastro", async () => {
+    const { prisma, tx } = withCoupon(COUPON);
+    const before = Date.now();
+
+    await new SignupService(prisma, new CouponsService()).signup({ ...DTO, couponCode: " promo30 " });
+
+    expect(tx.coupon.findUnique.mock.calls[0][0].where).toEqual({ code: "PROMO30" });
+    const trialMs = tx.tenant.create.mock.calls[0][0].data.trialEndsAt.getTime() - before;
+    expect(trialMs).toBeGreaterThanOrEqual((TRIAL_DAYS + 30) * DAY_MS - 1000);
+    expect(trialMs).toBeLessThanOrEqual((TRIAL_DAYS + 30) * DAY_MS + 5000);
+    expect(tx.couponRedemption.create).toHaveBeenCalledWith({ data: { couponId: "c-1", tenantId: "t-1" } });
+  });
+
+  it("sem cupom: trial padrão e nada de resgate", async () => {
+    const { prisma, tx } = withCoupon(COUPON);
+    await new SignupService(prisma, new CouponsService()).signup(DTO);
+    expect(tx.coupon.findUnique).not.toHaveBeenCalled();
+    expect(tx.couponRedemption.create).not.toHaveBeenCalled();
+  });
+
+  // Cupom percentual/fixo não altera o trial: fica registrado para a primeira cobrança.
+  it("cupom de desconto não mexe no trial, mas registra o resgate", async () => {
+    const { prisma, tx } = withCoupon({ ...COUPON, kind: "PERCENT", value: 20 });
+    const before = Date.now();
+    await new SignupService(prisma, new CouponsService()).signup({ ...DTO, couponCode: "DESC20" });
+    const trialMs = tx.tenant.create.mock.calls[0][0].data.trialEndsAt.getTime() - before;
+    expect(trialMs).toBeLessThanOrEqual(TRIAL_DAYS * DAY_MS + 5000);
+    expect(tx.couponRedemption.create).toHaveBeenCalled();
+  });
+
+  // Toda recusa é a MESMA mensagem: não dá para sondar quais códigos existem, expiraram ou esgotaram.
+  it.each([
+    ["inexistente", null, 1],
+    ["desativado", { ...COUPON, isActive: false }, 1],
+    ["expirado", { ...COUPON, validUntil: new Date(Date.now() - 1000) }, 1],
+    ["esgotado", { ...COUPON, maxRedemptions: 5, redemptionCount: 5 }, 1],
+    ["perdeu a corrida pelo último uso", COUPON, 0],
+  ])("cupom %s: 400 com mensagem genérica e nada é criado", async (_label, coupon, reserved) => {
+    const { prisma, tx } = withCoupon(coupon as Record<string, unknown> | null, reserved as number);
+
+    await expect(
+      new SignupService(prisma, new CouponsService()).signup({ ...DTO, couponCode: "PROMO30" }),
+    ).rejects.toThrow("Cupom inválido ou expirado.");
+
+    expect(tx.tenant.create).not.toHaveBeenCalled();
+    expect(tx.couponRedemption.create).not.toHaveBeenCalled();
+  });
+
+  it("código com formato inválido é recusado sem nem consultar o banco", async () => {
+    const { prisma, tx } = withCoupon(COUPON);
+    await expect(
+      new SignupService(prisma, new CouponsService()).signup({ ...DTO, couponCode: "x'; DROP--" }),
+    ).rejects.toThrow("Cupom inválido ou expirado.");
+    expect(tx.coupon.findUnique).not.toHaveBeenCalled();
+  });
 });

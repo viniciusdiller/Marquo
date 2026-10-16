@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { PressCard } from "@/components/ui/PressCard";
-import { MagnifyingGlass, MapPin, Star } from "@phosphor-icons/react/dist/ssr";
+import { MagnifyingGlass, MapPin, MapPinArea, Star } from "@phosphor-icons/react/dist/ssr";
 import type {
   MarketplaceCategory,
   MarketplaceResult,
 } from "@marquo/shared-types";
 import { marketplaceApi } from "@/lib/marketplace-api";
+import { getCoarsePosition, GeolocationFailure, type Coords } from "@/lib/geolocation";
 
 const priceLabel = (n: number | null) => (n ? "$".repeat(n) : "");
 
@@ -27,18 +28,49 @@ export function DiscoverSearch({
   const [category, setCategory] = useState("");
   const [results, setResults] = useState<MarketplaceResult[]>([]);
   const [loading, setLoading] = useState(true);
+  // Localização do visitante (arredondada, só em memória) e a ordem escolhida. Sem localização
+  // a única ordem possível é por nota.
+  const [coords, setCoords] = useState<Coords | null>(null);
+  const [sort, setSort] = useState<"rating" | "distance">("rating");
+  const [locating, setLocating] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
 
   useEffect(() => {
     const id = setTimeout(() => {
       setLoading(true);
       marketplaceApi
-        .search({ q: q || undefined, city: city || undefined, category: category || undefined })
+        .search({
+          q: q || undefined,
+          city: city || undefined,
+          category: category || undefined,
+          lat: coords ? String(coords.lat) : undefined,
+          lng: coords ? String(coords.lng) : undefined,
+          sort: coords ? sort : "rating",
+        })
         .then(setResults)
         .catch(() => setResults([]))
         .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(id);
-  }, [q, city, category]);
+  }, [q, city, category, coords, sort]);
+
+  async function toggleNearby() {
+    if (coords) {
+      setCoords(null);
+      setSort("rating");
+      return;
+    }
+    setLocating(true);
+    setGeoError(null);
+    try {
+      setCoords(await getCoarsePosition());
+      setSort("distance");
+    } catch (err) {
+      setGeoError(err instanceof GeolocationFailure ? err.message : "Não foi possível obter a localização.");
+    } finally {
+      setLocating(false);
+    }
+  }
 
   return (
     <div>
@@ -64,7 +96,38 @@ export function DiscoverSearch({
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={() => void toggleNearby()}
+          disabled={locating}
+          aria-pressed={coords != null}
+          className={
+            coords
+              ? "inline-flex items-center gap-1.5 rounded-xl bg-accent-500 px-3 py-2.5 text-sm font-medium text-white"
+              : "inline-flex items-center gap-1.5 rounded-xl border border-zinc-300 px-3 py-2.5 text-sm dark:border-white/15 dark:text-stone-200"
+          }
+        >
+          <MapPinArea size={16} />
+          {locating ? "Localizando..." : coords ? "Perto de mim ✓" : "Perto de mim"}
+        </button>
+        <select
+          value={coords ? sort : "rating"}
+          onChange={(e) => setSort(e.target.value as "rating" | "distance")}
+          disabled={!coords}
+          aria-label="Ordenar por"
+          className="rounded-xl border border-zinc-300 px-3 py-2.5 text-sm disabled:opacity-60 dark:border-white/15 dark:bg-zinc-900 dark:text-white"
+        >
+          <option value="rating">Melhor avaliados</option>
+          <option value="distance" disabled={!coords}>
+            Mais perto
+          </option>
+        </select>
       </div>
+      {geoError ? (
+        <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+          {geoError}
+        </p>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button
