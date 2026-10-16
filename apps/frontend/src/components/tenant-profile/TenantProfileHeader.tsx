@@ -152,26 +152,25 @@ export function TenantProfileHeader({
               </div>
             </Reveal>
 
-            {/* O elemento "colante" é o item da grade (a área cobre identidade + serviços): sticky dentro do Reveal não
-                teria altura para andar. */}
-            <div className="order-2 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
+            {/* Fixo na grade (sem sticky): acompanhar a rolagem dava a sensação de "balanço". */}
+            <div className="order-2 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
             <Reveal delay={0.1}>
               <aside
-                className="flex flex-col gap-4 rounded-3xl p-6 text-white"
+                className="flex flex-col gap-5 rounded-3xl p-8 text-white"
                 style={{ backgroundColor: BRAND.darkBg }}
               >
                 <div className="flex flex-col gap-1">
                   <span className="text-xs font-bold tracking-[0.1em] text-white/50 uppercase">
                     Agende online
                   </span>
-                  <span className="font-brand text-xl font-bold tracking-tight">
+                  <span className="font-brand text-2xl font-bold tracking-tight">
                     Escolha um serviço e marque seu horário
                   </span>
                 </div>
 
                 <a
                   href="#servicos"
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-(--tenant-accent) px-4 py-3.5 font-brand text-[15px] font-semibold text-white transition-[filter] hover:brightness-90"
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-(--tenant-accent) px-5 py-4 font-brand text-base font-semibold text-white transition-[filter] hover:brightness-90"
                 >
                   Escolher serviço
                   <ArrowRight size={17} />
@@ -208,7 +207,7 @@ export function TenantProfileHeader({
                       {tenant.address ? (
                         // Mesmo mapa embutido da seção de baixo (derivado do endereço em texto, sem chave de API; o
                         // frame-src do CSP já libera o Google Maps). Dá para arrastar e dar zoom.
-                        <div className="relative h-44 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+                        <div className="relative h-60 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
                           <iframe
                             title={`Mapa de ${tenant.name}`}
                             src={`https://www.google.com/maps?q=${encodeURIComponent(tenant.address)}&output=embed`}
