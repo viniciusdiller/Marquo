@@ -6,10 +6,10 @@ import { marketplaceApi } from "@/lib/marketplace-api";
 import { ApiError } from "@/lib/api";
 import { getNavSession } from "@/lib/nav-session";
 import { TenantProfileHeader } from "@/components/tenant-profile/TenantProfileHeader";
+import type { SectionNavItem } from "@/components/tenant-profile/TenantSectionNav";
 import { ServicesSection } from "@/components/tenant-profile/ServicesSection";
 import { TeamSection } from "@/components/tenant-profile/TeamSection";
 import { GallerySection } from "@/components/tenant-profile/GallerySection";
-import { ContactSection } from "@/components/tenant-profile/ContactSection";
 import { ReviewsSection } from "@/components/tenant-profile/ReviewsSection";
 
 // Avaliações e categorias (tags do header) só existem pra tenant com
@@ -61,6 +61,20 @@ export default async function TenantProfilePage({
     getNavSession(),
   ]);
 
+  // "Informações" aponta para o bloco de localização e contato do cartão preto (some junto com ele).
+  const hasContactBlock =
+    tenant.showContact &&
+    Boolean(tenant.address || tenant.businessHours || tenant.whatsappNumber || tenant.instagramUrl);
+
+  // Só os atalhos das seções que de fato aparecem nesta página (na mesma ordem em que são renderizadas).
+  const navItems: SectionNavItem[] = [
+    tenant.showServices && services.length > 0 ? { id: "servicos", label: "Serviços" } : null,
+    tenant.showGallery && tenant.galleryImages.length > 0 ? { id: "galeria", label: "Fotos" } : null,
+    tenant.showTeam && team.length > 0 ? { id: "equipe", label: "Equipe" } : null,
+    marketplaceData && marketplaceData.reviews.length > 0 ? { id: "avaliacoes", label: "Avaliações" } : null,
+    hasContactBlock ? { id: "contato", label: "Informações" } : null,
+  ].filter((item): item is SectionNavItem => item !== null);
+
   return (
     <main className="flex-1 bg-stone-50 dark:bg-zinc-950">
       <TenantProfileHeader
@@ -70,19 +84,20 @@ export default async function TenantProfilePage({
         session={session}
         servicesCount={services.length}
         teamCount={team.length}
-      />
+        sections={navItems}
+      >
+        {/* Os serviços sobem para a coluna da esquerda, ao lado do cartão "Agende online". */}
+        {tenant.showServices ? <ServicesSection embedded slug={slug} services={services} /> : null}
+      </TenantProfileHeader>
       {/* Ordem por prioridade real de decisão do cliente, não pela ordem em que os
           dados foram implementados: 1) prova visual do trabalho (o que mais pesa
-          pra negócio de beleza) 2) o que tem e quanto custa 3) prova social
-          reforçando a decisão 4) quem vai atender 5) logística de "como chegar",
-          que só importa depois que a pessoa já decidiu marcar. */}
+          pra negócio de beleza) 2) o que tem e quanto custa 3) quem vai atender
+          4) prova social reforçando a decisão. Localização e contato ficam no cartão preto do topo. */}
       {tenant.showGallery ? <GallerySection images={tenant.galleryImages} /> : null}
-      {tenant.showServices ? <ServicesSection slug={slug} services={services} /> : null}
+      {tenant.showTeam ? <TeamSection slug={slug} team={team} /> : null}
       {marketplaceData ? (
         <ReviewsSection rating={marketplaceData.rating} reviews={marketplaceData.reviews} />
       ) : null}
-      {tenant.showTeam ? <TeamSection slug={slug} team={team} /> : null}
-      {tenant.showContact ? <ContactSection tenant={tenant} /> : null}
     </main>
   );
 }
