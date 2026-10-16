@@ -20,7 +20,7 @@ export class TenantsService {
   constructor(private readonly prisma: PrismaService) {}
 
   // Campos explícitos: o painel (qualquer papel, inclusive PROFESSIONAL) recebe só o perfil do
-  // próprio negócio — nunca colunas de billing/integração (stripeCustomerId, createdAt...).
+  // próprio negócio — nunca colunas de billing/integração (createdAt, trial, suspensão...).
   findById(tenantId: string) {
     return this.prisma.tenant.findUniqueOrThrow({
       where: { id: tenantId },

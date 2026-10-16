@@ -1,8 +1,8 @@
 # Marquo
 
 > Antes chamado TotalAgenda. Identificadores legados mantidos de propósito (renomear quebra dados/integrações):
-> `metadata.product="totalagenda"` do Stripe, `idempotencyKey` `totalagenda-customer-*`, banco/usuário/volume do
-> Postgres (`totalagenda_*` no `docker-compose.yml`) e a página `/suporte-totalagenda` do Admin.
+> banco/usuário/volume do Postgres (`totalagenda_*` no `docker-compose.yml`) e a página `/suporte-totalagenda` do
+> Admin. (Os identificadores do Stripe saíram junto com o Stripe.)
 
 SaaS multi-tenant de agendamento e gestão para salões, barbearias e prestadores de
 serviço por horário. Cada negócio (tenant) tem página pública própria em `/[slug]` +
@@ -35,11 +35,11 @@ pnpm dev                                # backend :3001, frontend :3000
 Os três planos (Essencial/Profissional/Premium) existem em qualquer banco: a migration `seed_plans` os cria (valores
 antigos, de propósito) e o **`PlanCatalogService` os regrava a cada boot** a partir do catálogo (ver Billing). Sem
 eles o dono em trial não consegue adicionar profissional (o Essencial é o teto do trial) e `/dashboard/plano`
-fica vazio. O Price real do Stripe vem de `STRIPE_PRICE_*`; a coluna `stripePriceId` só guarda o id
+fica vazio.
 (placeholder `price_<tier>_pending` até haver env).
 
 `.env` obrigatório em `apps/backend/` e `packages/database/` (ver `DATABASE_URL`,
-`JWT_SECRET` e, em produção, as do Stripe e `CLIENT_IP_SECRET`, em `apps/backend/src/config/env.validation.ts`).
+`JWT_SECRET` e, em produção, `CLIENT_IP_SECRET` e `INTERNAL_API_SECRET`, em `apps/backend/src/config/env.validation.ts`).
 **Nunca commitar `.env*`** — regra absoluta do repo.
 
 ## Arquitetura
@@ -81,59 +81,105 @@ depois" (evita janela de IDOR).
     basta pra reivindicar uma conta antiga; OTP/e-mail nesse passo é o próximo endurecimento
     antes de abrir amplamente.
 
+### Conta da plataforma (painel de gestão da empresa)
+Terceira identidade, separada de staff e cliente final. **Não existe no banco**: é definida no `.env` do backend
+(`PLATFORM_ADMIN_EMAIL` + `PLATFORM_ADMIN_PASSWORD_HASH`, hash bcrypt gerado por `pnpm --filter backend platform:hash`;
+nunca a senha em claro; validação no `env.validation.ts` recusa texto puro e config pela metade). Sem as variáveis o
+painel fica desligado e o login responde 401 a tudo.
+- **Backend** (`src/platform-admin`, rotas `/platform/*`): `@Public()` só para pular o pipeline de staff; a autenticação
+  real é o `PlatformAdminGuard`. O token é assinado com chave **derivada** do `JWT_SECRET` (`platformSigningKey`), então um
+  token de staff/cliente nunca verifica ali e vice-versa; confere `type`, e-mail do `.env` e `pv` (prefixo do sha256 do
+  hash: trocar a senha derruba as sessões). Sessão de 2 h, sem refresh. Lockout progressivo **em memória** (um processo) +
+  throttle de 10/min no login; só o e-mail da conta é rastreado.
+- **Frontend**: mesmo formulário de `/entrar` (ordem: staff → plataforma → cliente; mesma mensagem de erro), cookie
+  `ta_platform` (httpOnly, `sameSite: strict`, sem renovação em `proxy.ts`) e telas em `/plataforma` (slug reservado,
+  `noindex`). `lib/platform-session.ts` é o cliente; toda decisão é do backend.
+- **Ações** (todas gravam `AdminAuditLog` na MESMA transação, com `actor` = e-mail da conta e `detail`, sem dado pessoal):
+  criar negócio (Tenant + dono sem senha conhecida: o dono recebe um link de "definir senha", uso único, 24 h, só o hash
+  no banco), suspender / reativar (`Tenant.suspendedAt`: vence qualquer estado de cobrança, tira do marketplace),
+  estender trial (só sem assinatura, teto de 180 dias à frente, otimista por `trialEndsAt`), **plano de cortesia**
+  (`PUT/DELETE /platform/tenants/:id/courtesy`: cria/atualiza `Subscription` com `courtesy`, com ou sem data de fim;
+  recusa se houver assinatura PAGA e se o plano tiver menos vagas que a equipe ativa), telefone do dono
+  (`PUT .../owner-phone`; o número NÃO vai para a auditoria), link de redefinição de senha (reaproveita
+  `InternalService`) e cupons (`/platform/coupons`). Leitura: métricas, negócios (com telefone e WhatsApp do dono),
+  assinaturas, usuários e auditoria, sempre com `select` explícito (nada de hash/token).
+- **Telefone do dono** (`User.phone`, normalizado sem DDI): obrigatório no cadastro público e no "Novo negócio" do
+  painel; contas antigas ficam sem número até alguém informar (aparece "Sem telefone" na lista). É contato comercial
+  (ex.: falar com quem cancela), nunca identidade de login. Link do WhatsApp: `lib/whatsapp.ts`.
+- **Não faz**: personificar um usuário (entrar "como" o dono), nem editar dado de dentro do negócio.
+- **Risco aceito**: sem 2FA nesta versão (uma senha vazada abre todos os negócios). Próximo endurecimento recomendado:
+  TOTP e restrição de IP no proxy para `/platform/` e `/plataforma`, como já se faz com `/internal/`.
+
 ### Billing
-**Em migração** (plano em `docs/roadmap.md`): o Marquo passa a cadastrar, dar trial e cobrar
-sozinho (Stripe direto), e o Admin-TotalSoftware vira só back-office.
+**Provedor: Mercado Pago** (`src/billing/payments`). O Stripe foi removido. Duas formas de pagar, escolhidas pelo dono em
+`/dashboard/plano`: **cartão recorrente** (assinatura `preapproval`; o provedor cobra todo mês) e **Pix mensal** (cada mês
+é UM pagamento; sem novo Pix o acesso termina em `currentPeriodEnd` e o salão "cai"). Sem `MERCADOPAGO_ACCESS_TOKEN` as
+rotas de cobrança respondem 503 e a tela só informa ("fale com a equipe"); a cortesia e a extensão do teste continuam
+sendo feitas pelo painel da plataforma. **Nunca testado contra o Mercado Pago real** (sem conta de teste neste ambiente):
+só contra um servidor falso e testes unitários (ver Riscos).
 
 - **Preço e limite de cada plano: UMA definição só** — `PLAN_CATALOG` em `packages/shared-types/src/index.ts`
-  (dinheiro em centavos; `maxProfessionals: null` = ilimitado). Antes o valor estava em 4 lugares (migration, seed,
-  Stripe e site) e o cliente podia ver um valor e pagar outro. Agora: (1) `PlanCatalogService` regrava a tabela
-  `Plan` a cada boot; `GET /plans` e o app leem a tabela; o seed lê o catálogo; (2) o site institucional lê
-  `GET /plans` (CORS por `SITE_URL`) e mantém uma cópia estática só como fallback; (3) **antes de cobrar**, checkout
-  e troca de plano chamam `StripeService.assertPriceMatchesCatalog`: o Price do Stripe precisa ter o mesmo valor,
-  BRL, recorrência mensal e estar ativo, senão 503 sem tocar no Stripe (no boot só avisa no log).
-  **Para mudar um preço:** edite o catálogo → **crie um Price NOVO no Stripe** (o valor de um Price é imutável)
-  → aponte `STRIPE_PRICE_<TIER>` para ele → deploy → atualize a cópia de fallback do site. Quem já assina segue no
-  Price antigo (não migra sozinho): com clientes reais, reajuste com Price novo + migração deliberada das
-  assinaturas (grandfathering), nunca só trocando o env. Preços atuais: Essencial R$ 49,90 (até 2), Profissional
-  R$ 99,90 (até 5), Premium R$ 189,90 (ilimitado).
-
-- **Cadastro e trial (já em vigor):** `POST /public/signup` (`src/signup`, frontend em `/cadastro`)
-  cria `Tenant` + `User` OWNER numa transação, com `trialEndsAt = agora + TRIAL_DAYS` (14 dias,
-  `billing/trial.constants.ts`), **sem cartão e sem `Subscription`**. O status vem de
-  `computeBillingStatus` (`TRIALING` até o fim do trial, depois `TRIAL_EXPIRED` e o
-  `TenantBillingGuard` bloqueia). O body só traz negócio, nome, e-mail e senha: papel, tenant, trial
-  e plano são definidos pelo servidor. Slugs reservados (`common/constants/reserved-slugs.ts`)
-  ganham sufixo, porque `/[slug]` divide o namespace com as rotas do app.
-- **Cobrança direto no Stripe (backend e tela em vigor):** `src/billing` e
-  `src/webhooks/stripe-webhook.*`. Rotas do **OWNER**, que funcionam mesmo com o acesso bloqueado
-  (`@SkipBillingCheck`: quem está bloqueado precisa delas para pagar) e têm limite de 10/min:
-  `POST /billing/checkout` (só `tier`; o Price vem de `STRIPE_PRICE_*`, o tenant do JWT e o retorno de
-  `FRONTEND_URL`; recusa com assinatura viva para não cobrar em dobro), `POST /billing/portal`,
-  `GET /billing/change-plan/preview` e `POST /billing/change-plan` (troca na hora, com crédito
-  proporcional; se o plano novo tem menos vagas o dono escolhe quem desativar e o servidor exige
-  EXATAMENTE o excesso, só profissionais ativos do tenant e sem agenda futura; desativações e Stripe
-  vão numa transação com lock por tenant, Stripe por último, então uma falha dele não desativa
-  ninguém). `DELETE /professionals/:id` só exclui quem não tem histórico (o schema protege o histórico
-  com `Restrict`); os demais são desativados. **Nenhum DTO de cobrança tem campo de valor.**
-- **Tela `/dashboard/plano`** (`app/dashboard/plano`): resumo do estado, cards de plano (preços de `GET /plans`),
-  "Assinar" (Server Action -> checkout do Stripe), "Gerenciar pagamento" (portal) e o diálogo de troca de
-  plano, com o aviso explícito de que vale agora e a escolha obrigatória dos profissionais a desativar. As
-  regras de qual botão cada card mostra e das mensagens do banner vivem em `lib/billing.ts` (testadas). Com
-  o acesso bloqueado (teste vencido, cancelada, não paga) o `BillingGate` leva o dono direto a essa tela em
-  vez de páginas vazias; ele avalia num carregamento completo (o layout do Next é reaproveitado em
-  navegação client-side), e o backend continua sendo quem barra. Só o OWNER vê botões de ação.
-- **`POST /webhooks/stripe`:** assinatura conferida sobre o corpo CRU (`rawBody` no `main.ts`), pública
-  e fora do throttle. Cada evento só sinaliza "algo mudou": a assinatura é RELIDA na API do Stripe e
-  gravada, então eventos repetidos, fora de ordem ou atrasados convergem. O plano vem do Price, nunca
-  do nome. `metadata.product=totalagenda` + `metadata.tenantId` isolam do TotalPousada na mesma conta do
-  Stripe (o webhook do Admin, por sua vez, ignora tudo sem `clienteId`: **nunca** ponha `clienteId` na
-  metadata do Marquo). `StripeEvent` é gravado só depois de processar, para o Stripe reentregar uma
-  falha. Em dev sem `STRIPE_*` as rotas respondem 503; em produção o boot exige todas as variáveis.
+  (dinheiro em centavos; `maxProfessionals: null` = ilimitado). `PlanCatalogService` regrava a tabela `Plan` a cada
+  boot; `GET /plans` e o app leem a tabela; o seed lê o catálogo; o site institucional lê `GET /plans` (CORS por
+  `SITE_URL`) e mantém uma cópia estática só como fallback. Preços atuais: Essencial R$ 49,90 (até 2), Profissional
+  R$ 99,90 (até 5), Premium R$ 189,90 (ilimitado). Reajuste com cliente real exige migração deliberada das
+  assinaturas (grandfathering): a assinatura do cartão guarda o valor no provedor.
+- **Estado de cobrança** (`computeBillingStatus`, um só lugar): `SUSPENDED` (suspensão manual, vence tudo) >
+  `EXPIRED` (cortesia vencida) > `PERIOD_ENDED` (Pix cujo mês acabou) > `CANCELED` (cancelada e o período pago
+  acabou) > `UNPAID` (`PAST_DUE` há mais de 3 dias do fim do período) > status da `Subscription` >
+  `TRIALING`/`TRIAL_EXPIRED` (sem assinatura, pelo `trialEndsAt`). `TenantBillingGuard` bloqueia o que não é
+  `TRIALING`/`ACTIVE`/`PAST_DUE`, com `code: BILLING_BLOCKED` e uma mensagem por estado (`billingBlockMessage`).
+  `Subscription.courtesy = true` é acesso concedido pela plataforma, sem cobrança. Nada depende de uma tarefa
+  agendada para bloquear: o vencimento é decidido na leitura.
+- **Cadastro e trial:** `POST /public/signup` cria `Tenant` + `User` OWNER numa transação, com
+  `trialEndsAt = agora + TRIAL_DAYS` (14 dias), **sem cartão e sem `Subscription`**. O body traz negócio, nome,
+  e-mail, **telefone** (obrigatório, normalizado) e senha, mais o **cupom** opcional: papel, tenant, trial e plano são
+  definidos pelo servidor. Slugs reservados ganham sufixo, porque `/[slug]` divide o namespace com as rotas do app.
+- **Rotas do OWNER** (`@SkipBillingCheck`, 10/min; funcionam bloqueado, que é quando precisa pagar), todas só com
+  `tier` e `couponCode?` (**nenhum DTO tem campo de valor**): `POST /billing/quote` (prévia, não reserva nada),
+  `POST /billing/checkout/card` (devolve o link do checkout do provedor), `POST /billing/checkout/pix` (devolve QR e
+  copia-e-cola), `GET /billing/attempts/:id` (relê o provedor e aplica; é o que a tela consulta a cada 4 s),
+  `POST /billing/sync`, `POST /billing/change-plan` e `POST /billing/cancel`. Mais `GET /plans` (público) e
+  `GET /billing/status` (qualquer papel).
+- **Troca de plano** (`PaymentsService.changePlan`, só assinatura paga ACTIVE e sem cancelamento agendado): vale NA HORA
+  para o limite de profissionais; o valor novo é cobrado a partir da próxima cobrança (cartão: atualiza o valor da
+  recorrência no provedor ANTES de gravar, e só depois da 1ª cobrança) ou do próximo Pix. **Recusa (409) se a equipe
+  ATIVA não couber no plano novo** (`PlanLimitService.assertCanDowngrade`): nada é desativado em silêncio, o dono
+  desativa o excedente e tenta de novo. A releitura do cartão nunca regrava o plano da `Subscription` com o da
+  tentativa original (isso desfaria a troca). Quem está em cortesia não troca por aqui (é a plataforma). Sem
+  proporcional: não há cobrança nem crédito da diferença no mês corrente.
+- **`BillingAttempt`** = uma tentativa de pagamento; o `id` dela é o `external_reference` enviado ao provedor, e é por
+  ele que o pagamento volta ao negócio (nunca por algo do corpo de um webhook). Valores (lista, desconto, cobrado) são
+  SEMPRE calculados no servidor (`priceWithCoupon`: desconto nunca leva a cobrança abaixo de R$ 5,00). O pagamento só
+  é aplicado se a referência, o id do provedor E o valor pago conferirem com a tentativa. Aplicar o mesmo pagamento
+  duas vezes soma UM mês (a tentativa só sai de `PENDING` uma vez, sob advisory lock por negócio).
+- **Sincronização: o provedor é a fonte da verdade, nunca o navegador nem o corpo do webhook.** Três caminhos, todos
+  RELENDO a API do Mercado Pago com o nosso token: `POST /webhooks/mercadopago` (público; se vier `x-signature` e
+  houver `MERCADOPAGO_WEBHOOK_SECRET`, é conferido por HMAC e uma assinatura inválida é recusada; sem o cabeçalho
+  segue pela releitura; id desconhecido = 200, falha do provedor = 503), a consulta da tentativa pela tela, e uma
+  tarefa horária que expira tentativas vencidas. Notificação forjada não credita nada.
+- **Pix:** cada pagamento aprovado soma 1 mês a partir do fim do período atual (quem paga antes não perde dias) ou de
+  agora. Só dá para gerar o próximo Pix a ≤ 10 dias do vencimento (evita pagar vários meses sem querer). Trocar de
+  cartão para Pix cancela a recorrência antiga no provedor.
+- **Cartão:** o desconto de cupom vale só na PRIMEIRA cobrança: a assinatura nasce com o valor com desconto e, depois
+  que a primeira cobrança sai (`summarized.charged_quantity ≥ 1`), é atualizada para o preço cheio (nunca antes, para
+  a 1ª não sair cheia). Se essa atualização falhar fica no log (nível error) e a próxima sincronização tenta de novo.
+  Cancelar encerra a recorrência no provedor e mantém o acesso até o fim do período pago.
+- **Tela `/dashboard/plano`:** estado, cards (`planActionFor` decide o botão, testado), diálogo de assinatura (forma
+  de pagamento, cupom com prévia do valor, QR do Pix com confirmação automática) e cancelamento. Só o OWNER vê ações.
+  O `BillingGate` leva o dono bloqueado a ela. `DELETE /professionals/:id` só exclui quem não tem histórico.
+- **Cupons** (`src/coupons`, aba "Cupons" do painel): `Coupon` (código maiúsculo único, tipo `TRIAL_DAYS` | `PERCENT` |
+  `FIXED_CENTS`, valor com faixa por tipo, limite de usos, janela de validade, ativo) e `CouponRedemption` (uma por
+  negócio+cupom, com `appliedAt` quando o desconto é de fato abatido). O resgate é ATÔMICO (`reserve`: `UPDATE`
+  condicional que só incrementa se ainda estiver ativo, na janela e com uso sobrando), então dois no último uso não
+  passam os dois, e toda recusa devolve a mesma mensagem. `TRIAL_DAYS` vale só no cadastro (soma dias ao teste);
+  `PERCENT`/`FIXED_CENTS` abatem a PRIMEIRA cobrança: o do cadastro entra sozinho no checkout, ou o dono digita um
+  código lá (reserva um uso novo, devolvido se a tentativa falhar/expirar). Tipo, valor e código não mudam depois de
+  criado; só ativar/desativar, descrição, teto de usos (nunca abaixo do já resgatado) e fim da validade.
 - **O Admin-TotalSoftware não provisiona mais tenants do Marquo:** o webhook `/webhooks/totalsoftware`,
   o `WebhookSecretGuard`, as variáveis `TOTALAGENDA_*` e `Tenant.externalCustomerId` foram removidos. O
   Admin só fala com este backend pela API interna de suporte (`src/internal`, HMAC — ver abaixo). A
-  cobrança do TotalPousada continua no Admin e na mesma conta do Stripe.
+  cobrança do TotalPousada continua no Admin (outro produto, outra conta).
 - **API interna de suporte** (`GET /internal/tenants`, `POST /internal/tenants/:id/password-reset-link`):
   só o Admin chama. `InternalAuthGuard` exige `x-internal-timestamp` + `x-internal-signature` (HMAC-SHA256
   de `internal.v1
@@ -375,8 +421,8 @@ que o valor é *confiável para aquele contexto* — um `class-validator` que s�
 - Senhas com bcrypt (rounds 12). Nunca logar senha, token, hash ou `Authorization`.
 - JWT: validar assinatura + expiração (`passport-jwt`); `JWT_SECRET` obrigatório no
   `env.validation` (fail closed). Não confiar em claim sem revalidar o recurso no banco.
-- Único webhook de entrada: `POST /webhooks/stripe`, autenticado pela assinatura do Stripe sobre o corpo
-  cru (sem segredo configurado → 503, nunca aceita sem verificar).
+- Único webhook de entrada: `POST /webhooks/mercadopago` (ver Billing): o corpo é só um aviso e o estado é sempre
+  relido na API do provedor; assinatura conferida quando presente e há segredo.
 - Token de "definir senha": só o **hash** é persistido, com expiração; consumido uma vez.
 
 ### Exposição de dados sensíveis
@@ -431,11 +477,13 @@ que o valor é *confiável para aquele contexto* — um `class-validator` que s�
   `legal.test.ts` falha se ainda houver lacuna) e atualizar `LEGAL_DOCS_VERSION` junto com o texto.
 - Backend não faz requisição HTTP de saída hoje (sem superfície de SSRF): se surgir fetch de
   URL controlada por usuário, validar host contra allowlist e bloquear IP privado/metadata.
-- **Sem smoke e2e contra Stripe real** (checkout, portal, troca de plano) — depende de uma
-  conta Stripe de teste configurada, que não existe neste ambiente. Mitigação parcial:
-  `StripeService` e as regras de troca de plano têm cobertura unit (Prisma mockado); falta o
-  caminho ponta-a-ponta contra o Stripe de verdade. Rodar manualmente antes de mexer em
-  `src/billing`/`src/webhooks/stripe-webhook.*`.
+- **Integração Mercado Pago sem teste contra o provedor real** (sem conta de teste neste ambiente): validada contra um
+  servidor falso e por testes unitários. Antes de abrir o cadastro ao público, rodar manualmente com credenciais TEST-:
+  checkout de cartão (confirmar `init_point`, que `back_url`/`notification_url` são aceitos, o formato das
+  notificações de assinatura e a atualização de valor da assinatura), Pix (QR, expiração) e o webhook assinado. Pontos
+  que dependem do formato real do provedor: `summarized.charged_quantity`, `next_payment_date` e `x-signature` em
+  notificações de assinatura. Reembolso/estorno do Pix (`refunded`/`charged_back`) só marca a tentativa como falha: não
+  retira o mês já concedido (decisão manual da equipe).
 
 ## Convenções
 
@@ -467,6 +515,13 @@ que o valor é *confiável para aquele contexto* — um `class-validator` que s�
   Server Component — `RegisteredPlaces.tsx` e `app/descobrir/page.tsx` hoje duplicam
   a própria chamada em vez de reusar `marketplaceApi.search`, evitar repetir esse
   padrão em páginas novas.
+- **Home e descoberta (cliente final):** `/` é só busca + "Perto de você" (`NearbyPlaces`) + "Mais bem avaliados"
+  (`TopRatedPlaces`); o discurso de venda pro dono vive em `/para-donos` (botão "Para donos" da `Nav`, âncoras do
+  `Footer ownerPage`). `/para-donos` é slug reservado. `GET /public/marketplace/search` aceita `sort=rating|distance`
+  e `limit` (1–50): a nota é suavizada pelo nº de avaliações (`ratingScore`: 1 avaliação 5,0 não passa 4,8 em 40) e o
+  `limit` corta DEPOIS de ordenar. A localização do visitante só é pedida num clique (ou se a permissão já existe),
+  vai arredondada a ~1 km (`lib/geolocation.ts`) e nunca é gravada. Dono informa lat/lng à mão em
+  `/dashboard/marketplace` (não há geocodificação): negócio sem coordenada some da busca por proximidade.
 - Cor de destaque: token `--color-accent-*` em `globals.css`; tenant pode sobrescrever com
   `accentColor` (aplicado como CSS var `--tenant-accent` no layout de `/[slug]`).
 - Ícones: `@phosphor-icons/react` (usar o import `/dist/ssr` em Server Components).

@@ -35,11 +35,11 @@ describe("documentos legais", () => {
     }
   });
 
-  it("cita os pontos que o produto realmente implementa (trial de 14 dias, Stripe, LGPD)", () => {
+  it("cita os pontos que o produto realmente implementa (trial de 14 dias, provedor de pagamentos, LGPD)", () => {
     const terms = TERMS_SECTIONS.flatMap((s) => s.paragraphs).join(" ");
     const privacy = PRIVACY_SECTIONS.flatMap((s) => s.paragraphs).join(" ");
     assert.match(terms, /14 dias/);
-    assert.match(terms, /Stripe/);
+    assert.match(terms, /provedor de pagamentos/);
     assert.match(privacy, /LGPD/);
     assert.match(privacy, /hash/);
   });

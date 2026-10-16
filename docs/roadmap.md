@@ -145,10 +145,11 @@ Refactor que todo o resto depende. Fazer e **revisar antes** de construir M1–M
 
 ## Billing dentro do Marquo (em andamento)
 
-O Marquo passa a cadastrar, dar trial e cobrar sozinho (Stripe direto); o Admin-TotalSoftware
-vira back-office. Decisões: produtos independentes (sem SSO), trial de 14 dias sem cartão, só cartão
-via Stripe, sem provedor de e-mail na v1, troca de plano por tela própria (downgrade valendo na
-hora, dono escolhe quais profissionais excedentes desativar), bloqueio total pós-trial/cancelamento.
+O Marquo cadastra, dá trial e (em breve) cobra sozinho; o Admin-TotalSoftware vira back-office.
+**Mudança de rumo (2026-10-14): o Stripe foi removido e o provedor passa a ser o Mercado Pago.** Decisões:
+produtos independentes (sem SSO), trial de 14 dias sem cartão, sem provedor de e-mail na v1, bloqueio total
+pós-trial/cancelamento. Enquanto o Mercado Pago não entra, a equipe libera acesso pelo painel da plataforma
+(cortesia por plano e data, extensão de teste, cupons de campanha).
 
 - [x] Fase 0 (Admin) — sessão do painel assinada, sem credencial padrão, limite de tentativas no login.
 - [x] Fase 1 — `POST /public/signup` + `/cadastro`, trial de 14 dias, e-mail de User em minúsculas,
@@ -157,10 +158,15 @@ hora, dono escolhe quais profissionais excedentes desativar), bloqueio total pó
 - [x] Fase 1c — aceite versionado dos Termos e da Privacidade (`LEGAL_DOCS_VERSION`, `User.termsAcceptedAt`/`termsVersion`)
   e páginas `/termos` e `/privacidade` **em rascunho**. Pendente (usuário): preencher as lacunas, revisão
   jurídica, `LEGAL_DRAFT = false` e nova `LEGAL_DOCS_VERSION`.
-- [x] Fase 2 — Stripe no backend (**código e testes prontos; falta o teste com chaves reais do Stripe em modo teste**): Checkout, Customer Portal, `POST /webhooks/stripe` (assinatura,
-  dedupe por `event.id`, estado relido na API do Stripe), `POST /billing/change-plan`, exclusão de
-  profissional só sem histórico, mensagens do guard por estado.
-- [x] Fase 3 — UI `/dashboard/plano`, modal de troca de plano com aviso explícito, banner com link.
+- [x] ~~Fase 2 — Stripe no backend~~ **Removida** (2026-10-14): Checkout, Portal, webhook, troca de plano, `StripeEvent` e
+  colunas de id do Stripe saíram. Ficaram: exclusão de profissional só sem histórico e as mensagens do guard por estado.
+- [x] ~~Fase 3 — UI de assinatura/troca de plano~~ `/dashboard/plano` agora só informa (estado, planos, "fale com a equipe").
+- [x] **Fase 6 — Mercado Pago** (código e testes prontos; **falta o teste contra o provedor real com credenciais TEST-**):
+  cartão recorrente (preapproval) e Pix mensal, cupom abatendo a primeira cobrança, webhook com releitura do estado,
+  sincronização pela tela e tarefa horária, cancelamento, "salão cai" no Pix vencido e troca de plano (bloqueia
+  downgrade se a equipe ativa não couber). Pendente: troca com cobrança proporcional.
+- [x] Painel da plataforma (`/plataforma`): métricas, negócios, assinaturas, usuários, auditoria; criar negócio,
+  suspender/reativar, estender teste, plano de cortesia, telefone do dono e cupons.
 - [x] Fase 4 (Marquo) — `webhooks/totalsoftware`, `WebhookSecretGuard`, `TOTALAGENDA_*` e `Tenant.externalCustomerId`
   removidos (`/auth/set-password` mantido para a Fase 5). Pendente nos outros repos: tirar o Marquo do
   Admin (checkout, provisionamento, página `/totalagenda`) e apontar o "Assinar" do site para `/cadastro`.
