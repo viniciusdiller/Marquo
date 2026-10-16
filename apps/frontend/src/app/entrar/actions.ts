@@ -7,6 +7,7 @@ import type { ConsumerSession } from "@marquo/shared-types";
 import { ApiError } from "@/lib/api";
 import { signIn } from "@/lib/auth";
 import { consumerPublicFetch, setConsumerToken } from "@/lib/consumer-session";
+import { platformPublicFetch, setPlatformToken } from "@/lib/platform-session";
 
 // consumerPublicFetch roda no servidor: sem isso, o backend veria o User-Agent da chamada
 // fetch() do Next (algo como "node"), não o do navegador de quem está logando — a lista de
@@ -46,9 +47,27 @@ async function tryStaffLogin(email: string, password: string): Promise<boolean> 
   }
 }
 
-// Um único formulário pra dono e cliente, mas DUAS identidades e duas sessões (staff = NextAuth,
-// cliente = cookie ta_consumer). Dono só entra por e-mail; telefone nunca tenta staff. Toda
-// falha devolve a mesma mensagem — não diz qual identidade falhou nem se o identificador existe.
+// Conta da plataforma (painel de gestão da empresa). Definida no .env do backend, não existe no banco.
+// Roda DEPOIS do staff e ANTES do cliente: dono/staff que acerta a senha nunca paga esta chamada extra,
+// e um e-mail de staff que coincida com o da plataforma não a sequestra (precisa da senha do .env).
+async function tryPlatformLogin(email: string, password: string): Promise<boolean> {
+  try {
+    const session = await platformPublicFetch<{ accessToken: string; expiresInSeconds: number }>(
+      "/platform/auth/login",
+      { method: "POST", body: JSON.stringify({ email, password }) },
+    );
+    await setPlatformToken(session.accessToken, session.expiresInSeconds);
+    return true;
+  } catch {
+    // Qualquer falha (senha errada, painel desligado, 429) cai no próximo passo com a mesma mensagem.
+    return false;
+  }
+}
+
+// Um único formulário pra dono, cliente e a conta da plataforma, mas TRÊS identidades e sessões
+// separadas (staff = NextAuth, cliente = cookie ta_consumer, plataforma = cookie ta_platform). Dono só
+// entra por e-mail; telefone nunca tenta staff nem plataforma. Toda falha devolve a mesma mensagem —
+// não diz qual identidade falhou nem se o identificador existe.
 export async function loginAction(
   identifier: string,
   password: string,
@@ -59,6 +78,10 @@ export async function loginAction(
 
   if (id.includes("@") && (await tryStaffLogin(id, password))) {
     return { redirectTo: staffDestination(next) };
+  }
+
+  if (id.includes("@") && (await tryPlatformLogin(id, password))) {
+    return { redirectTo: "/plataforma" };
   }
 
   try {
