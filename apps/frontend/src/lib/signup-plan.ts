@@ -2,7 +2,7 @@
 //
 // IMPORTANTE: é só uma INTENÇÃO de apresentação. O cadastro não recebe plano nenhum (o backend define papel,
 // trial e limites; ver SignupDto), ninguém é cobrado no cadastro e o plano só passa a valer quando o dono
-// assina em /dashboard/plano (checkout no Stripe). Aqui a escolha serve para (1) mostrar ao visitante o que
+// tiver um plano ativado em /dashboard/plano. Aqui a escolha serve para (1) mostrar ao visitante o que
 // cada plano oferece antes de criar a conta e (2) destacar a opção que ele escolheu na tela de plano.
 import type { PlanTier } from "./billing";
 

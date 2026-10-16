@@ -3,78 +3,131 @@
 import { revalidatePath } from "next/cache";
 import { authedFetch } from "@/lib/api-server";
 import { ApiError } from "@/lib/api";
-import type { PlanChangePreview, PlanTier } from "@/lib/billing";
+import type { BillingMethod, PlanTier } from "@/lib/billing";
 
-// Server Actions são alcançáveis por POST direto, não só pela tela: por isso cada uma valida o que
-// recebe e o backend decide tudo de verdade (papel OWNER, preço, tenant, excesso de profissionais).
-// Nada aqui carrega valor em dinheiro: o cliente só diz QUAL plano.
+// Server Actions da cobrança. O cliente só informa QUAL plano e o código do cupom: preço, desconto, valor
+// cobrado, e-mail do pagador e tenant são sempre do backend (JWT + catálogo + cupom). Estas ações não confiam
+// em nada que venha da tela além disso.
+
 const TIERS: readonly PlanTier[] = ["ESSENCIAL", "PROFISSIONAL", "PREMIUM"];
-const isTier = (value: unknown): value is PlanTier => TIERS.includes(value as PlanTier);
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const INVALID = { error: "Pedido inválido." } as const;
-
-function failure(error: unknown) {
-  return { error: error instanceof ApiError ? error.message : "Não foi possível concluir. Tente novamente." };
+export interface QuoteView {
+  tier: PlanTier;
+  planName: string;
+  listPriceCents: number;
+  discountCents: number;
+  chargeCents: number;
+  coupon: { code: string; kind: "TRIAL_DAYS" | "PERCENT" | "FIXED_CENTS"; value: number; fromSignup: boolean } | null;
+  couponError: string | null;
 }
 
-// O destino do redirecionamento (Stripe) vem do backend; só seguimos https.
-function safeUrl(url: unknown): string | null {
-  return typeof url === "string" && url.startsWith("https://") ? url : null;
+export interface PixView {
+  attemptId: string;
+  chargeCents: number;
+  expiresAt: string;
+  qrCode: string;
+  qrCodeBase64: string | null;
+  ticketUrl: string | null;
 }
 
-export async function startCheckoutAction(tier: PlanTier): Promise<{ url: string } | { error: string }> {
-  if (!isTier(tier)) return INVALID;
+export type ActionResult<T> = ({ ok: true } & T) | { ok: false; error: string };
+
+function failure(err: unknown): { ok: false; error: string } {
+  if (err instanceof ApiError) {
+    if (err.statusCode === 401) return { ok: false, error: "Sua sessão expirou. Entre novamente." };
+    if (err.statusCode === 429) return { ok: false, error: "Muitas tentativas. Aguarde um minuto." };
+    return { ok: false, error: err.message };
+  }
+  return { ok: false, error: "Erro inesperado. Tente novamente." };
+}
+
+function validTier(tier: string): tier is PlanTier {
+  return (TIERS as readonly string[]).includes(tier);
+}
+
+function body(tier: PlanTier, coupon: string) {
+  const code = coupon.trim();
+  return JSON.stringify(code ? { tier, couponCode: code } : { tier });
+}
+
+export async function quoteAction(tier: string, coupon: string): Promise<ActionResult<{ quote: QuoteView }>> {
+  if (!validTier(tier)) return { ok: false, error: "Plano inválido." };
   try {
-    const { url } = await authedFetch<{ url: string }>("/billing/checkout", {
+    const quote = await authedFetch<QuoteView>("/billing/quote", { method: "POST", body: body(tier, coupon) });
+    return { ok: true, quote };
+  } catch (err) {
+    return failure(err);
+  }
+}
+
+export async function startCardAction(tier: string, coupon: string): Promise<ActionResult<{ url: string }>> {
+  if (!validTier(tier)) return { ok: false, error: "Plano inválido." };
+  try {
+    const result = await authedFetch<{ url: string }>("/billing/checkout/card", {
+      method: "POST",
+      body: body(tier, coupon),
+    });
+    return { ok: true, url: result.url };
+  } catch (err) {
+    return failure(err);
+  }
+}
+
+export async function startPixAction(tier: string, coupon: string): Promise<ActionResult<{ pix: PixView }>> {
+  if (!validTier(tier)) return { ok: false, error: "Plano inválido." };
+  try {
+    const pix = await authedFetch<PixView>("/billing/checkout/pix", { method: "POST", body: body(tier, coupon) });
+    return { ok: true, pix };
+  } catch (err) {
+    return failure(err);
+  }
+}
+
+export interface AttemptStatusView {
+  status: "PENDING" | "APPROVED" | "FAILED" | "EXPIRED";
+  method: BillingMethod;
+}
+
+export async function attemptStatusAction(attemptId: string): Promise<ActionResult<{ attempt: AttemptStatusView }>> {
+  try {
+    const attempt = await authedFetch<AttemptStatusView>(`/billing/attempts/${encodeURIComponent(attemptId)}`);
+    if (attempt.status === "APPROVED") revalidatePath("/dashboard", "layout");
+    return { ok: true, attempt };
+  } catch (err) {
+    return failure(err);
+  }
+}
+
+export async function changePlanAction(tier: string): Promise<ActionResult<{ planName: string; effective: string }>> {
+  if (!validTier(tier)) return { ok: false, error: "Plano inválido." };
+  try {
+    const result = await authedFetch<{ planName: string; effective: string }>("/billing/change-plan", {
       method: "POST",
       body: JSON.stringify({ tier }),
     });
-    const safe = safeUrl(url);
-    return safe ? { url: safe } : { error: "O serviço de pagamento não devolveu um link válido." };
-  } catch (error) {
-    return failure(error);
+    revalidatePath("/dashboard", "layout");
+    return { ok: true, planName: result.planName, effective: result.effective };
+  } catch (err) {
+    return failure(err);
   }
 }
 
-export async function openPortalAction(): Promise<{ url: string } | { error: string }> {
+export async function syncBillingAction(): Promise<ActionResult<object>> {
   try {
-    const { url } = await authedFetch<{ url: string }>("/billing/portal", { method: "POST" });
-    const safe = safeUrl(url);
-    return safe ? { url: safe } : { error: "O serviço de pagamento não devolveu um link válido." };
-  } catch (error) {
-    return failure(error);
+    await authedFetch("/billing/sync", { method: "POST" });
+    revalidatePath("/dashboard", "layout");
+    return { ok: true };
+  } catch (err) {
+    return failure(err);
   }
 }
 
-export async function previewPlanChangeAction(
-  tier: PlanTier,
-): Promise<{ preview: PlanChangePreview } | { error: string }> {
-  if (!isTier(tier)) return INVALID;
+export async function cancelSubscriptionAction(): Promise<ActionResult<object>> {
   try {
-    return { preview: await authedFetch<PlanChangePreview>(`/billing/change-plan/preview?tier=${encodeURIComponent(tier)}`) };
-  } catch (error) {
-    return failure(error);
+    await authedFetch("/billing/cancel", { method: "POST" });
+    revalidatePath("/dashboard", "layout");
+    return { ok: true };
+  } catch (err) {
+    return failure(err);
   }
-}
-
-export async function changePlanAction(
-  tier: PlanTier,
-  deactivateProfessionalIds: string[],
-): Promise<{ ok: true } | { error: string }> {
-  if (!isTier(tier) || !Array.isArray(deactivateProfessionalIds)) return INVALID;
-  if (deactivateProfessionalIds.length > 50 || !deactivateProfessionalIds.every((id) => UUID.test(id))) {
-    return INVALID;
-  }
-  try {
-    await authedFetch("/billing/change-plan", {
-      method: "POST",
-      body: JSON.stringify({ tier, deactivateProfessionalIds }),
-    });
-  } catch (error) {
-    return failure(error);
-  }
-  // Plano, limites e a lista de profissionais mudaram; o banner do layout também.
-  revalidatePath("/dashboard", "layout");
-  return { ok: true };
 }
