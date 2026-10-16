@@ -105,7 +105,7 @@ describe("InternalService.listTenants", () => {
     users: [{ email: "ze@x.com", name: "Zé" }],
   };
 
-  it("resume cada tenant com o estado de cobrança, sem ids do Stripe nem hashes", async () => {
+  it("resume cada tenant com o estado de cobrança, sem ids de provedor nem hashes", async () => {
     const prisma = buildPrisma({ tenants: [ROW], total: 1 });
 
     const page = await new InternalService(prisma, config()).listTenants({ page: 1, pageSize: 10 });

@@ -22,7 +22,7 @@ export class InternalService {
   ) {}
 
   // Visão de suporte: busca por nome do negócio, slug ou e-mail do dono. `select` explícito: nada de
-  // ids do Stripe, hashes ou tokens.
+  // ids de provedor de pagamento, hashes ou tokens.
   async listTenants(query: InternalTenantsQueryDto) {
     const pagination = resolvePagination(query);
     const search = query.search?.trim();
@@ -51,6 +51,7 @@ export class InternalService {
           subscription: {
             select: {
               status: true,
+              courtesy: true,
               currentPeriodEnd: true,
               cancelAtPeriodEnd: true,
               plan: { select: { name: true } },
