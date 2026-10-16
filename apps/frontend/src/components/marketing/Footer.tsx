@@ -3,15 +3,16 @@ import { Container } from "../ui/Container";
 import { Logo } from "../brand/Logo";
 import { BrandPattern } from "../brand/BrandPattern";
 
-// #como-funciona/#recursos/#faq são âncoras que só existem na home — em
-// qualquer outra página (descobrir, [slug], etc.) viram link morto. isHome
-// controla se essas colunas/links aparecem.
+// #como-funciona/#recursos/#faq são âncoras que só existem em /para-donos — em qualquer
+// outra página (home, descobrir, [slug], etc.) viram link morto. ownerPage controla se essas
+// colunas/links aparecem.
 const accountLinks = [
   { href: "/entrar", label: "Entrar" },
+  { href: "/para-donos", label: "Para donos" },
   { href: "/cadastro", label: "Começar grátis" },
 ];
 
-export function Footer({ isHome = false }: { isHome?: boolean }) {
+export function Footer({ ownerPage = false }: { ownerPage?: boolean }) {
   return (
     <footer className="relative isolate overflow-hidden border-t border-zinc-200 py-14 dark:border-white/10">
       <BrandPattern mask="linear-gradient(to top, black, transparent 80%)" />
@@ -25,7 +26,7 @@ export function Footer({ isHome = false }: { isHome?: boolean }) {
           </div>
 
           <div className="grid grid-cols-2 gap-10 sm:gap-16">
-            {isHome ? (
+            {ownerPage ? (
               <div>
                 <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">
                   Produto
@@ -66,7 +67,7 @@ export function Footer({ isHome = false }: { isHome?: boolean }) {
                     </a>
                   </li>
                 ))}
-                {isHome ? (
+                {ownerPage ? (
                   <li>
                     <a
                       href="#faq"

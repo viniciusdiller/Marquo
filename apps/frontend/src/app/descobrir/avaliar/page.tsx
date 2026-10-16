@@ -20,9 +20,9 @@ export default async function AvaliarPage() {
   }
 
   return (
-    <>
+    <div className="flex min-h-dvh flex-col">
       <SiteHeader />
-      <main className="mx-auto max-w-md px-4 py-10">
+      <main className="mx-auto w-full max-w-md flex-1 px-4 py-10">
         <BackLink href="/descobrir" />
         <h1 className="mt-3 font-display text-2xl font-bold text-zinc-900 dark:text-white">
           Avaliar visitas
@@ -30,6 +30,6 @@ export default async function AvaliarPage() {
         <ReviewList pending={pending} />
       </main>
       <Footer />
-    </>
+    </div>
   );
 }
