@@ -1,3 +1,5 @@
+import { mkdir, unlink } from "fs/promises";
+import { join } from "path";
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 import { Role } from "@marquo/database";
@@ -8,8 +10,13 @@ import { SLOT_BLOCKING_STATUSES } from "../appointments/appointments.service";
 import { CreateProfessionalDto } from "./dto/create-professional.dto";
 import { UpdateProfessionalDto } from "./dto/update-professional.dto";
 import { SetWorkingHoursDto } from "./dto/set-working-hours.dto";
+import { UPLOADS_DIR, UPLOADS_URL_PREFIX } from "../common/constants/uploads";
+import { convertToWebp } from "../common/utils/image.util";
 
 const BCRYPT_ROUNDS = 12;
+const PHOTO_SIZE = 512;
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const ALLOWED_PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 @Injectable()
 export class ProfessionalsService {
@@ -196,6 +203,68 @@ export class ProfessionalsService {
     });
   }
 
+  // ─────────────────────────────────────────────
+  // Foto do profissional
+  // ─────────────────────────────────────────────
+
+  private photoDir(tenantId: string) {
+    return join(UPLOADS_DIR, "tenants", tenantId, "professionals");
+  }
+
+  // Remove o arquivo ANTERIOR a partir do caminho gravado no banco, mas só se ele estiver dentro da pasta de fotos
+  // deste negócio (o valor vem do banco, não do cliente; a checagem evita apagar fora dela se um dia vier sujo).
+  private async deletePhotoFile(tenantId: string, photoUrl: string | null) {
+    if (!photoUrl) return;
+    const prefix = `${UPLOADS_URL_PREFIX}/tenants/${tenantId}/professionals/`;
+    if (!photoUrl.startsWith(prefix)) return;
+    const name = photoUrl.slice(prefix.length);
+    if (!/^[0-9a-f-]{36}-[a-z0-9]+\.webp$/i.test(name)) return;
+    await unlink(join(this.photoDir(tenantId), name)).catch(() => {});
+  }
+
+  async updatePhoto(tenantId: string, professionalId: string, file: Express.Multer.File | undefined) {
+    if (!file) throw new BadRequestException("Nenhum arquivo enviado.");
+    if (!ALLOWED_PHOTO_MIME_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException("Formato de imagem não suportado. Use JPEG, PNG ou WEBP.");
+    }
+    if (file.size > MAX_PHOTO_BYTES) throw new BadRequestException("Imagem muito grande (máximo 5MB).");
+
+    // Posse no WHERE (nunca buscar por id e comparar o dono depois).
+    const professional = await this.prisma.professional.findFirst({
+      where: { id: professionalId, tenantId },
+      select: { id: true, photoUrl: true },
+    });
+    if (!professional) throw new NotFoundException("Profissional não encontrado.");
+
+    await mkdir(this.photoDir(tenantId), { recursive: true });
+    // Nome com versão: a foto nova tem URL nova (nada de cache velho no navegador/CDN) e o arquivo anterior é apagado.
+    const filename = `${professional.id}-${Date.now().toString(36)}.webp`;
+    await convertToWebp(file.buffer, {
+      maxDimension: PHOTO_SIZE,
+      quality: 82,
+      outPath: join(this.photoDir(tenantId), filename),
+      crop: "square",
+    });
+
+    const photoUrl = `${UPLOADS_URL_PREFIX}/tenants/${tenantId}/professionals/${filename}`;
+    // updateMany com tenantId: a escrita também é escopada ao negócio.
+    await this.prisma.professional.updateMany({ where: { id: professional.id, tenantId }, data: { photoUrl } });
+    await this.deletePhotoFile(tenantId, professional.photoUrl);
+    return { photoUrl };
+  }
+
+  async removePhoto(tenantId: string, professionalId: string) {
+    const professional = await this.prisma.professional.findFirst({
+      where: { id: professionalId, tenantId },
+      select: { id: true, photoUrl: true },
+    });
+    if (!professional) throw new NotFoundException("Profissional não encontrado.");
+
+    await this.prisma.professional.updateMany({ where: { id: professional.id, tenantId }, data: { photoUrl: null } });
+    await this.deletePhotoFile(tenantId, professional.photoUrl);
+    return { photoUrl: null };
+  }
+
   async findPublicTeamByTenantSlug(slug: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
     if (!tenant) {
@@ -208,7 +277,7 @@ export class ProfessionalsService {
       orderBy: { createdAt: "asc" },
     });
 
-    return professionals.map((p) => ({ id: p.id, name: p.user.name, bio: p.bio }));
+    return professionals.map((p) => ({ id: p.id, name: p.user.name, bio: p.bio, photoUrl: p.photoUrl }));
   }
 
   async findPublicByTenantSlugAndService(slug: string, serviceId: string) {
@@ -231,6 +300,7 @@ export class ProfessionalsService {
       id: ps.professional.id,
       name: ps.professional.user.name,
       bio: ps.professional.bio,
+      photoUrl: ps.professional.photoUrl,
     }));
   }
 }
