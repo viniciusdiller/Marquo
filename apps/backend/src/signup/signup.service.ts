@@ -4,6 +4,8 @@ import { Prisma, Role } from "@marquo/database";
 import { LEGAL_DOCS_VERSION } from "@marquo/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { generateUniqueSlug } from "../common/utils/slug.util";
+import { normalizePhone } from "../common/utils/phone.util";
+import { CouponsService } from "../coupons/coupons.service";
 import { isReservedSlug } from "../common/constants/reserved-slugs";
 import { TRIAL_DAYS } from "../billing/trial.constants";
 import { SignupDto } from "./dto/signup.dto";
@@ -33,7 +35,10 @@ function isUniqueViolation(error: unknown, field: string): boolean {
 
 @Injectable()
 export class SignupService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly coupons: CouponsService,
+  ) {}
 
   // Cria Tenant + OWNER em trial, tudo numa transação. Nasce SEM Subscription: o status de
   // billing vem de computeBillingStatus (TRIALING até trialEndsAt, depois TRIAL_EXPIRED).
@@ -46,11 +51,18 @@ export class SignupService {
     // O hash roda ANTES de qualquer consulta, então o custo de CPU é o mesmo com e-mail novo ou
     // repetido (não há atalho barato que diferencie os caminhos pelo tempo).
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-    const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * DAY_MS);
+    const baseTrialDays = TRIAL_DAYS;
+    const couponCode = dto.couponCode?.trim() ? dto.couponCode : null;
 
     for (let attempt = 1; ; attempt++) {
       try {
         return await this.prisma.$transaction(async (tx) => {
+          // Cupom ANTES de criar o negócio, na mesma transação: cupom inválido derruba o cadastro inteiro e o uso
+          // reservado volta junto se qualquer passo seguinte falhar.
+          const coupon = couponCode ? await this.coupons.reserve(tx, couponCode) : null;
+          const extraTrialDays = coupon?.kind === "TRIAL_DAYS" ? coupon.value : 0;
+          const trialEndsAt = new Date(Date.now() + (baseTrialDays + extraTrialDays) * DAY_MS);
+
           const slug = await generateUniqueSlug(dto.businessName, async (candidate) => {
             if (isReservedSlug(candidate)) return true;
             const existing = await tx.tenant.findUnique({
@@ -71,12 +83,15 @@ export class SignupService {
               email: dto.email,
               passwordHash,
               name: dto.ownerName,
+              phone: normalizePhone(dto.phone),
               role: Role.OWNER,
               // Data e versão vêm do servidor (a versão é a vigente, já conferida acima).
               termsAcceptedAt: new Date(),
               termsVersion: LEGAL_DOCS_VERSION,
             },
           });
+
+          if (coupon) await this.coupons.recordRedemption(tx, coupon.couponId, tenant.id);
 
           return { slug };
         });

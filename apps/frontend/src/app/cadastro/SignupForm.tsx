@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LEGAL_DOCS_VERSION } from "@marquo/shared-types";
 import { Input } from "@/components/ui/Input";
+import { MaskedInput } from "@/components/ui/MaskedInput";
 import { Button } from "@/components/ui/Button";
 import { ApiError, publicApi } from "@/lib/api";
 import type { PlanTier } from "@/lib/billing";
@@ -22,8 +23,8 @@ function signupErrorMessage(error: unknown): string {
       return "Muitos cadastros feitos desta rede em pouco tempo. Tente novamente mais tarde.";
     }
     if (error.statusCode === 400) {
-      // Termos desatualizados: a mensagem do backend diz o que fazer (recarregar e aceitar de novo).
-      return error.message.includes("Termos")
+      // Termos desatualizados / cupom inválido: a mensagem do backend diz o que fazer.
+      return error.message.includes("Termos") || error.message.includes("Cupom")
         ? error.message
         : "Confira os dados informados e tente de novo.";
     }
@@ -39,6 +40,8 @@ export function SignupForm({ selectedTier = null }: { selectedTier?: PlanTier | 
   const [businessName, setBusinessName] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [couponCode, setCouponCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [accepted, setAccepted] = useState(false);
@@ -66,7 +69,9 @@ export function SignupForm({ selectedTier = null }: { selectedTier?: PlanTier | 
           businessName,
           ownerName,
           email,
+          phone,
           password,
+          ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
           acceptedTermsVersion: LEGAL_DOCS_VERSION,
         });
       } catch (err) {
@@ -124,6 +129,16 @@ export function SignupForm({ selectedTier = null }: { selectedTier?: PlanTier | 
         required
         maxLength={254}
       />
+      <MaskedInput
+        mask="phone"
+        label="Telefone (WhatsApp)"
+        name="phone"
+        type="tel"
+        value={phone}
+        onChange={setPhone}
+        required
+        hint="Para a equipe do Marquo falar com você sobre a sua conta."
+      />
       <Input
         label="Crie uma senha"
         name="new-password"
@@ -144,6 +159,16 @@ export function SignupForm({ selectedTier = null }: { selectedTier?: PlanTier | 
         onChange={(e) => setConfirm(e.target.value)}
         required
         maxLength={MAX_PASSWORD}
+      />
+
+      <Input
+        label="Cupom (opcional)"
+        name="coupon"
+        value={couponCode}
+        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+        maxLength={32}
+        autoComplete="off"
+        placeholder="Tem um código promocional?"
       />
 
       <label className="flex items-start gap-2 text-sm text-zinc-600 dark:text-stone-300">
