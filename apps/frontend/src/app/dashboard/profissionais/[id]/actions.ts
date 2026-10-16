@@ -118,3 +118,36 @@ export async function deleteTimeBlockAction(
   revalidatePath(`/dashboard/profissionais/${encodeURIComponent(professionalId)}`);
   return {};
 }
+
+// Foto do profissional: o backend reprocessa (WebP quadrado), confere a posse e apaga a anterior. Aqui só repassa o
+// arquivo escolhido; o tipo/tamanho são revalidados lá.
+export async function uploadProfessionalPhotoAction(
+  professionalId: string,
+  formData: FormData,
+): Promise<ActionState> {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Selecione uma imagem." };
+
+  try {
+    const uploadData = new FormData();
+    uploadData.set("file", file);
+    await authedFetch(`/professionals/${encodeURIComponent(professionalId)}/photo`, {
+      method: "POST",
+      body: uploadData,
+    });
+  } catch (error) {
+    return { error: error instanceof ApiError ? error.message : "Não foi possível enviar a foto." };
+  }
+  revalidatePath("/dashboard/profissionais", "layout");
+  return {};
+}
+
+export async function removeProfessionalPhotoAction(professionalId: string): Promise<ActionState> {
+  try {
+    await authedFetch(`/professionals/${encodeURIComponent(professionalId)}/photo`, { method: "DELETE" });
+  } catch (error) {
+    return { error: error instanceof ApiError ? error.message : "Não foi possível remover a foto." };
+  }
+  revalidatePath("/dashboard/profissionais", "layout");
+  return {};
+}

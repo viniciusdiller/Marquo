@@ -4,6 +4,7 @@ import { useActionState, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Button } from "@/components/ui/Button";
+import { FilePicker } from "@/components/ui/FilePicker";
 import { compressImageFile } from "@/lib/image-compression";
 import { riseIn } from "@/lib/stagger";
 import {
@@ -88,6 +89,7 @@ export function GalleryManager({ images }: { images: { id: string; url: string }
     uploadInitialState,
   );
   const [compressing, setCompressing] = useState(false);
+  const [photoChosen, setPhotoChosen] = useState(false);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -115,18 +117,19 @@ export function GalleryManager({ images }: { images: { id: string; url: string }
         </div>
       ) : null}
 
-      <form action={uploadFormAction} className="mt-4 flex items-center gap-3">
-        <input
-          type="file"
-          name="file"
+      <form action={uploadFormAction} className="mt-4 flex flex-wrap items-center gap-3">
+        <FilePicker
           accept="image/jpeg,image/png,image/webp"
+          label="Anexar foto"
+          changeLabel="Trocar foto"
           onChange={handleFileChange}
-          className="text-sm text-zinc-600 dark:text-stone-300"
+          onSelectionChange={(name) => setPhotoChosen(name !== null)}
+          disabled={uploadPending || compressing}
         />
         <Button
           type="submit"
           variant="ghost"
-          disabled={uploadPending || compressing}
+          disabled={!photoChosen || uploadPending || compressing}
           className="text-sm"
         >
           {compressing ? "Comprimindo..." : uploadPending ? "Enviando..." : "Adicionar foto"}
