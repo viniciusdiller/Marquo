@@ -8,13 +8,23 @@ import { Container } from "../ui/Container";
 import { Logo } from "../brand/Logo";
 import { AccountNav } from "../account/AccountNav";
 import type { NavSession } from "@/lib/nav-session";
+import { SectionLinks, useActiveSection, type SectionNavItem } from "./TenantSectionNav";
 
 // Mesmo padrão do Nav.tsx da home (fixed + transparente no topo, ganha fundo com blur
 // só depois de rolar) — reaproveitado aqui pra a marca ter o mesmo peso visual que tem
 // no site principal, em vez de um selo pequeno num canto. Sem os links de marketing
 // (Como funciona/Recursos/FAQ não existem nessa rota); só a marca e a volta pro
 // /descobrir, que sai do corpo da hero pra não duplicar.
-export function TenantTopBar({ slug, session }: { slug: string; session: NavSession }) {
+export function TenantTopBar({
+  slug,
+  session,
+  sections = [],
+}: {
+  slug: string;
+  session: NavSession;
+  sections?: SectionNavItem[];
+}) {
+  const active = useActiveSection(sections);
   const [scrolled, setScrolled] = useState(false);
   const { scrollY } = useScroll();
 
@@ -37,6 +47,9 @@ export function TenantTopBar({ slug, session }: { slug: string; session: NavSess
             <Logo markSize={28} />
           </Link>
 
+          {/* Desktop: atalhos das seções no meio da barra (como as abas da Trinks). */}
+          <SectionLinks items={sections} active={active} className="hidden min-w-0 lg:block" />
+
           <div className="flex items-center gap-5">
             <Link
               href="/descobrir"
@@ -49,6 +62,13 @@ export function TenantTopBar({ slug, session }: { slug: string; session: NavSess
             <AccountNav session={session} loginNext={`/${slug}`} />
           </div>
         </Container>
+
+        {/* Celular/tablet: os mesmos atalhos numa segunda linha rolável, colada à barra. */}
+        {sections.length >= 2 ? (
+          <Container className="relative pb-2 lg:hidden">
+            <SectionLinks items={sections} active={active} />
+          </Container>
+        ) : null}
       </div>
     </header>
   );

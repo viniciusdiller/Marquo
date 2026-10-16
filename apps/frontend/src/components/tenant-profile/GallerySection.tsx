@@ -27,7 +27,7 @@ export function GallerySection({ images }: { images: PublicGalleryImage[] }) {
   return (
     <>
       <Reveal>
-        <section className="border-t border-zinc-200 py-16 dark:border-white/10">
+        <section id="galeria" className="scroll-mt-32 border-t border-zinc-200 py-16 dark:border-white/10">
           <Container>
             <SectionHeading eyebrow="Nosso trabalho" title="Galeria" />
 
