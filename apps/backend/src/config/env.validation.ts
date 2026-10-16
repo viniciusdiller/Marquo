@@ -1,5 +1,6 @@
 import { plainToInstance } from "class-transformer";
 import {
+  IsEmail,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -32,7 +33,7 @@ class EnvironmentVariables {
   @Min(1)
   PORT?: number;
 
-  // URL pública do frontend: destino do retorno do checkout/portal do Stripe. Sem ela em produção o
+  // URL pública do frontend: base do link de "definir senha" enviado ao dono (e retorno de pagamento, quando houver). Sem ela em produção o
   // padrão seria localhost, então é obrigatória com NODE_ENV=production.
   @ValidateIf((o) => o.NODE_ENV === "production" || o.FRONTEND_URL !== undefined)
   @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
@@ -70,29 +71,49 @@ class EnvironmentVariables {
   @MinLength(32)
   INTERNAL_API_SECRET?: string;
 
-  // Cobrança (Stripe). Opcionais em desenvolvimento (as rotas de cobrança respondem 503 "cobrança não
-  // configurada"); OBRIGATÓRIAS em produção (o boot falha). O prefixo é conferido para pegar chave
-  // trocada (ex.: colar a chave pública no lugar da secreta).
-  @ValidateIf((o) => o.NODE_ENV === "production" || o.STRIPE_SECRET_KEY !== undefined)
-  @Matches(/^sk_(test|live)_[A-Za-z0-9]+$/)
-  STRIPE_SECRET_KEY?: string;
+  // Mercado Pago (cartão recorrente e Pix). Opcional em desenvolvimento: sem o token as rotas de cobrança respondem
+  // 503 e a tela só informa. Com o token em PRODUÇÃO o boot exige também o segredo do webhook e a URL pública do
+  // backend (onde o provedor entrega as notificações). O prefixo é conferido para pegar chave trocada.
+  @ValidateIf((o) => o.MERCADOPAGO_ACCESS_TOKEN !== undefined)
+  @Matches(/^(APP_USR|TEST)-[A-Za-z0-9_-]{10,}$/, {
+    message: "MERCADOPAGO_ACCESS_TOKEN deve ser o Access Token do Mercado Pago (APP_USR-... ou TEST-...).",
+  })
+  MERCADOPAGO_ACCESS_TOKEN?: string;
 
-  @ValidateIf((o) => o.NODE_ENV === "production" || o.STRIPE_WEBHOOK_SECRET !== undefined)
-  @Matches(/^whsec_[A-Za-z0-9]+$/)
-  STRIPE_WEBHOOK_SECRET?: string;
+  @ValidateIf(
+    (o) =>
+      (o.NODE_ENV === "production" && o.MERCADOPAGO_ACCESS_TOKEN !== undefined) ||
+      o.MERCADOPAGO_WEBHOOK_SECRET !== undefined,
+  )
+  @IsString()
+  @MinLength(16)
+  MERCADOPAGO_WEBHOOK_SECRET?: string;
 
-  // Price mensal de cada plano (criados no Stripe). O preço cobrado vem daqui, nunca do cliente.
-  @ValidateIf((o) => o.NODE_ENV === "production" || o.STRIPE_PRICE_ESSENCIAL !== undefined)
-  @Matches(/^price_[A-Za-z0-9]+$/)
-  STRIPE_PRICE_ESSENCIAL?: string;
+  // URL pública do backend (sem barra no fim). Vira o notification_url enviado ao provedor.
+  @ValidateIf(
+    (o) =>
+      (o.NODE_ENV === "production" && o.MERCADOPAGO_ACCESS_TOKEN !== undefined) || o.BACKEND_PUBLIC_URL !== undefined,
+  )
+  @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
+  BACKEND_PUBLIC_URL?: string;
 
-  @ValidateIf((o) => o.NODE_ENV === "production" || o.STRIPE_PRICE_PROFISSIONAL !== undefined)
-  @Matches(/^price_[A-Za-z0-9]+$/)
-  STRIPE_PRICE_PROFISSIONAL?: string;
+  // Só para testes com um servidor falso do provedor; ignorado em produção (o cliente usa sempre o host oficial).
+  @ValidateIf((o) => o.MERCADOPAGO_API_BASE !== undefined)
+  @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
+  MERCADOPAGO_API_BASE?: string;
 
-  @ValidateIf((o) => o.NODE_ENV === "production" || o.STRIPE_PRICE_PREMIUM !== undefined)
-  @Matches(/^price_[A-Za-z0-9]+$/)
-  STRIPE_PRICE_PREMIUM?: string;
+  // Conta da plataforma (painel de gestão da empresa). As DUAS são opcionais, mas vêm juntas: sem elas o
+  // painel fica desligado (login responde 401). A senha NUNCA vai em claro — só o hash bcrypt, gerado por
+  // `pnpm --filter backend platform:hash`. Entre aspas simples no .env, porque o hash contém `$`.
+  @ValidateIf((o) => o.PLATFORM_ADMIN_EMAIL !== undefined || o.PLATFORM_ADMIN_PASSWORD_HASH !== undefined)
+  @IsEmail()
+  PLATFORM_ADMIN_EMAIL?: string;
+
+  @ValidateIf((o) => o.PLATFORM_ADMIN_EMAIL !== undefined || o.PLATFORM_ADMIN_PASSWORD_HASH !== undefined)
+  @Matches(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/, {
+    message: "PLATFORM_ADMIN_PASSWORD_HASH deve ser um hash bcrypt (gere com `pnpm --filter backend platform:hash`).",
+  })
+  PLATFORM_ADMIN_PASSWORD_HASH?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {
