@@ -20,6 +20,7 @@ import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
 import { ListConsumerBookingsQueryDto } from "./dto/list-consumer-bookings-query.dto";
 import { ConsumerAuthService } from "../consumer-auth/consumer-auth.service";
 import { AuthenticatedConsumer } from "../consumer-auth/types/consumer-auth-user";
+import { AppointmentNotifierService } from "../email/appointment-notifier.service";
 
 
 // Mesmo fuso fixo usado por AvailabilityService — datetime sem offset explícito (ex.:
@@ -65,6 +66,7 @@ export class AppointmentsService {
     private readonly prisma: PrismaService,
     private readonly clientsService: ClientsService,
     private readonly consumerAuth: ConsumerAuthService,
+    private readonly notifier: AppointmentNotifierService,
   ) {}
 
   // ─────────────────────────────────────────────
@@ -90,7 +92,7 @@ export class AppointmentsService {
     const startAt = this.parseFutureDate(dto.startAt, "Não é possível agendar em um horário no passado.");
     const endAt = startAt.plus({ minutes: resolved.durationMinutes });
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await this.lockProfessional(tx, dto.professionalId);
       await this.assertNoConflict(tx, dto.professionalId, startAt.toJSDate(), endAt.toJSDate());
 
@@ -120,6 +122,9 @@ export class AppointmentsService {
       });
       return this.serialize(created);
     });
+    // Só depois do commit: a equipe recebe o aviso e o cliente a confirmação.
+    this.notifier.notify("CREATED", result.id, tenant.id, "CLIENT", { alsoConfirmToClient: true });
+    return result;
   }
 
   async createByStaff(user: AuthenticatedUser, dto: CreateStaffAppointmentDto) {
@@ -150,7 +155,7 @@ export class AppointmentsService {
 
     const { clientName, clientPhone, clientId } = await this.resolveStaffClient(user.tenantId, dto);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await this.lockProfessional(tx, dto.professionalId);
       await this.assertNoConflict(tx, dto.professionalId, startAt.toJSDate(), endAt.toJSDate());
 
@@ -182,6 +187,9 @@ export class AppointmentsService {
       });
       return this.serialize(created);
     });
+    // Marcado pela recepção: quem recebe o aviso é o cliente (se houver e-mail), não a equipe.
+    this.notifier.notify("CREATED", result.id, user.tenantId, "STAFF");
+    return result;
   }
 
   // ─────────────────────────────────────────────
@@ -575,6 +583,12 @@ export class AppointmentsService {
       data: { status: AppointmentStatus.CANCELED, canceledAt: new Date() },
       include: APPOINTMENT_INCLUDE,
     });
+    this.notifier.notify(
+      "CANCELED",
+      updated.id,
+      updated.tenantId,
+      options.clientInitiated ? "CLIENT" : "STAFF",
+    );
     return this.serialize(updated);
   }
 
@@ -631,7 +645,7 @@ export class AppointmentsService {
       : this.parseFutureDate(dto.startAt, "Não é possível remarcar para um horário no passado.");
     const endAt = startAt.plus({ minutes: totalDuration });
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await this.lockProfessional(tx, targetProfessionalId);
       await this.assertNoConflict(
         tx,
@@ -653,6 +667,13 @@ export class AppointmentsService {
       });
       return this.serialize(updated);
     });
+    this.notifier.notify(
+      "RESCHEDULED",
+      result.id,
+      appointment.tenantId,
+      options.staffInitiated ? "STAFF" : "CLIENT",
+    );
+    return result;
   }
 
   private async assertNoConflict(

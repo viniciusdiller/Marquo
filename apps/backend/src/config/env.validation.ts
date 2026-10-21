@@ -102,6 +102,21 @@ class EnvironmentVariables {
   @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
   MERCADOPAGO_API_BASE?: string;
 
+  // E-mail transacional (Resend): aviso de novo agendamento, confirmação ao cliente. Opcional: sem a chave o
+  // envio fica desligado (nada sai, nada quebra). A chave e o remetente vêm JUNTOS; o remetente precisa ser de
+  // um domínio verificado no Resend ("Nome <avisos@dominio.com.br>" ou só o endereço).
+  @ValidateIf((o) => o.RESEND_API_KEY !== undefined || o.EMAIL_FROM !== undefined)
+  @Matches(/^re_[A-Za-z0-9_-]{10,}$/, {
+    message: "RESEND_API_KEY deve ser uma chave de API do Resend (re_...).",
+  })
+  RESEND_API_KEY?: string;
+
+  @ValidateIf((o) => o.RESEND_API_KEY !== undefined || o.EMAIL_FROM !== undefined)
+  @Matches(/^(?:[^<>\r\n@]+<[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+>|[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+)$/, {
+    message: 'EMAIL_FROM deve ser "Nome <avisos@dominio.com.br>" ou só o endereço.',
+  })
+  EMAIL_FROM?: string;
+
   // Conta da plataforma (painel de gestão da empresa). As DUAS são opcionais, mas vêm juntas: sem elas o
   // painel fica desligado (login responde 401). A senha NUNCA vai em claro — só o hash bcrypt, gerado por
   // `pnpm --filter backend platform:hash`. Entre aspas simples no .env, porque o hash contém `$`.

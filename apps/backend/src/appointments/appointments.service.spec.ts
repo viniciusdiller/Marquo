@@ -5,6 +5,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ClientsService } from "../clients/clients.service";
 import { ConsumerAuthService } from "../consumer-auth/consumer-auth.service";
 import { AuthenticatedUser } from "../auth/types/auth-user";
+import { AppointmentNotifierService } from "../email/appointment-notifier.service";
 
 const FUTURE_DATE = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
@@ -24,6 +25,10 @@ function buildConsumerAuthMock() {
 }
 
 const consumer = { consumerId: "consumer-1", sessionId: "session-1" };
+
+function buildNotifierMock() {
+  return { notify: jest.fn() } as unknown as AppointmentNotifierService;
+}
 
 // Um atendimento "hidratado" como o APPOINTMENT_INCLUDE devolve — usado pelo serialize().
 function hydratedAppointment(overrides: Record<string, unknown> = {}) {
@@ -115,6 +120,7 @@ const owner: AuthenticatedUser = { userId: "u-1", tenantId: "tenant-1", role: Ro
 describe("AppointmentsService", () => {
   const clientsService = buildClientsServiceMock();
   const consumerAuth = buildConsumerAuthMock();
+  const notifier = buildNotifierMock();
 
   const baseDto = {
     professionalId: "prof-1",
@@ -125,7 +131,7 @@ describe("AppointmentsService", () => {
   describe("createFromPublicLink", () => {
     it("cria um atendimento CONFIRMED com 1 item quando não há conflito", async () => {
       const tx = buildTxMock();
-      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth);
+      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth, notifier);
 
       const result = await service.createFromPublicLink("slug", baseDto, consumer);
 
@@ -141,7 +147,7 @@ describe("AppointmentsService", () => {
           create: jest.fn(),
         },
       });
-      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth);
+      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth, notifier);
 
       await expect(service.createFromPublicLink("slug", baseDto, consumer)).rejects.toThrow(ConflictException);
       expect(tx.appointment.create).not.toHaveBeenCalled();
@@ -149,13 +155,13 @@ describe("AppointmentsService", () => {
 
     it("lança ConflictException quando colide com um TimeBlock", async () => {
       const tx = buildTxMock({ timeBlock: { findFirst: jest.fn().mockResolvedValue({ id: "block-1" }) } });
-      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth);
+      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth, notifier);
 
       await expect(service.createFromPublicLink("slug", baseDto, consumer)).rejects.toThrow(ConflictException);
     });
 
     it("lança BadRequestException ao agendar no passado", async () => {
-      const service = new AppointmentsService(buildPrismaMock(buildTxMock()), clientsService, consumerAuth);
+      const service = new AppointmentsService(buildPrismaMock(buildTxMock()), clientsService, consumerAuth, notifier);
 
       await expect(
         service.createFromPublicLink("slug", { ...baseDto, startAt: "2020-01-01T10:00:00-03:00" }, consumer),
@@ -165,7 +171,7 @@ describe("AppointmentsService", () => {
     it("lança NotFoundException quando o serviço não está disponível para o profissional", async () => {
       const prisma = buildPrismaMock(buildTxMock());
       (prisma.professionalService.findFirst as jest.Mock).mockResolvedValue(null);
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(service.createFromPublicLink("slug", baseDto, consumer)).rejects.toThrow(NotFoundException);
     });
@@ -175,7 +181,7 @@ describe("AppointmentsService", () => {
     // outro tenant antes de rejeitar). O filtro de tenantId tem que estar dentro do WHERE.
     it("busca o vínculo profissional↔serviço já filtrando pelo tenantId do link público", async () => {
       const prisma = buildPrismaMock(buildTxMock());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await service.createFromPublicLink("slug", baseDto, consumer);
 
@@ -201,7 +207,7 @@ describe("AppointmentsService", () => {
         trialEndsAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
         subscription: null,
       });
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(service.createFromPublicLink("slug", baseDto, consumer)).rejects.toThrow(ForbiddenException);
     });
@@ -210,7 +216,7 @@ describe("AppointmentsService", () => {
   describe("createByStaff", () => {
     it("cria atendimento SCHEDULED por padrão com cadastro rápido de cliente", async () => {
       const tx = buildTxMock();
-      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth);
+      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth, notifier);
 
       await service.createByStaff(owner, {
         professionalId: "prof-1",
@@ -226,7 +232,7 @@ describe("AppointmentsService", () => {
     });
 
     it("recusa PROFESSIONAL criando para a agenda de outro profissional", async () => {
-      const service = new AppointmentsService(buildPrismaMock(buildTxMock()), clientsService, consumerAuth);
+      const service = new AppointmentsService(buildPrismaMock(buildTxMock()), clientsService, consumerAuth, notifier);
       const pro: AuthenticatedUser = {
         userId: "u-2",
         tenantId: "tenant-1",
@@ -246,7 +252,7 @@ describe("AppointmentsService", () => {
 
     it("exige cliente existente ou nome+telefone", async () => {
       const prisma = buildPrismaMock(buildTxMock());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(
         service.createByStaff(owner, {
@@ -263,7 +269,7 @@ describe("AppointmentsService", () => {
     // do round-trip da requisição — precisa de uma tolerância que o fluxo público não tem.
     it("aceita um horário poucos segundos no passado (walk-in escolhendo 'agora')", async () => {
       const tx = buildTxMock();
-      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth);
+      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth, notifier);
       const almostNow = new Date(Date.now() - 30_000).toISOString();
 
       await expect(
@@ -278,7 +284,7 @@ describe("AppointmentsService", () => {
     });
 
     it("ainda recusa um horário claramente no passado", async () => {
-      const service = new AppointmentsService(buildPrismaMock(buildTxMock()), clientsService, consumerAuth);
+      const service = new AppointmentsService(buildPrismaMock(buildTxMock()), clientsService, consumerAuth, notifier);
 
       await expect(
         service.createByStaff(owner, {
@@ -296,7 +302,7 @@ describe("AppointmentsService", () => {
     it("cancela um atendimento CONFIRMED", async () => {
       const prisma = buildPrismaMock(buildTxMock());
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(hydratedAppointment());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       const result = await service.cancelForConsumer("appt-1", consumer);
 
@@ -308,7 +314,7 @@ describe("AppointmentsService", () => {
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(
         hydratedAppointment({ status: AppointmentStatus.CANCELED }),
       );
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(service.cancelForConsumer("appt-1", consumer)).rejects.toThrow(BadRequestException);
     });
@@ -316,7 +322,7 @@ describe("AppointmentsService", () => {
     it("lança NotFoundException se o atendimento não existe (ou é de outro cliente)", async () => {
       const prisma = buildPrismaMock(buildTxMock());
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(service.cancelForConsumer("nao-existe", consumer)).rejects.toThrow(NotFoundException);
     });
@@ -331,7 +337,7 @@ describe("AppointmentsService", () => {
       async (status) => {
         const prisma = buildPrismaMock(buildTxMock());
         (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(hydratedAppointment({ status }));
-        const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+        const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
         await expect(service.cancelForConsumer("appt-1", consumer)).rejects.toThrow(BadRequestException);
       },
@@ -343,7 +349,7 @@ describe("AppointmentsService", () => {
       const tx = buildTxMock();
       const prisma = buildPrismaMock(tx);
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(hydratedAppointment());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await service.rescheduleForConsumer("appt-1", { startAt: FUTURE_DATE }, consumer);
 
@@ -363,7 +369,7 @@ describe("AppointmentsService", () => {
       });
       const prisma = buildPrismaMock(tx);
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(hydratedAppointment());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(service.rescheduleForConsumer("appt-1", { startAt: FUTURE_DATE }, consumer)).rejects.toThrow(
         ConflictException,
@@ -375,7 +381,7 @@ describe("AppointmentsService", () => {
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(
         hydratedAppointment({ status: AppointmentStatus.COMPLETED }),
       );
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(service.rescheduleForConsumer("appt-1", { startAt: FUTURE_DATE }, consumer)).rejects.toThrow(
         BadRequestException,
@@ -389,7 +395,7 @@ describe("AppointmentsService", () => {
       const tx = buildTxMock();
       const prisma = buildPrismaMock(tx);
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(hydratedAppointment());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await service.rescheduleForConsumer("appt-1", {
         startAt: FUTURE_DATE,
@@ -419,7 +425,7 @@ describe("AppointmentsService", () => {
 
     it("recusa PROFESSIONAL remarcando para a agenda de outro profissional", async () => {
       const prisma = buildPrismaMock(buildTxMock());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(
         service.rescheduleByStaff(professional, "appt-1", {
@@ -435,7 +441,7 @@ describe("AppointmentsService", () => {
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(
         hydratedAppointment({ professionalId: "prof-2" }),
       );
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(
         service.rescheduleByStaff(professional, "appt-1", { startAt: FUTURE_DATE }),
@@ -449,7 +455,7 @@ describe("AppointmentsService", () => {
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(
         hydratedAppointment({ status: AppointmentStatus.IN_SERVICE }),
       );
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       const result = await service.cancelByStaff(owner, "appt-1");
 
@@ -463,7 +469,7 @@ describe("AppointmentsService", () => {
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(
         hydratedAppointment({ status: AppointmentStatus.IN_SERVICE }),
       );
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(service.cancelForConsumer("appt-1", consumer)).rejects.toThrow(BadRequestException);
     });
@@ -474,7 +480,7 @@ describe("AppointmentsService", () => {
     it("localiza o atendimento já filtrando pelo consumerId dono (não busca por id e compara depois)", async () => {
       const prisma = buildPrismaMock(buildTxMock());
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(hydratedAppointment());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await service.cancelForConsumer("appt-1", consumer);
 
@@ -488,7 +494,7 @@ describe("AppointmentsService", () => {
     it("atendimento de outro consumidor cai no mesmo NotFoundException de 'não existe' (nunca 403)", async () => {
       const prisma = buildPrismaMock(buildTxMock());
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(null);
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(service.cancelForConsumer("appt-de-outro", consumer)).rejects.toThrow(NotFoundException);
       await expect(
@@ -499,7 +505,7 @@ describe("AppointmentsService", () => {
     it("findAllForConsumer devolve [] sem vínculo algum, sem consultar atendimentos", async () => {
       const prisma = buildPrismaMock(buildTxMock());
       (prisma.consumerTenantLink.findMany as jest.Mock).mockResolvedValue([]);
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(service.findAllForConsumer(consumer)).resolves.toMatchObject({
         items: [],
@@ -517,7 +523,7 @@ describe("AppointmentsService", () => {
         { clientId: "client-b" },
       ]);
       (prisma.appointment.findMany as jest.Mock).mockResolvedValue([hydratedAppointment()]);
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       const result = await service.findAllForConsumer(consumer);
 
@@ -533,7 +539,7 @@ describe("AppointmentsService", () => {
       const prisma = buildPrismaMock(buildTxMock());
       (prisma.appointment as unknown as { count: jest.Mock }).count = jest.fn().mockResolvedValue(23);
       (prisma.appointment.findMany as jest.Mock).mockResolvedValue([hydratedAppointment()]);
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       const result = await service.findAllForConsumer(consumer, { page: 3, pageSize: 10 });
 
@@ -546,7 +552,7 @@ describe("AppointmentsService", () => {
     it("scope=upcoming filtra confirmados futuros em ordem crescente; past é o complemento", async () => {
       const prisma = buildPrismaMock(buildTxMock());
       (prisma.appointment as unknown as { count: jest.Mock }).count = jest.fn().mockResolvedValue(0);
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await service.findAllForConsumer(consumer, { scope: "upcoming" });
       const upcoming = (prisma.appointment.findMany as jest.Mock).mock.calls[0][0];
@@ -562,7 +568,7 @@ describe("AppointmentsService", () => {
 
     it("createFromPublicLink deriva nome/telefone do Client de ensureLink, nunca do body", async () => {
       const tx = buildTxMock();
-      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth);
+      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth, notifier);
 
       await service.createFromPublicLink(
         "slug",
@@ -582,7 +588,7 @@ describe("AppointmentsService", () => {
     // Regressão: from/to vinham direto de @Query sem DTO — new Date("lixo") gerava um
     // Invalid Date que ia parar no WHERE do Prisma sem checagem, virando 500 em vez de 400.
     it("lança BadRequestException com from/to inválidos", async () => {
-      const service = new AppointmentsService(buildPrismaMock(buildTxMock()), clientsService, consumerAuth);
+      const service = new AppointmentsService(buildPrismaMock(buildTxMock()), clientsService, consumerAuth, notifier);
       await expect(service.findForAdmin(owner, "nao-e-uma-data")).rejects.toThrow(
         BadRequestException,
       );
@@ -593,7 +599,7 @@ describe("AppointmentsService", () => {
     // virava uma query pesada sem limite.
     it("limita a busca com take mesmo sem filtro de data", async () => {
       const prisma = buildPrismaMock(buildTxMock());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await service.findForAdmin(owner);
 
@@ -604,7 +610,7 @@ describe("AppointmentsService", () => {
 
     it("aplica skip e take quando parâmetros de paginação são informados", async () => {
       const prisma = buildPrismaMock(buildTxMock());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await service.findForAdmin(owner, undefined, undefined, { page: 3, pageSize: 25 });
 
@@ -627,7 +633,7 @@ describe("AppointmentsService", () => {
     }
 
     it("devolve profissionais, atendimentos e bloqueios do intervalo", async () => {
-      const service = new AppointmentsService(calendarPrisma(), clientsService, consumerAuth);
+      const service = new AppointmentsService(calendarPrisma(), clientsService, consumerAuth, notifier);
 
       const result = await service.getCalendar(owner, range.from, range.to);
 
@@ -638,7 +644,7 @@ describe("AppointmentsService", () => {
 
     it("PROFESSIONAL só enxerga a própria coluna", async () => {
       const prisma = calendarPrisma();
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
       const pro: AuthenticatedUser = {
         userId: "u-2",
         tenantId: "tenant-1",
@@ -653,7 +659,7 @@ describe("AppointmentsService", () => {
     });
 
     it("recusa intervalo maior que 45 dias", async () => {
-      const service = new AppointmentsService(calendarPrisma(), clientsService, consumerAuth);
+      const service = new AppointmentsService(calendarPrisma(), clientsService, consumerAuth, notifier);
       await expect(
         service.getCalendar(
           owner,
@@ -668,7 +674,7 @@ describe("AppointmentsService", () => {
     it("permite CONFIRMED -> IN_SERVICE", async () => {
       const prisma = buildPrismaMock(buildTxMock());
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(hydratedAppointment());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       const result = await service.updateStatus(owner, "appt-1", { status: "IN_SERVICE" });
 
@@ -680,7 +686,7 @@ describe("AppointmentsService", () => {
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(
         hydratedAppointment({ status: AppointmentStatus.COMPLETED }),
       );
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await expect(
         service.updateStatus(owner, "appt-1", { status: "IN_SERVICE" }),
@@ -690,12 +696,84 @@ describe("AppointmentsService", () => {
     it("carimba noShowAt ao marcar NO_SHOW", async () => {
       const prisma = buildPrismaMock(buildTxMock());
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(hydratedAppointment());
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
 
       await service.updateStatus(owner, "appt-1", { status: "NO_SHOW" });
 
       const data = (prisma.appointment.update as jest.Mock).mock.calls[0][0].data;
       expect(data.noShowAt).toBeInstanceOf(Date);
+    });
+  });
+
+  // E-mail é efeito colateral DEPOIS da gravação: dispara com o ator certo (quem recebe o aviso depende dele)
+  // e uma falha na gravação NÃO dispara nada.
+  describe("notificações por e-mail", () => {
+    function setup(appointmentOverrides: Record<string, unknown> = {}) {
+      const tx = buildTxMock();
+      const prisma = buildPrismaMock(tx);
+      (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(hydratedAppointment(appointmentOverrides));
+      const notify = jest.fn();
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, { notify } as unknown as AppointmentNotifierService);
+      return { tx, prisma, notify, service };
+    }
+
+    it("agendamento público: avisa a equipe e confirma ao cliente, escopo no tenant do slug", async () => {
+      const { service, notify } = setup();
+      await service.createFromPublicLink("slug", baseDto, consumer);
+      expect(notify).toHaveBeenCalledWith("CREATED", "appt-1", "tenant-1", "CLIENT", { alsoConfirmToClient: true });
+    });
+
+    it("agendamento pela recepção: avisa o cliente (ator STAFF)", async () => {
+      const { service, notify } = setup();
+      await service.createByStaff(owner, {
+        professionalId: "prof-1",
+        startAt: FUTURE_DATE,
+        items: [{ serviceId: "svc-1" }],
+        clientName: "Novo Cliente",
+        clientPhone: "11988887777",
+      });
+      expect(notify).toHaveBeenCalledWith("CREATED", "appt-1", "tenant-1", "STAFF");
+    });
+
+    it("conflito de horário (nada gravado) não dispara e-mail", async () => {
+      const tx = buildTxMock({
+        appointment: { findFirst: jest.fn().mockResolvedValue({ id: "existing" }), create: jest.fn() },
+      });
+      const notify = jest.fn();
+      const service = new AppointmentsService(
+        buildPrismaMock(tx),
+        clientsService,
+        consumerAuth,
+        { notify } as unknown as AppointmentNotifierService,
+      );
+      await expect(service.createFromPublicLink("slug", baseDto, consumer)).rejects.toThrow(ConflictException);
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it("cliente cancela: ator CLIENT; recepção cancela: ator STAFF", async () => {
+      const byClient = setup();
+      await byClient.service.cancelForConsumer("appt-1", consumer);
+      expect(byClient.notify).toHaveBeenCalledWith("CANCELED", "appt-1", "tenant-1", "CLIENT");
+
+      const byStaff = setup();
+      await byStaff.service.cancelByStaff(owner, "appt-1");
+      expect(byStaff.notify).toHaveBeenCalledWith("CANCELED", "appt-1", "tenant-1", "STAFF");
+    });
+
+    it("cliente remarca: ator CLIENT; recepção remarca: ator STAFF", async () => {
+      const byClient = setup();
+      await byClient.service.rescheduleForConsumer("appt-1", { startAt: FUTURE_DATE }, consumer);
+      expect(byClient.notify).toHaveBeenCalledWith("RESCHEDULED", "appt-1", "tenant-1", "CLIENT");
+
+      const byStaff = setup();
+      await byStaff.service.rescheduleByStaff(owner, "appt-1", { startAt: FUTURE_DATE });
+      expect(byStaff.notify).toHaveBeenCalledWith("RESCHEDULED", "appt-1", "tenant-1", "STAFF");
+    });
+
+    it("cancelar atendimento já cancelado (erro de negócio) não dispara e-mail", async () => {
+      const { service, notify } = setup({ status: AppointmentStatus.CANCELED });
+      await expect(service.cancelByStaff(owner, "appt-1")).rejects.toThrow(BadRequestException);
+      expect(notify).not.toHaveBeenCalled();
     });
   });
 });
