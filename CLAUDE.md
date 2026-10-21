@@ -209,6 +209,18 @@ só contra um servidor falso e testes unitários (ver Riscos).
   `remove_appointment_manage_token`): capability não autenticada num link circulável era
   superfície de IDOR/vazamento (nome e telefone) sem ganho, já que agendar também exige login.
 
+### E-mail transacional (Resend)
+- `src/email`: `EmailService` (cliente HTTP mínimo do Resend, sem SDK, host fixo, timeout de 8 s, **nunca lança**) e
+  `AppointmentNotifierService`. Variáveis `RESEND_API_KEY` + `EMAIL_FROM` (vêm juntas; o remetente precisa ser de um
+  domínio verificado no Resend). Sem elas o envio fica desligado: nada sai, nada quebra (mesmo padrão do Mercado Pago).
+- **Disparo depois do commit, fire-and-forget** (`AppointmentsService`): falha de e-mail nunca desfaz nem atrasa um
+  agendamento. Avisa-se o OUTRO lado: agendamento público → equipe (dono ativo + profissional ativo) recebe o aviso e o
+  cliente a confirmação; cliente cancela/remarca → só a equipe; recepção marca/cancela/remarca → só o cliente.
+- **Destinatário nunca vem do request**: relido do banco com `tenantId` no WHERE. Cliente = e-mail da conta
+  (`Consumer.email`) com prioridade sobre `Client.email` (ficha). Conteúdo é template fixo com todo texto de usuário
+  escapado (`escapeHtml`); não há como mandar texto livre. Nunca se loga endereço, assunto nem corpo.
+- Ainda não feito: lembrete antes do horário, recuperação de senha por e-mail, OTP do cliente por e-mail.
+
 ### Comissões e repasses
 - **Sem "fechar período".** `GET /commissions/earnings` (`CommissionsService.earnings`) calcula na hora, por
   profissional: **bruto** (Σ preço × qtd dos itens dele), **descontos**, **líquido** (bruto − descontos), **repasse**

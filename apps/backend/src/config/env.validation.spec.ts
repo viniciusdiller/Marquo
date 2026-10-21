@@ -89,6 +89,34 @@ describe("validateEnv: FRONTEND_URL", () => {
     expect(() => validateEnv({ ...dev, FRONTEND_URL: "nao-e-url" })).toThrow();
   });
 
+  describe("e-mail (RESEND_API_KEY + EMAIL_FROM)", () => {
+    const strong = { ...base, JWT_SECRET: "a".repeat(40) };
+    const key = "re_" + "k".repeat(24);
+
+    it("é opcional: sem as variáveis o envio fica desligado", () => {
+      expect(() => validateEnv(strong)).not.toThrow();
+    });
+
+    it("aceita a chave com remetente 'Nome <endereço>' ou só o endereço", () => {
+      expect(() =>
+        validateEnv({ ...strong, RESEND_API_KEY: key, EMAIL_FROM: "Marquo <avisos@marquo.com.br>" }),
+      ).not.toThrow();
+      expect(() => validateEnv({ ...strong, RESEND_API_KEY: key, EMAIL_FROM: "avisos@marquo.com.br" })).not.toThrow();
+    });
+
+    it("recusa uma sem a outra (config pela metade não pode subir)", () => {
+      expect(() => validateEnv({ ...strong, RESEND_API_KEY: key })).toThrow();
+      expect(() => validateEnv({ ...strong, EMAIL_FROM: "avisos@marquo.com.br" })).toThrow();
+    });
+
+    it("recusa chave com prefixo errado e remetente malformado ou com quebra de linha", () => {
+      const from = "avisos@marquo.com.br";
+      expect(() => validateEnv({ ...strong, RESEND_API_KEY: "sk_" + "k".repeat(24), EMAIL_FROM: from })).toThrow();
+      expect(() => validateEnv({ ...strong, RESEND_API_KEY: key, EMAIL_FROM: "sem-arroba" })).toThrow();
+      expect(() => validateEnv({ ...strong, RESEND_API_KEY: key, EMAIL_FROM: `${from}\nBcc: x@y.com` })).toThrow();
+    });
+  });
+
   describe("conta da plataforma (PLATFORM_ADMIN_*)", () => {
     const strong = { ...base, JWT_SECRET: "a".repeat(40) };
     const hash = "$2b$12$" + "a".repeat(53);
