@@ -6,11 +6,19 @@ const REQUEST_TIMEOUT_MS = 8_000;
 // Teto defensivo: nenhuma notificação do produto tem tantos destinatários.
 const MAX_RECIPIENTS = 5;
 
+export interface EmailAttachment {
+  filename: string;
+  // Conteúdo em base64 (é o que a API do Resend espera).
+  content: string;
+  contentType?: string;
+}
+
 export interface EmailMessage {
   to: string[];
   subject: string;
   html: string;
   text: string;
+  attachments?: EmailAttachment[];
 }
 
 // Cliente mínimo do Resend (sem SDK: uma dependência a menos para auditar). Só fala com UM host fixo
@@ -56,6 +64,15 @@ export class EmailService {
           subject: message.subject.replace(/[\r\n]+/g, " ").slice(0, 200),
           html: message.html,
           text: message.text,
+          ...(message.attachments?.length
+            ? {
+                attachments: message.attachments.map((a) => ({
+                  filename: a.filename,
+                  content: a.content,
+                  ...(a.contentType ? { content_type: a.contentType } : {}),
+                })),
+              }
+            : {}),
         }),
       });
       if (!response.ok) {

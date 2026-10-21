@@ -5,11 +5,23 @@ import { EmailService } from "./email.service";
 
 function hydrated(overrides: Record<string, unknown> = {}) {
   return {
+    id: "appt-1",
     clientName: "João Silva",
+    clientPhone: "11999998888",
     startAt: new Date("2026-03-10T17:30:00.000Z"),
+    endAt: new Date("2026-03-10T18:30:00.000Z"),
+    rescheduledCount: 0,
     items: [{ service: { name: "Corte" } }],
     professional: { user: { name: "Alex", email: "alex@salao.com", isActive: true } },
-    tenant: { name: "Salão Teste", slug: "salao", users: [{ email: "dono@salao.com" }] },
+    tenant: {
+      name: "Salão Teste",
+      slug: "salao",
+      address: "Rua A, 10",
+      neighborhood: "Centro",
+      city: "Cabo Frio",
+      whatsappNumber: "5522999887766",
+      users: [{ email: "dono@salao.com" }],
+    },
     client: { email: "ficha@cliente.com", consumerLink: { consumer: { email: "conta@cliente.com" } } },
     ...overrides,
   };
@@ -84,6 +96,40 @@ describe("AppointmentNotifierService.deliver", () => {
     );
     await service.deliver("CREATED", "a", "t", "CLIENT");
     expect(send.mock.calls[0][0].to).toEqual(["dono@salao.com"]);
+  });
+
+  it("a confirmação do cliente traz endereço e telefone do salão, convite de calendário e a logo", async () => {
+    const { service, send } = build(hydrated());
+    await service.deliver("CREATED", "appt-1", "tenant-1", "STAFF");
+
+    const message = send.mock.calls[0][0];
+    expect(message.text).toContain("Endereço: Rua A, 10, Centro, Cabo Frio");
+    expect(message.text).toContain("Telefone: (22) 99988-7766");
+    expect(message.attachments).toHaveLength(1);
+    expect(message.html).toContain("https://marquo.com.br/brand/email/marquo-logo.png");
+  });
+
+  it("a equipe vê o telefone do cliente; o cliente não recebe o próprio telefone de volta", async () => {
+    const { service, send } = build(hydrated());
+    await service.deliver("CREATED", "appt-1", "tenant-1", "CLIENT", { alsoConfirmToClient: true });
+
+    const toStaff = send.mock.calls.find((c) => c[0].to[0] === "dono@salao.com")![0];
+    const toClient = send.mock.calls.find((c) => c[0].to[0] === "conta@cliente.com")![0];
+    expect(toStaff.text).toContain("(11) 99999-8888");
+    expect(toClient.text).not.toContain("99999-8888");
+  });
+
+  it("cancelamento sai sem anexo de calendário", async () => {
+    const { service, send } = build(hydrated());
+    await service.deliver("CANCELED", "appt-1", "tenant-1", "STAFF");
+    expect(send.mock.calls[0][0].attachments).toEqual([]);
+  });
+
+  it("endereço vazio no cadastro do salão não gera linha de endereço", async () => {
+    const tenant = { ...hydrated().tenant, address: null, neighborhood: " ", city: null };
+    const { service, send } = build(hydrated({ tenant }));
+    await service.deliver("CREATED", "appt-1", "tenant-1", "STAFF");
+    expect(send.mock.calls[0][0].text).not.toContain("Endereço:");
   });
 
   it("o link do painel usa FRONTEND_URL sem barra dupla", async () => {

@@ -55,14 +55,22 @@ export class AppointmentNotifierService {
     const appointment = await this.prisma.appointment.findFirst({
       where: { id: appointmentId, tenantId },
       select: {
+        id: true,
         clientName: true,
+        clientPhone: true,
         startAt: true,
+        endAt: true,
+        rescheduledCount: true,
         items: { orderBy: { position: "asc" }, select: { service: { select: { name: true } } } },
         professional: { select: { user: { select: { name: true, email: true, isActive: true } } } },
         tenant: {
           select: {
             name: true,
             slug: true,
+            address: true,
+            neighborhood: true,
+            city: true,
+            whatsappNumber: true,
             users: { where: { role: Role.OWNER, isActive: true }, select: { email: true } },
           },
         },
@@ -74,15 +82,25 @@ export class AppointmentNotifierService {
     if (!appointment) return;
 
     const frontend = (this.config.get<string>("FRONTEND_URL") ?? "").replace(/\/+$/, "");
+    const { address, neighborhood, city, whatsappNumber } = appointment.tenant;
     const base: Omit<AppointmentEmailData, "audience"> = {
       event,
+      appointmentId: appointment.id,
+      rescheduledCount: appointment.rescheduledCount,
       tenantName: appointment.tenant.name,
       clientName: appointment.clientName,
+      clientPhone: appointment.clientPhone,
       professionalName: appointment.professional.user.name,
       serviceNames: appointment.items.map((item) => item.service.name),
       startAt: appointment.startAt,
+      endAt: appointment.endAt,
+      tenantAddress: [address, neighborhood, city].filter((part) => part && part.trim()).join(", ") || undefined,
+      tenantPhone: whatsappNumber ?? undefined,
       dashboardUrl: frontend ? `${frontend}/dashboard/agenda` : undefined,
       publicUrl: frontend ? `${frontend}/${appointment.tenant.slug}` : undefined,
+      // Imagem servida pelo frontend (apps/frontend/public/brand/email): precisa de URL pública.
+      logoUrl: frontend ? `${frontend}/brand/email/marquo-logo.png` : undefined,
+      siteUrl: frontend || undefined,
     };
 
     const sends: Promise<boolean>[] = [];
