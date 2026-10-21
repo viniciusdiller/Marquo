@@ -14,7 +14,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     title: "1. Quem somos e aceite",
     paragraphs: [
-      "O Marquo é um sistema de agendamento e gestão para salões, barbearias e prestadores de serviço por horário, oferecido por [PREENCHER: razão social], inscrita no CNPJ [PREENCHER: CNPJ], com sede em [PREENCHER: endereço completo] (“Marquo”, “nós”).",
+      "O Marquo é um sistema de agendamento e gestão para salões, barbearias e prestadores de serviço por horário, oferecido por VALLE CONSULTORIA E NEGOCIOS LTDA, inscrita no CNPJ 64.576.289/0001-74, com sede na Rua Julia Kubitschek, nº 16, Loja 04, Centro, Cabo Frio/RJ, CEP 28905-000 (“Marquo”, “nós”).",
       "Ao criar uma conta você declara que leu e aceita estes Termos de Uso e a Política de Privacidade. Se não concordar, não crie a conta.",
     ],
   },
@@ -98,7 +98,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
   {
     title: "1. Quem é o responsável",
     paragraphs: [
-      "Esta política descreve como o Marquo trata dados pessoais. Somos [PREENCHER: razão social], CNPJ [PREENCHER: CNPJ], [PREENCHER: endereço completo].",
+      "Esta política descreve como o Marquo trata dados pessoais. Somos VALLE CONSULTORIA E NEGOCIOS LTDA, CNPJ 64.576.289/0001-74, com sede na Rua Julia Kubitschek, nº 16, Loja 04, Centro, Cabo Frio/RJ, CEP 28905-000.",
       "Encarregado pelo tratamento de dados (LGPD): [PREENCHER: nome e e-mail do encarregado].",
       "Papéis: para os dados do dono da conta e dos usuários do Estabelecimento (equipe) e para a conta de cliente do Marquo, somos o controlador. Para os dados dos clientes de cada Estabelecimento, somos o operador e o Estabelecimento é o controlador. [REVISAR: enquadramento dos papéis.]",
     ],
