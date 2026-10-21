@@ -21,7 +21,9 @@
       "picomatch@>=4 <5": "^4.0.4",
       "tmp@<0.1": "^0.2.6",
       "webpack@>=5 <6": "^5.104.1",
-      "file-type@>=20 <21": "^21.3.2"
+      "file-type@>=20 <21": "^21.3.2",
+      "proxy-addr": "^2.0.8",
+      "source-map-js": "^1.2.2"
     },
     "auditConfig": {
       "ignoreGhsas": [
