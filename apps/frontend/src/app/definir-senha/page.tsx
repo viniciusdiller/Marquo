@@ -51,8 +51,11 @@ export default async function DefinirSenhaPage({
             </>
           ) : (
             <p className="mt-1 text-sm text-zinc-500 dark:text-stone-400">
-              Este link para definir senha é inválido ou expirou. Se sua assinatura já foi
-              confirmada, entre em contato com o suporte para receber um novo link.
+              Este link para definir senha é inválido ou expirou.{" "}
+              <Link href="/esqueci-senha" className="font-semibold text-accent-600 dark:text-accent-300">
+                Peça um novo link
+              </Link>{" "}
+              ou, se precisar de ajuda, fale com o suporte: suporte@marquo.com.br.
             </p>
           )}
         </div>

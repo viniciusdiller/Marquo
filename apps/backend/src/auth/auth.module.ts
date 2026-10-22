@@ -6,9 +6,12 @@ import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { RefreshTokenService } from "./refresh-token.service";
+import { PasswordResetService } from "./password-reset.service";
+import { EmailModule } from "../email/email.module";
 
 @Module({
   imports: [
+    EmailModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -20,7 +23,7 @@ import { RefreshTokenService } from "./refresh-token.service";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, RefreshTokenService, JwtStrategy],
+  providers: [AuthService, RefreshTokenService, PasswordResetService, JwtStrategy],
   // JwtModule exportado para o consumer-auth reaproveitar o mesmo JwtService (mesmo
   // JWT_SECRET) sem reconfigurar — ver consumer-auth/consumer-auth.module.ts.
   exports: [AuthService, JwtModule],

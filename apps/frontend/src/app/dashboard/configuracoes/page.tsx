@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { HowItWorks } from "@/components/ui/HowItWorks";
 import { TenantProfileSettingsForm } from "./TenantProfileSettingsForm";
 import { GalleryManager } from "./GalleryManager";
+import { ExportDataCard } from "./ExportDataCard";
 
 interface TenantMe {
   name: string;
@@ -71,6 +72,7 @@ export default async function ConfiguracoesPage() {
       <div className="mt-6 flex flex-col gap-8">
         <TenantProfileSettingsForm tenant={tenant} />
         <GalleryManager images={tenant.galleryImages} />
+        <ExportDataCard />
       </div>
     </div>
   );
