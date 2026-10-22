@@ -111,6 +111,13 @@ export function LoginForm({ next }: { next?: string }) {
             maxLength={72}
           />
 
+          <Link
+            href="/esqueci-senha"
+            className="-mt-2 self-end text-sm font-semibold text-accent-600 dark:text-accent-300"
+          >
+            Esqueci minha senha
+          </Link>
+
           {error ? <p role="alert" className="animate-rise-in text-sm text-red-600 dark:text-red-400">{error}</p> : null}
 
           <Button type="submit" disabled={pending} className="mt-2 w-full disabled:opacity-60">
