@@ -705,6 +705,57 @@ describe("AppointmentsService", () => {
     });
   });
 
+  // Lembrete: atendimento marcado para dentro de 24 h já nasce "lembrado" (a confirmação acabou de sair); para além
+  // disso fica nulo e a varredura envia. Remarcar recalcula.
+  describe("marca do lembrete (reminderSentAt)", () => {
+    const IN_2_HOURS = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    const IN_3_DAYS = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    const staffDto = (startAt: string) => ({
+      professionalId: "prof-1",
+      startAt,
+      items: [{ serviceId: "svc-1" }],
+      clientName: "Novo Cliente",
+      clientPhone: "11988887777",
+    });
+
+    it("agendamento público para daqui a 2 h: sem lembrete pendente", async () => {
+      const tx = buildTxMock();
+      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth, notifier);
+      await service.createFromPublicLink("slug", { ...baseDto, startAt: IN_2_HOURS }, consumer);
+      expect((tx.appointment.create as jest.Mock).mock.calls[0][0].data.reminderSentAt).toBeInstanceOf(Date);
+    });
+
+    it("agendamento público para daqui a 3 dias: lembrete pendente (nulo)", async () => {
+      const tx = buildTxMock();
+      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth, notifier);
+      await service.createFromPublicLink("slug", { ...baseDto, startAt: IN_3_DAYS }, consumer);
+      expect((tx.appointment.create as jest.Mock).mock.calls[0][0].data.reminderSentAt).toBeNull();
+    });
+
+    it("agendamento pela recepção segue a mesma regra", async () => {
+      const soon = buildTxMock();
+      await new AppointmentsService(buildPrismaMock(soon), clientsService, consumerAuth, notifier).createByStaff(owner, staffDto(IN_2_HOURS));
+      expect((soon.appointment.create as jest.Mock).mock.calls[0][0].data.reminderSentAt).toBeInstanceOf(Date);
+
+      const later = buildTxMock();
+      await new AppointmentsService(buildPrismaMock(later), clientsService, consumerAuth, notifier).createByStaff(owner, staffDto(IN_3_DAYS));
+      expect((later.appointment.create as jest.Mock).mock.calls[0][0].data.reminderSentAt).toBeNull();
+    });
+
+    it("remarcar para além de 24 h devolve o lembrete a pendente; para dentro de 24 h o dispensa", async () => {
+      for (const [startAt, expectDate] of [[IN_3_DAYS, false], [IN_2_HOURS, true]] as const) {
+        const tx = buildTxMock();
+        const prisma = buildPrismaMock(tx);
+        (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(hydratedAppointment());
+        const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
+        await service.rescheduleByStaff(owner, "appt-1", { startAt });
+        const data = (tx.appointment.update as jest.Mock).mock.calls[0][0].data;
+        if (expectDate) expect(data.reminderSentAt).toBeInstanceOf(Date);
+        else expect(data.reminderSentAt).toBeNull();
+      }
+    });
+  });
+
   // E-mail é efeito colateral DEPOIS da gravação: dispara com o ator certo (quem recebe o aviso depende dele)
   // e uma falha na gravação NÃO dispara nada.
   describe("notificações por e-mail", () => {

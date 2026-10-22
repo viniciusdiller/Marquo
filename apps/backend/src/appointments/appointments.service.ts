@@ -21,6 +21,7 @@ import { ListConsumerBookingsQueryDto } from "./dto/list-consumer-bookings-query
 import { ConsumerAuthService } from "../consumer-auth/consumer-auth.service";
 import { AuthenticatedConsumer } from "../consumer-auth/types/consumer-auth-user";
 import { AppointmentNotifierService } from "../email/appointment-notifier.service";
+import { REMINDER_LEAD_MS } from "./reminder.constants";
 
 
 // Mesmo fuso fixo usado por AvailabilityService — datetime sem offset explícito (ex.:
@@ -109,6 +110,7 @@ export class AppointmentsService {
           endAt: endAt.toJSDate(),
           status: AppointmentStatus.CONFIRMED,
           source: "PUBLIC",
+          reminderSentAt: this.reminderMark(startAt),
           items: {
             create: {
               serviceId: dto.serviceId,
@@ -173,6 +175,7 @@ export class AppointmentsService {
               ? AppointmentStatus.CONFIRMED
               : AppointmentStatus.SCHEDULED,
           source: "STAFF",
+          reminderSentAt: this.reminderMark(startAt),
           notes: dto.notes,
           items: {
             create: resolvedItems.map((item, position) => ({
@@ -414,6 +417,12 @@ export class AppointmentsService {
   // ─────────────────────────────────────────────
   // Internos
   // ─────────────────────────────────────────────
+
+  // Atendimento marcado para daqui a menos de 24 h não precisa de lembrete: a confirmação acabou de sair. Nulo = o
+  // lembrete ainda vai ser enviado pela varredura (ver AppointmentReminderService).
+  private reminderMark(startAt: DateTime): Date | null {
+    return startAt.toMillis() - Date.now() <= REMINDER_LEAD_MS ? new Date() : null;
+  }
 
   private async getTenantBySlug(slug: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
@@ -662,6 +671,8 @@ export class AppointmentsService {
           startAt: startAt.toJSDate(),
           endAt: endAt.toJSDate(),
           rescheduledCount: { increment: 1 },
+          // Novo horário: o lembrete vale de novo (ou é dispensado, se o horário caiu dentro das próximas 24 h).
+          reminderSentAt: this.reminderMark(startAt),
         },
         include: APPOINTMENT_INCLUDE,
       });

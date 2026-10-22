@@ -8,6 +8,7 @@ import {
 import { ClientsModule } from "../clients/clients.module";
 import { ConsumerAuthModule } from "../consumer-auth/consumer-auth.module";
 import { EmailModule } from "../email/email.module";
+import { AppointmentReminderService } from "./appointment-reminder.service";
 
 @Module({
   imports: [ClientsModule, ConsumerAuthModule, EmailModule],
@@ -16,7 +17,7 @@ import { EmailModule } from "../email/email.module";
     PublicAppointmentsController,
       ConsumerAppointmentsController,
   ],
-  providers: [AppointmentsService],
+  providers: [AppointmentsService, AppointmentReminderService],
   exports: [AppointmentsService],
 })
 export class AppointmentsModule {}
