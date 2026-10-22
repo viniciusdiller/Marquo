@@ -33,6 +33,7 @@ import { ReviewsModule } from "./reviews/reviews.module";
 import { SignupModule } from "./signup/signup.module";
 import { InternalModule } from "./internal/internal.module";
 import { PlatformAdminModule } from "./platform-admin/platform-admin.module";
+import { DataExportModule } from "./data-export/data-export.module";
 import { ReportsModule } from './reports/reports.module';
 
 @Module({
@@ -64,6 +65,7 @@ import { ReportsModule } from './reports/reports.module';
     SignupModule,
     InternalModule,
     PlatformAdminModule,
+    DataExportModule,
     ReportsModule,
   ],
   providers: [
