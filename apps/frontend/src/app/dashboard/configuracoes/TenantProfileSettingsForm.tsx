@@ -36,6 +36,7 @@ interface TenantProfile {
   showContact: boolean;
   minSchedulingLeadTimeMinutes: number;
   maxSchedulingLeadTimeDays: number;
+  notifyStaffByEmail: boolean;
 }
 
 const SECTION_TOGGLES = [
@@ -232,6 +233,23 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
           </div>
           <p className="text-xs text-zinc-400 dark:text-stone-500">
             Uma seção só aparece se também tiver conteúdo cadastrado.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <p className="text-sm font-medium text-zinc-700 dark:text-stone-200">Avisos por e-mail</p>
+          <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-stone-300">
+            <input
+              type="checkbox"
+              name="notifyStaffByEmail"
+              defaultChecked={tenant.notifyStaffByEmail}
+              className="h-4 w-4 rounded border-zinc-300 text-accent-500 focus:ring-accent-500/20 dark:border-white/15"
+            />
+            Avisar a equipe (dono e profissional) por e-mail sobre novos agendamentos, cancelamentos e remarcações
+          </label>
+          <p className="text-xs text-zinc-400 dark:text-stone-500">
+            Desligar não muda o que o cliente recebe: a confirmação, o lembrete e os avisos de cancelamento e remarcação
+            dele continuam saindo.
           </p>
         </div>
 
