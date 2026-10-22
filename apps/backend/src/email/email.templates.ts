@@ -16,7 +16,7 @@ const COLOR = {
   muted: "#6B6676",
 };
 
-export type AppointmentEmailEvent = "CREATED" | "CANCELED" | "RESCHEDULED";
+export type AppointmentEmailEvent = "CREATED" | "CANCELED" | "RESCHEDULED" | "REMINDER";
 export type AppointmentEmailAudience = "STAFF" | "CLIENT";
 
 export interface AppointmentEmailData {
@@ -78,12 +78,14 @@ const TITLE: Record<AppointmentEmailEvent, { staff: string; client: string }> = 
   CREATED: { staff: "Novo agendamento", client: "Agendamento confirmado" },
   CANCELED: { staff: "Agendamento cancelado", client: "Agendamento cancelado" },
   RESCHEDULED: { staff: "Agendamento remarcado", client: "Agendamento remarcado" },
+  REMINDER: { staff: "Lembrete de agendamento", client: "Lembrete do seu agendamento" },
 };
 
 const BADGE_COLOR: Record<AppointmentEmailEvent, string> = {
   CREATED: COLOR.primary,
   CANCELED: COLOR.coral,
   RESCHEDULED: COLOR.primaryDark,
+  REMINDER: COLOR.primary,
 };
 
 export function buildAppointmentEmail(data: AppointmentEmailData): AppointmentEmail {
@@ -195,7 +197,7 @@ export function buildAppointmentEmail(data: AppointmentEmailData): AppointmentEm
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
 <tr><td style="padding:0 4px 18px">${logo(150)}</td></tr>
 <tr><td style="background:#ffffff;border-radius:16px;padding:28px">
-<span style="display:inline-block;background:${BADGE_COLOR[data.event]};color:#ffffff;${font};font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:4px 12px">${escapeHtml(data.event === "CREATED" ? (staff ? "Novo" : "Confirmado") : data.event === "CANCELED" ? "Cancelado" : "Remarcado")}</span>
+<span style="display:inline-block;background:${BADGE_COLOR[data.event]};color:#ffffff;${font};font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:4px 12px">${escapeHtml(data.event === "CREATED" ? (staff ? "Novo" : "Confirmado") : data.event === "CANCELED" ? "Cancelado" : data.event === "REMINDER" ? "Lembrete" : "Remarcado")}</span>
 <h1 style="margin:14px 0 18px;font-size:22px;line-height:1.3;color:${COLOR.graphite}">${escapeHtml(title)}</h1>
 <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:${COLOR.lilacBg};border-radius:12px"><tr><td style="padding:12px 18px"><table role="presentation" cellpadding="0" cellspacing="0">${htmlRows}</table></td></tr></table>
 ${buttons ? `<div style="margin-top:22px">${buttons}</div>` : ""}${calendarNote}

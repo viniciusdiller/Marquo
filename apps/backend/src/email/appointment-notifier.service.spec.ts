@@ -153,3 +153,34 @@ describe("AppointmentNotifierService.notify", () => {
     await new Promise((resolve) => setImmediate(resolve));
   });
 });
+
+describe("AppointmentNotifierService.deliverReminder", () => {
+  it("envia o lembrete só ao CLIENTE (nunca à equipe), com a conta do cliente à frente da ficha", async () => {
+    const { service, send, findFirst } = build(hydrated());
+
+    await expect(service.deliverReminder("appt-1", "tenant-1")).resolves.toBe("SENT");
+
+    expect(findFirst.mock.calls[0][0].where).toEqual({ id: "appt-1", tenantId: "tenant-1" });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0].to).toEqual(["conta@cliente.com"]);
+    expect(send.mock.calls[0][0].subject).toContain("Lembrete");
+  });
+
+  it("sem e-mail do cliente: SKIPPED e nada é enviado", async () => {
+    const { service, send } = build(hydrated({ client: { email: null, consumerLink: null } }));
+    await expect(service.deliverReminder("appt-1", "tenant-1")).resolves.toBe("SKIPPED");
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("atendimento de outro tenant ou inexistente: SKIPPED", async () => {
+    const { service, send } = build(null);
+    await expect(service.deliverReminder("appt-1", "tenant-OUTRO")).resolves.toBe("SKIPPED");
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("provedor recusou o envio: FAILED", async () => {
+    const { service, send } = build(hydrated());
+    send.mockResolvedValue(false);
+    await expect(service.deliverReminder("appt-1", "tenant-1")).resolves.toBe("FAILED");
+  });
+});

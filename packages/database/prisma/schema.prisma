@@ -398,6 +398,10 @@ model Appointment {
   canceledAt       DateTime?         @db.Timestamptz(6)
   noShowAt         DateTime?         @db.Timestamptz(6)
   rescheduledCount Int               @default(0)
+  // Lembrete por e-mail ao cliente (ver ReminderService). Não nulo = já foi enviado OU não é mais necessário (marcado
+  // com menos de 24 h de antecedência: a confirmação acabou de sair). Voltar a nulo ao remarcar. A reivindicação é
+  // atômica (UPDATE condicional), então nenhum atendimento é lembrado duas vezes.
+  reminderSentAt   DateTime?         @db.Timestamptz(6)
   createdAt        DateTime          @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime          @updatedAt @db.Timestamptz(6)
 
@@ -414,6 +418,8 @@ model Appointment {
   @@index([tenantId, startAt])
   @@index([professionalId, startAt])
   @@index([clientId])
+  // Varredura dos lembretes (todos os negócios, por janela de horário).
+  @@index([startAt])
 }
 
 model AppointmentItem {
