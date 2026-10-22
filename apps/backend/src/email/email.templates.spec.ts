@@ -103,6 +103,18 @@ describe("buildAppointmentEmail", () => {
     expect(buildAppointmentEmail({ ...base, event: "RESCHEDULED" }).subject).toContain("Agendamento remarcado");
   });
 
+  describe("lembrete", () => {
+    it("lembrete ao cliente: título, etiqueta, horário e convite de calendário", () => {
+      const { subject, html, text, attachments } = buildAppointmentEmail({ ...base, audience: "CLIENT", event: "REMINDER" });
+      expect(subject).toContain("Lembrete do seu agendamento");
+      expect(html).toContain("Lembrete");
+      expect(text).toContain("Quando:");
+      expect(text).toContain("14:30");
+      expect(text).toContain("Adicionar ao Google Agenda");
+      expect(attachments).toHaveLength(1);
+    });
+  });
+
   describe("calendário", () => {
     it("novo agendamento: botão do Google Agenda + .ics em anexo", () => {
       const { html, text, attachments } = buildAppointmentEmail({ ...base, audience: "CLIENT" });

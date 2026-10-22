@@ -21,6 +21,7 @@ import { ListConsumerBookingsQueryDto } from "./dto/list-consumer-bookings-query
 import { ConsumerAuthService } from "../consumer-auth/consumer-auth.service";
 import { AuthenticatedConsumer } from "../consumer-auth/types/consumer-auth-user";
 import { AppointmentNotifierService } from "../email/appointment-notifier.service";
+import { REMINDER_LEAD_MS } from "./reminder.constants";
 
 
 // Mesmo fuso fixo usado por AvailabilityService — datetime sem offset explícito (ex.:
@@ -109,6 +110,7 @@ export class AppointmentsService {
           endAt: endAt.toJSDate(),
           status: AppointmentStatus.CONFIRMED,
           source: "PUBLIC",
+          reminderSentAt: this.reminderMark(startAt),
           items: {
             create: {
               serviceId: dto.serviceId,
@@ -173,6 +175,7 @@ export class AppointmentsService {
               ? AppointmentStatus.CONFIRMED
               : AppointmentStatus.SCHEDULED,
           source: "STAFF",
+          reminderSentAt: this.reminderMark(startAt),
           notes: dto.notes,
           items: {
             create: resolvedItems.map((item, position) => ({
@@ -188,7 +191,9 @@ export class AppointmentsService {
       return this.serialize(created);
     });
     // Marcado pela recepção: quem recebe o aviso é o cliente (se houver e-mail), não a equipe.
-    this.notifier.notify("CREATED", result.id, user.tenantId, "STAFF");
+    this.notifier.notify("CREATED", result.id, user.tenantId, "STAFF", {
+      notifyProfessional: user.professionalId !== dto.professionalId,
+    });
     return result;
   }
 
@@ -330,7 +335,7 @@ export class AppointmentsService {
   }
 
   async cancelByStaff(user: AuthenticatedUser, id: string) {
-    return this.applyCancel(await this.findOwnedByStaff(user, id));
+    return this.applyCancel(await this.findOwnedByStaff(user, id), { actorProfessionalId: user.professionalId });
   }
 
   async rescheduleByStaff(user: AuthenticatedUser, id: string, dto: RescheduleAppointmentDto) {
@@ -346,6 +351,7 @@ export class AppointmentsService {
     }
     return this.applyReschedule(await this.findOwnedByStaff(user, id), dto, {
       staffInitiated: true,
+      actorProfessionalId: user.professionalId,
     });
   }
 
@@ -414,6 +420,12 @@ export class AppointmentsService {
   // ─────────────────────────────────────────────
   // Internos
   // ─────────────────────────────────────────────
+
+  // Atendimento marcado para daqui a menos de 24 h não precisa de lembrete: a confirmação acabou de sair. Nulo = o
+  // lembrete ainda vai ser enviado pela varredura (ver AppointmentReminderService).
+  private reminderMark(startAt: DateTime): Date | null {
+    return startAt.toMillis() - Date.now() <= REMINDER_LEAD_MS ? new Date() : null;
+  }
 
   private async getTenantBySlug(slug: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
@@ -557,7 +569,7 @@ export class AppointmentsService {
 
   private async applyCancel(
     appointment: AppointmentWithRelations,
-    options: { clientInitiated?: boolean } = {},
+    options: { clientInitiated?: boolean; actorProfessionalId?: string } = {},
   ) {
     if (appointment.status === AppointmentStatus.CANCELED) {
       throw new BadRequestException("Este agendamento já foi cancelado.");
@@ -588,6 +600,8 @@ export class AppointmentsService {
       updated.id,
       updated.tenantId,
       options.clientInitiated ? "CLIENT" : "STAFF",
+      // Cancelado pela equipe: o profissional dono do horário só é avisado se não foi ele mesmo quem cancelou.
+      { notifyProfessional: updated.professionalId !== options.actorProfessionalId },
     );
     return this.serialize(updated);
   }
@@ -595,7 +609,7 @@ export class AppointmentsService {
   private async applyReschedule(
     appointment: AppointmentWithRelations,
     dto: RescheduleAppointmentDto,
-    options: { staffInitiated?: boolean } = {},
+    options: { staffInitiated?: boolean; actorProfessionalId?: string } = {},
   ) {
     if (
       appointment.status !== AppointmentStatus.CONFIRMED &&
@@ -662,6 +676,8 @@ export class AppointmentsService {
           startAt: startAt.toJSDate(),
           endAt: endAt.toJSDate(),
           rescheduledCount: { increment: 1 },
+          // Novo horário: o lembrete vale de novo (ou é dispensado, se o horário caiu dentro das próximas 24 h).
+          reminderSentAt: this.reminderMark(startAt),
         },
         include: APPOINTMENT_INCLUDE,
       });
@@ -672,6 +688,7 @@ export class AppointmentsService {
       result.id,
       appointment.tenantId,
       options.staffInitiated ? "STAFF" : "CLIENT",
+      { notifyProfessional: result.professionalId !== options.actorProfessionalId },
     );
     return result;
   }

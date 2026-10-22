@@ -14,6 +14,14 @@ import {
 // aviso; o cliente, a confirmação).
 export type NotificationActor = "CLIENT" | "STAFF";
 
+export interface NotifyOptions {
+  // Criação pelo link público: o cliente também recebe a confirmação.
+  alsoConfirmToClient?: boolean;
+  // A equipe (recepção ou dono) mexeu na agenda de OUTRO profissional: ele também precisa saber. Só vale quando o ator
+  // é STAFF; quando o próprio profissional agenda para si, não há o que avisar.
+  notifyProfessional?: boolean;
+}
+
 // Dispara os e-mails de agendamento DEPOIS que o atendimento já foi gravado. Nunca lança e nunca é esperado
 // por quem chama (fire-and-forget): falha de e-mail não pode desfazer nem atrasar a resposta de um agendamento.
 //
@@ -36,7 +44,7 @@ export class AppointmentNotifierService {
     appointmentId: string,
     tenantId: string,
     actor: NotificationActor,
-    options: { alsoConfirmToClient?: boolean } = {},
+    options: NotifyOptions = {},
   ): void {
     if (!this.email.isConfigured()) return;
     void this.deliver(event, appointmentId, tenantId, actor, options).catch((error: unknown) => {
@@ -49,10 +57,65 @@ export class AppointmentNotifierService {
     appointmentId: string,
     tenantId: string,
     actor: NotificationActor,
-    // Criação pelo link público: o cliente também recebe a confirmação.
-    options: { alsoConfirmToClient?: boolean } = {},
+    options: NotifyOptions = {},
   ): Promise<void> {
-    const appointment = await this.prisma.appointment.findFirst({
+    const appointment = await this.load(appointmentId, tenantId);
+    if (!appointment) return;
+    const base = this.buildBase(event, appointment);
+
+    const sends: Promise<boolean>[] = [];
+    // O dono pode desligar os avisos da EQUIPE; o que o cliente recebe não depende disso.
+    const staffAllowed = appointment.tenant.notifyStaffByEmail;
+
+    if (staffAllowed && actor === "STAFF" && options.notifyProfessional && appointment.professional.user.isActive) {
+      sends.push(
+        this.email.send({
+          to: [appointment.professional.user.email],
+          ...buildAppointmentEmail({ ...base, audience: "STAFF" }),
+        }),
+      );
+    }
+
+    if (staffAllowed && (actor === "CLIENT" || options.alsoConfirmToClient)) {
+      const staff = [
+        ...appointment.tenant.users.map((user) => user.email),
+        ...(appointment.professional.user.isActive ? [appointment.professional.user.email] : []),
+      ];
+      if (staff.length > 0) {
+        sends.push(this.email.send({ to: staff, ...buildAppointmentEmail({ ...base, audience: "STAFF" }) }));
+      }
+    }
+
+    if (actor === "STAFF" || options.alsoConfirmToClient) {
+      const clientEmail = this.clientEmail(appointment);
+      if (clientEmail) {
+        sends.push(this.email.send({ to: [clientEmail], ...buildAppointmentEmail({ ...base, audience: "CLIENT" }) }));
+      }
+    }
+
+    await Promise.all(sends);
+  }
+
+  // Lembrete ao CLIENTE (nunca à equipe). Devolve o que aconteceu, para o ReminderService decidir se devolve a
+  // reivindicação do atendimento: SENT = saiu; SKIPPED = não há o que enviar (sem e-mail, atendimento sumiu), não
+  // adianta tentar de novo; FAILED = o provedor falhou, vale tentar na próxima varredura.
+  async deliverReminder(appointmentId: string, tenantId: string): Promise<"SENT" | "SKIPPED" | "FAILED"> {
+    const appointment = await this.load(appointmentId, tenantId);
+    if (!appointment) return "SKIPPED";
+    const clientEmail = this.clientEmail(appointment);
+    if (!clientEmail) return "SKIPPED";
+
+    const message = buildAppointmentEmail({ ...this.buildBase("REMINDER", appointment), audience: "CLIENT" });
+    return (await this.email.send({ to: [clientEmail], ...message })) ? "SENT" : "FAILED";
+  }
+
+  // Conta de cliente (verificada pelo próprio login) tem prioridade sobre o e-mail digitado na ficha.
+  private clientEmail(appointment: LoadedAppointment): string | null {
+    return appointment.client?.consumerLink?.consumer.email ?? appointment.client?.email ?? null;
+  }
+
+  private load(appointmentId: string, tenantId: string) {
+    return this.prisma.appointment.findFirst({
       where: { id: appointmentId, tenantId },
       select: {
         id: true,
@@ -71,6 +134,7 @@ export class AppointmentNotifierService {
             neighborhood: true,
             city: true,
             whatsappNumber: true,
+            notifyStaffByEmail: true,
             users: { where: { role: Role.OWNER, isActive: true }, select: { email: true } },
           },
         },
@@ -79,11 +143,12 @@ export class AppointmentNotifierService {
         },
       },
     });
-    if (!appointment) return;
+  }
 
+  private buildBase(event: AppointmentEmailEvent, appointment: LoadedAppointment): Omit<AppointmentEmailData, "audience"> {
     const frontend = (this.config.get<string>("FRONTEND_URL") ?? "").replace(/\/+$/, "");
     const { address, neighborhood, city, whatsappNumber } = appointment.tenant;
-    const base: Omit<AppointmentEmailData, "audience"> = {
+    return {
       event,
       appointmentId: appointment.id,
       rescheduledCount: appointment.rescheduledCount,
@@ -102,27 +167,7 @@ export class AppointmentNotifierService {
       logoUrl: frontend ? `${frontend}/brand/email/marquo-logo.png` : undefined,
       siteUrl: frontend || undefined,
     };
-
-    const sends: Promise<boolean>[] = [];
-
-    if (actor === "CLIENT" || options.alsoConfirmToClient) {
-      const staff = [
-        ...appointment.tenant.users.map((user) => user.email),
-        ...(appointment.professional.user.isActive ? [appointment.professional.user.email] : []),
-      ];
-      if (staff.length > 0) {
-        sends.push(this.email.send({ to: staff, ...buildAppointmentEmail({ ...base, audience: "STAFF" }) }));
-      }
-    }
-
-    if (actor === "STAFF" || options.alsoConfirmToClient) {
-      // Conta de cliente (verificada pelo próprio login) tem prioridade sobre o e-mail digitado na ficha.
-      const clientEmail = appointment.client?.consumerLink?.consumer.email ?? appointment.client?.email ?? null;
-      if (clientEmail) {
-        sends.push(this.email.send({ to: [clientEmail], ...buildAppointmentEmail({ ...base, audience: "CLIENT" }) }));
-      }
-    }
-
-    await Promise.all(sends);
   }
 }
+
+type LoadedAppointment = NonNullable<Awaited<ReturnType<AppointmentNotifierService["load"]>>>;
