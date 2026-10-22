@@ -24,6 +24,7 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "public",
   "auth",
   "billing",
+  "export",
   "webhooks",
   "internal",
   "uploads",
