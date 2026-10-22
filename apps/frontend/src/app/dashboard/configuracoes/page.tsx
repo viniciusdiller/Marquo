@@ -24,6 +24,7 @@ interface TenantMe {
   galleryImages: { id: string; url: string }[];
   minSchedulingLeadTimeMinutes: number;
   maxSchedulingLeadTimeDays: number;
+  notifyStaffByEmail: boolean;
 }
 
 export default async function ConfiguracoesPage() {

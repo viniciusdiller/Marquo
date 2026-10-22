@@ -64,6 +64,10 @@ export class UpdateTenantProfileDto {
   showContact?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  notifyStaffByEmail?: boolean;
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   minSchedulingLeadTimeMinutes?: number;

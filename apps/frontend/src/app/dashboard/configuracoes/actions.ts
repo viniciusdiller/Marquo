@@ -50,6 +50,7 @@ export async function updateTenantProfileAction(
         showTeam: formData.get("showTeam") === "on",
         showGallery: formData.get("showGallery") === "on",
         showContact: formData.get("showContact") === "on",
+        notifyStaffByEmail: formData.get("notifyStaffByEmail") === "on",
         minSchedulingLeadTimeMinutes: formData.get("minSchedulingLeadTimeMinutes") 
           ? parseInt(String(formData.get("minSchedulingLeadTimeMinutes")), 10) 
           : undefined,

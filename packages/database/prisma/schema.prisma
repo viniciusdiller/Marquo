@@ -167,6 +167,10 @@ model Tenant {
   minSchedulingLeadTimeMinutes Int @default(120) // mínimo de 2 horas de antecedência
   maxSchedulingLeadTimeDays    Int @default(60) // agenda aberta por no máximo 60 dias
 
+  // Avisos por e-mail à EQUIPE (novo agendamento, cancelamento, remarcação). Desligar não muda o que o CLIENTE recebe
+  // (confirmação, cancelamento, remarcação e lembrete continuam saindo).
+  notifyStaffByEmail Boolean @default(true)
+
   users               User[]
   professionals       Professional[]
   services            Service[]

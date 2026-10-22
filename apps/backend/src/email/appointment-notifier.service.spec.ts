@@ -20,6 +20,7 @@ function hydrated(overrides: Record<string, unknown> = {}) {
       neighborhood: "Centro",
       city: "Cabo Frio",
       whatsappNumber: "5522999887766",
+      notifyStaffByEmail: true,
       users: [{ email: "dono@salao.com" }],
     },
     client: { email: "ficha@cliente.com", consumerLink: { consumer: { email: "conta@cliente.com" } } },
@@ -182,5 +183,64 @@ describe("AppointmentNotifierService.deliverReminder", () => {
     const { service, send } = build(hydrated());
     send.mockResolvedValue(false);
     await expect(service.deliverReminder("appt-1", "tenant-1")).resolves.toBe("FAILED");
+  });
+});
+
+describe("AppointmentNotifierService: avisos da equipe", () => {
+  it("recepção mexe na agenda de OUTRO profissional: ele é avisado (só ele, não o dono), e o cliente também", async () => {
+    const { service, send } = build(hydrated());
+
+    await service.deliver("RESCHEDULED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
+
+    const recipients = send.mock.calls.map((c) => c[0].to);
+    expect(recipients).toContainEqual(["alex@salao.com"]);
+    expect(recipients).toContainEqual(["conta@cliente.com"]);
+    expect(recipients).not.toContainEqual(["dono@salao.com", "alex@salao.com"]);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("o próprio profissional agendou para si (notifyProfessional falso): ele não recebe aviso do que ele fez", async () => {
+    const { service, send } = build(hydrated());
+    await service.deliver("CREATED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: false });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0].to).toEqual(["conta@cliente.com"]);
+  });
+
+  it("profissional desativado não é avisado", async () => {
+    const { service, send } = build(
+      hydrated({ professional: { user: { name: "Alex", email: "alex@salao.com", isActive: false } } }),
+    );
+    await service.deliver("CREATED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
+    expect(send.mock.calls.map((c) => c[0].to)).not.toContainEqual(["alex@salao.com"]);
+  });
+
+  describe("dono desligou os avisos da equipe (notifyStaffByEmail = false)", () => {
+    const off = () => hydrated({ tenant: { ...hydrated().tenant, notifyStaffByEmail: false } });
+
+    it("agendamento público: ninguém da equipe recebe, mas o cliente continua recebendo a confirmação", async () => {
+      const { service, send } = build(off());
+      await service.deliver("CREATED", "appt-1", "tenant-1", "CLIENT", { alsoConfirmToClient: true });
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0][0].to).toEqual(["conta@cliente.com"]);
+    });
+
+    it("cliente cancela: a equipe não é avisada", async () => {
+      const { service, send } = build(off());
+      await service.deliver("CANCELED", "appt-1", "tenant-1", "CLIENT");
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("recepção remarca: o profissional não é avisado, o cliente sim", async () => {
+      const { service, send } = build(off());
+      await service.deliver("RESCHEDULED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0][0].to).toEqual(["conta@cliente.com"]);
+    });
+
+    it("o lembrete ao cliente também não depende dessa chave", async () => {
+      const { service, send } = build(off());
+      await expect(service.deliverReminder("appt-1", "tenant-1")).resolves.toBe("SENT");
+      expect(send).toHaveBeenCalledTimes(1);
+    });
   });
 });

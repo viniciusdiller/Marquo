@@ -191,7 +191,9 @@ export class AppointmentsService {
       return this.serialize(created);
     });
     // Marcado pela recepção: quem recebe o aviso é o cliente (se houver e-mail), não a equipe.
-    this.notifier.notify("CREATED", result.id, user.tenantId, "STAFF");
+    this.notifier.notify("CREATED", result.id, user.tenantId, "STAFF", {
+      notifyProfessional: user.professionalId !== dto.professionalId,
+    });
     return result;
   }
 
@@ -333,7 +335,7 @@ export class AppointmentsService {
   }
 
   async cancelByStaff(user: AuthenticatedUser, id: string) {
-    return this.applyCancel(await this.findOwnedByStaff(user, id));
+    return this.applyCancel(await this.findOwnedByStaff(user, id), { actorProfessionalId: user.professionalId });
   }
 
   async rescheduleByStaff(user: AuthenticatedUser, id: string, dto: RescheduleAppointmentDto) {
@@ -349,6 +351,7 @@ export class AppointmentsService {
     }
     return this.applyReschedule(await this.findOwnedByStaff(user, id), dto, {
       staffInitiated: true,
+      actorProfessionalId: user.professionalId,
     });
   }
 
@@ -566,7 +569,7 @@ export class AppointmentsService {
 
   private async applyCancel(
     appointment: AppointmentWithRelations,
-    options: { clientInitiated?: boolean } = {},
+    options: { clientInitiated?: boolean; actorProfessionalId?: string } = {},
   ) {
     if (appointment.status === AppointmentStatus.CANCELED) {
       throw new BadRequestException("Este agendamento já foi cancelado.");
@@ -597,6 +600,8 @@ export class AppointmentsService {
       updated.id,
       updated.tenantId,
       options.clientInitiated ? "CLIENT" : "STAFF",
+      // Cancelado pela equipe: o profissional dono do horário só é avisado se não foi ele mesmo quem cancelou.
+      { notifyProfessional: updated.professionalId !== options.actorProfessionalId },
     );
     return this.serialize(updated);
   }
@@ -604,7 +609,7 @@ export class AppointmentsService {
   private async applyReschedule(
     appointment: AppointmentWithRelations,
     dto: RescheduleAppointmentDto,
-    options: { staffInitiated?: boolean } = {},
+    options: { staffInitiated?: boolean; actorProfessionalId?: string } = {},
   ) {
     if (
       appointment.status !== AppointmentStatus.CONFIRMED &&
@@ -683,6 +688,7 @@ export class AppointmentsService {
       result.id,
       appointment.tenantId,
       options.staffInitiated ? "STAFF" : "CLIENT",
+      { notifyProfessional: result.professionalId !== options.actorProfessionalId },
     );
     return result;
   }

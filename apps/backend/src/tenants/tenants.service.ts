@@ -43,6 +43,7 @@ export class TenantsService {
         showContact: true,
         minSchedulingLeadTimeMinutes: true,
         maxSchedulingLeadTimeDays: true,
+        notifyStaffByEmail: true,
         galleryImages: { orderBy: { position: "asc" } },
       },
     });

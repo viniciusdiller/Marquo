@@ -783,7 +783,7 @@ describe("AppointmentsService", () => {
         clientName: "Novo Cliente",
         clientPhone: "11988887777",
       });
-      expect(notify).toHaveBeenCalledWith("CREATED", "appt-1", "tenant-1", "STAFF");
+      expect(notify).toHaveBeenCalledWith("CREATED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
     });
 
     it("conflito de horário (nada gravado) não dispara e-mail", async () => {
@@ -804,21 +804,43 @@ describe("AppointmentsService", () => {
     it("cliente cancela: ator CLIENT; recepção cancela: ator STAFF", async () => {
       const byClient = setup();
       await byClient.service.cancelForConsumer("appt-1", consumer);
-      expect(byClient.notify).toHaveBeenCalledWith("CANCELED", "appt-1", "tenant-1", "CLIENT");
+      expect(byClient.notify).toHaveBeenCalledWith("CANCELED", "appt-1", "tenant-1", "CLIENT", expect.any(Object));
 
       const byStaff = setup();
       await byStaff.service.cancelByStaff(owner, "appt-1");
-      expect(byStaff.notify).toHaveBeenCalledWith("CANCELED", "appt-1", "tenant-1", "STAFF");
+      expect(byStaff.notify).toHaveBeenCalledWith("CANCELED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
     });
 
     it("cliente remarca: ator CLIENT; recepção remarca: ator STAFF", async () => {
       const byClient = setup();
       await byClient.service.rescheduleForConsumer("appt-1", { startAt: FUTURE_DATE }, consumer);
-      expect(byClient.notify).toHaveBeenCalledWith("RESCHEDULED", "appt-1", "tenant-1", "CLIENT");
+      expect(byClient.notify).toHaveBeenCalledWith("RESCHEDULED", "appt-1", "tenant-1", "CLIENT", expect.any(Object));
 
       const byStaff = setup();
       await byStaff.service.rescheduleByStaff(owner, "appt-1", { startAt: FUTURE_DATE });
-      expect(byStaff.notify).toHaveBeenCalledWith("RESCHEDULED", "appt-1", "tenant-1", "STAFF");
+      expect(byStaff.notify).toHaveBeenCalledWith("RESCHEDULED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
+    });
+
+    it("o profissional que agenda/cancela/remarca na PRÓPRIA agenda não é avisado do que ele mesmo fez", async () => {
+      const own: AuthenticatedUser = { userId: "u-9", tenantId: "tenant-1", role: Role.PROFESSIONAL, professionalId: "prof-1" };
+
+      const created = setup();
+      await created.service.createByStaff(own, {
+        professionalId: "prof-1",
+        startAt: FUTURE_DATE,
+        items: [{ serviceId: "svc-1" }],
+        clientName: "Novo Cliente",
+        clientPhone: "11988887777",
+      });
+      expect(created.notify).toHaveBeenCalledWith("CREATED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: false });
+
+      const canceled = setup({ professionalId: "prof-1" });
+      await canceled.service.cancelByStaff(own, "appt-1");
+      expect(canceled.notify).toHaveBeenCalledWith("CANCELED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: false });
+
+      const moved = setup({ professionalId: "prof-1" });
+      await moved.service.rescheduleByStaff(own, "appt-1", { startAt: FUTURE_DATE });
+      expect(moved.notify).toHaveBeenCalledWith("RESCHEDULED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: false });
     });
 
     it("cancelar atendimento já cancelado (erro de negócio) não dispara e-mail", async () => {
