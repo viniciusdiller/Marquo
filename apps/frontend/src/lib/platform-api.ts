@@ -57,6 +57,7 @@ export const AUDIT_LABEL: Record<string, string> = {
   OWNER_PHONE_UPDATED: "Telefone do dono atualizado",
   PASSWORD_RESET_LINK: "Link de redefinição de senha",
   TENANT_PURGED: "Dados do negócio excluídos",
+  TRIAL_SET: "Teste grátis definido",
 };
 
 export interface PlatformOverview {
@@ -253,3 +254,24 @@ export const DELETION_COUNT_LABEL: Record<keyof PlatformDeletionPreview["counts"
   intakeResponses: "Fichas de anamnese respondidas",
   galleryImages: "Fotos da galeria",
 };
+
+// Teste grátis: só negócios sem assinatura. `daysLeft` já vem calculado pelo backend (negativo = venceu há N dias).
+export interface PlatformTrialItem {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+  trialEndsAt: string;
+  daysLeft: number;
+  expired: boolean;
+  suspended: boolean;
+  owner: { name: string; email: string; phone: string | null } | null;
+}
+
+export function trialRemainingLabel(item: Pick<PlatformTrialItem, "daysLeft" | "expired">): string {
+  if (item.expired) {
+    const ago = Math.abs(item.daysLeft);
+    return ago === 0 ? "Venceu hoje" : `Venceu há ${ago} dia${ago === 1 ? "" : "s"}`;
+  }
+  return item.daysLeft === 1 ? "Falta 1 dia" : `Faltam ${item.daysLeft} dias`;
+}

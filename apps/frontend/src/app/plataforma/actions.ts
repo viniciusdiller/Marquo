@@ -68,6 +68,24 @@ export async function purgeTenantDataAction(
   }
 }
 
+// Define quanto teste grátis o negócio TEM a partir de hoje (0 encerra agora; até 365). O backend calcula a data final e
+// revalida tudo (limites, negócio sem assinatura, concorrência); aqui só se confere o formato para dar erro rápido.
+export async function setTrialAction(id: string, days: number): Promise<PlatformActionResult> {
+  if (!Number.isInteger(days) || days < 0 || days > 365) {
+    return { ok: false, error: "Informe de 0 a 365 dias." };
+  }
+  try {
+    await platformFetch(`/platform/tenants/${encodeURIComponent(id)}/set-trial`, {
+      method: "POST",
+      body: JSON.stringify({ days }),
+    });
+    revalidatePath("/plataforma", "layout");
+    return { ok: true };
+  } catch (err) {
+    return toError(err);
+  }
+}
+
 export async function reactivateTenantAction(id: string): Promise<PlatformActionResult> {
   try {
     await platformFetch(`/platform/tenants/${encodeURIComponent(id)}/reactivate`, { method: "POST" });

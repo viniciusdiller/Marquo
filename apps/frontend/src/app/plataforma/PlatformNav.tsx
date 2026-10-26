@@ -7,6 +7,7 @@ import clsx from "clsx";
 const ITEMS = [
   { href: "/plataforma", label: "Visão geral", exact: true },
   { href: "/plataforma/negocios", label: "Negócios" },
+  { href: "/plataforma/testes", label: "Testes grátis" },
   { href: "/plataforma/assinaturas", label: "Assinaturas" },
   { href: "/plataforma/cupons", label: "Cupons" },
   { href: "/plataforma/usuarios", label: "Usuários" },

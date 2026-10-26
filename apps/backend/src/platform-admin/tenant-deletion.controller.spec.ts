@@ -19,7 +19,7 @@ describe("rotas de exclusão de dados (plataforma)", () => {
 
   it("a exclusão usa o e-mail da conta da plataforma como autor da auditoria", async () => {
     const purge = jest.fn().mockResolvedValue({ purged: true, slug: "x" });
-    const controller = new PlatformAdminController({} as never, {} as never, {} as never, { purge } as unknown as TenantDeletionService);
+    const controller = new PlatformAdminController({} as never, {} as never, {} as never, { purge } as unknown as TenantDeletionService, {} as never);
 
     await controller.deleteTenantData("3f2b8f0e-0000-4000-8000-000000000001", { confirmSlug: "x" }, { email: "admin@marquo.com.br" } as never);
 
