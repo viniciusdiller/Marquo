@@ -58,6 +58,7 @@ export const AUDIT_LABEL: Record<string, string> = {
   PASSWORD_RESET_LINK: "Link de redefinição de senha",
   TENANT_PURGED: "Dados do negócio excluídos",
   TRIAL_SET: "Teste grátis definido",
+  PLAN_PRICE_SET: "Preço de plano alterado",
 };
 
 export interface PlatformOverview {
@@ -274,4 +275,17 @@ export function trialRemainingLabel(item: Pick<PlatformTrialItem, "daysLeft" | "
     return ago === 0 ? "Venceu hoje" : `Venceu há ${ago} dia${ago === 1 ? "" : "s"}`;
   }
   return item.daysLeft === 1 ? "Falta 1 dia" : `Faltam ${item.daysLeft} dias`;
+}
+
+// Preço dos planos: o atual vem do banco; o de tabela (teto) e o piso são os limites que o backend aplica.
+export interface PlatformPlanPrice {
+  tier: "ESSENCIAL" | "PROFISSIONAL" | "PREMIUM";
+  name: string;
+  priceCents: number;
+  listPriceCents: number;
+  minPriceCents: number;
+  discounted: boolean;
+  maxProfessionals: number | null;
+  // Assinantes de cartão ativos: continuam no valor combinado no provedor, só o novo preço vale para quem assina depois.
+  cardSubscribers: number;
 }

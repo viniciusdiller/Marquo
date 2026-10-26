@@ -956,13 +956,16 @@ model Review {
 // CORTESIA concedida pelo painel da plataforma (courtesy = true).
 
 model Plan {
-  id               String   @id @default(uuid())
-  tier             PlanTier @unique
-  name             String
-  priceCents       Int
-  maxProfessionals Int?
-  createdAt        DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
+  id                 String   @id @default(uuid())
+  tier               PlanTier @unique
+  name               String
+  priceCents         Int
+  // Preço rebaixado pela plataforma (nulo = vale o do catálogo). O sync do boot reaplica este valor em priceCents, para
+  // o desconto sobreviver a um deploy. Nunca passa do preço do catálogo (ver PlanPricingService).
+  priceOverrideCents Int?
+  maxProfessionals   Int?
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
 
   subscriptions Subscription[]
   attempts      BillingAttempt[]

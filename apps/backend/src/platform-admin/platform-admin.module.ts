@@ -7,6 +7,7 @@ import { PlatformAdminGuard } from "./platform-admin.guard";
 import { PlatformAdminService } from "./platform-admin.service";
 import { PlatformAuthService } from "./platform-auth.service";
 import { PlatformCouponsService } from "./platform-coupons.service";
+import { PlanPricingService } from "./plan-pricing.service";
 import { TenantDeletionService } from "./tenant-deletion.service";
 import { TrialsService } from "./trials.service";
 
@@ -15,6 +16,6 @@ import { TrialsService } from "./trials.service";
 @Module({
   imports: [AuthModule, InternalModule, EmailModule],
   controllers: [PlatformAdminController],
-  providers: [PlatformAdminService, PlatformAuthService, PlatformCouponsService, TenantDeletionService, TrialsService, PlatformAdminGuard],
+  providers: [PlatformAdminService, PlatformAuthService, PlatformCouponsService, TenantDeletionService, TrialsService, PlanPricingService, PlatformAdminGuard],
 })
 export class PlatformAdminModule {}

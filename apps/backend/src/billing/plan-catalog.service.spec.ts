@@ -35,8 +35,15 @@ describe("PLAN_CATALOG (fonte única de preço e limite)", () => {
   });
 });
 
-function buildSync() {
-  const prisma = { plan: { upsert: jest.fn().mockResolvedValue({}) } };
+function buildSync(overrides: Record<string, number | null> = {}) {
+  const prisma = {
+    plan: {
+      findUnique: jest.fn(({ where }: { where: { tier: string } }) =>
+        Promise.resolve(where.tier in overrides ? { priceOverrideCents: overrides[where.tier] } : null),
+      ),
+      upsert: jest.fn().mockResolvedValue({}),
+    },
+  };
   const service = new PlanCatalogService(prisma as unknown as PrismaService);
   return { service, prisma };
 }
@@ -60,6 +67,26 @@ describe("PlanCatalogService.syncPlans", () => {
         },
       });
     }
+  });
+
+  it("mantém o preço rebaixado pela plataforma (o desconto sobrevive ao boot)", async () => {
+    const { service, prisma } = buildSync({ ESSENCIAL: 3990 });
+
+    await service.syncPlans();
+
+    const call = prisma.plan.upsert.mock.calls.find(([arg]) => arg.where.tier === "ESSENCIAL")![0];
+    expect(call.update.priceCents).toBe(3990);
+    const other = prisma.plan.upsert.mock.calls.find(([arg]) => arg.where.tier === "PROFISSIONAL")![0];
+    expect(other.update.priceCents).toBe(planCatalogEntry("PROFISSIONAL")!.priceCents);
+  });
+
+  it("nunca cobra acima do catálogo, mesmo com desconto antigo maior que o preço de tabela", async () => {
+    const { service, prisma } = buildSync({ ESSENCIAL: 999_999 });
+
+    await service.syncPlans();
+
+    const call = prisma.plan.upsert.mock.calls.find(([arg]) => arg.where.tier === "ESSENCIAL")![0];
+    expect(call.update.priceCents).toBe(planCatalogEntry("ESSENCIAL")!.priceCents);
   });
 
   it("sincroniza no boot (onModuleInit)", async () => {

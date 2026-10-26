@@ -9,6 +9,7 @@ const ITEMS = [
   { href: "/plataforma/negocios", label: "Negócios" },
   { href: "/plataforma/testes", label: "Testes grátis" },
   { href: "/plataforma/assinaturas", label: "Assinaturas" },
+  { href: "/plataforma/precos", label: "Preços" },
   { href: "/plataforma/cupons", label: "Cupons" },
   { href: "/plataforma/usuarios", label: "Usuários" },
   { href: "/plataforma/exclusao", label: "Exclusão de dados" },

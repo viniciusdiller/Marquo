@@ -16,7 +16,7 @@ describe("rotas do teste grátis (plataforma)", () => {
 
   it("definir o teste usa o e-mail da conta da plataforma como autor e os dias do corpo", async () => {
     const setRemaining = jest.fn().mockResolvedValue({ id: "x" });
-    const controller = new PlatformAdminController({} as never, {} as never, {} as never, {} as never, { setRemaining } as unknown as TrialsService);
+    const controller = new PlatformAdminController({} as never, {} as never, {} as never, {} as never, { setRemaining } as unknown as TrialsService, {} as never);
 
     await controller.setTrial("3f2b8f0e-0000-4000-8000-000000000001", { days: 21 }, { email: "admin@marquo.com.br" } as never);
 
