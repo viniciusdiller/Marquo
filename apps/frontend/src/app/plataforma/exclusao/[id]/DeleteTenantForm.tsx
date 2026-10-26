@@ -28,7 +28,7 @@ export function DeleteTenantForm({ tenantId, slug, eligible }: { tenantId: strin
         setError(result.error ?? "Não foi possível excluir.");
         return;
       }
-      router.replace("/plataforma/exclusao");
+      router.replace("/plataforma/negocios");
       router.refresh();
     });
   }

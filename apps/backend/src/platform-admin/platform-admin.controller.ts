@@ -22,6 +22,7 @@ import { PlatformAuthService } from "./platform-auth.service";
 import { PlatformAdminService } from "./platform-admin.service";
 import { PlatformCouponsService } from "./platform-coupons.service";
 import { TenantDeletionService } from "./tenant-deletion.service";
+import { PlatformConsumersService } from "./platform-consumers.service";
 import { PlanPricingService } from "./plan-pricing.service";
 import { TrialsService } from "./trials.service";
 import { AuthenticatedPlatformAdmin } from "./platform-admin.config";
@@ -40,6 +41,8 @@ import {
   PlatformTenantsQueryDto,
   PlatformUsersQueryDto,
   PlatformVerifyCodeDto,
+  DeleteConsumerDto,
+  PlatformConsumersQueryDto,
   SetPlanPriceDto,
   SetTrialDto,
   SuspendTenantDto,
@@ -60,6 +63,7 @@ export class PlatformAdminController {
     private readonly deletion: TenantDeletionService,
     private readonly trials: TrialsService,
     private readonly pricing: PlanPricingService,
+    private readonly consumersAdmin: PlatformConsumersService,
   ) {}
 
   @Post("auth/login")
@@ -288,5 +292,25 @@ export class PlatformAdminController {
     @CurrentPlatformAdmin() admin: AuthenticatedPlatformAdmin,
   ) {
     return this.deletion.purge(id, dto, admin.email);
+  }
+
+  // ───────── Clientes finais (contas globais): listar e excluir ─────────
+
+  @UseGuards(PlatformAdminGuard)
+  @Get("consumers")
+  listConsumers(@Query() query: PlatformConsumersQueryDto) {
+    return this.consumersAdmin.list(query);
+  }
+
+  @UseGuards(PlatformAdminGuard)
+  @Post("consumers/:id/delete")
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  deleteConsumer(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: DeleteConsumerDto,
+    @CurrentPlatformAdmin() admin: AuthenticatedPlatformAdmin,
+  ) {
+    return this.consumersAdmin.remove(id, dto, admin.email);
   }
 }

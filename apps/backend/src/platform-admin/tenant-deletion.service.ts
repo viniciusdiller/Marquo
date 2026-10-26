@@ -110,6 +110,21 @@ export function evaluateDeletion(
   return { billingStatus, accessEndedAt, deletable: true, eligible: eligibleOn.getTime() <= now.getTime(), eligibleOn };
 }
 
+// Assinatura PAGA em vigor (cartão ou Pix cobrando): o negócio não é excluído enquanto ela existir. Cortesia não conta (a
+// plataforma concedeu). Pix cujo mês acabou ou assinatura cancelada/vencida já caem no caminho de "sem acesso".
+export function blockingSubscriptionMessage(
+  tenant: TenantForStatus,
+  subscription: SubscriptionForStatus,
+  now: Date = new Date(),
+): string | null {
+  const status = evaluateDeletion(tenant, subscription, now);
+  if (status.deletable || !subscription || subscription.courtesy) return null;
+  const paying = subscription.status === SubscriptionStatus.ACTIVE || subscription.status === SubscriptionStatus.PAST_DUE;
+  return paying
+    ? "Este negócio tem uma assinatura paga em vigor. Cancele a assinatura e espere o fim do período pago antes de excluir."
+    : null;
+}
+
 const SUBSCRIPTION_SELECT = {
   status: true,
   courtesy: true,
@@ -119,7 +134,11 @@ const SUBSCRIPTION_SELECT = {
   updatedAt: true,
 } as const;
 
-// Exclusão dos dados de um negócio que deixou de usar o Marquo (promessa dos termos: 90 dias depois do fim do acesso).
+// Exclusão dos dados de um negócio. Dois caminhos, os dois com confirmação digitada e auditoria:
+//  - Negócio que deixou de usar o Marquo (promessa dos termos: 90 dias depois do fim do acesso): sem motivo depois dos 90
+//    dias, com motivo antes.
+//  - Negócio que AINDA tem acesso (teste, cortesia, suspenso... ex.: contas de teste): sempre com motivo. Só é recusado se
+//    tiver assinatura PAGA em vigor (cancele e espere o fim do período): apagar quem está pagando seria o erro caro.
 //
 // NADA é apagado sozinho: a plataforma vê a lista, simula e confirma digitando o endereço do negócio. Apaga tudo o que é
 // dado operacional (clientes, agenda, comandas, financeiro, equipe, fotos) e deixa só a linha do negócio ANONIMIZADA,
@@ -187,12 +206,20 @@ export class TenantDeletionService {
         this.prisma.tenantGalleryImage.count({ where }),
       ]);
 
+    const blockedReason = tenant.deletedAt
+      ? "Os dados deste negócio já foram excluídos."
+      : blockingSubscriptionMessage(tenant, tenant.subscription, now);
+
     return {
       id: tenant.id,
       name: tenant.name,
       slug: tenant.slug,
       createdAt: tenant.createdAt,
       ...status,
+      // Pode ser excluído agora (sem assinatura paga em vigor). `deletable`/`eligible` seguem sendo só a regra dos 90 dias.
+      purgeable: blockedReason === null,
+      blockedReason,
+      hasAccess: !status.deletable && !tenant.deletedAt,
       retentionDays: DELETION_RETENTION_DAYS,
       counts: { users, professionals, clients, appointments, tickets, products, financialEntries, reviews, intakeResponses, galleryImages },
     };
@@ -207,22 +234,21 @@ export class TenantDeletionService {
     const tenant = await this.findTenant(tenantId);
     const status = evaluateDeletion(tenant, tenant.subscription, now);
 
-    if (!status.deletable) {
-      throw new ConflictException(
-        tenant.deletedAt
-          ? "Os dados deste negócio já foram excluídos."
-          : "Este negócio ainda tem acesso ao Marquo. Só dá para excluir depois que o acesso terminar.",
-      );
-    }
+    if (tenant.deletedAt) throw new ConflictException("Os dados deste negócio já foram excluídos.");
+    const blocked = blockingSubscriptionMessage(tenant, tenant.subscription, now);
+    if (blocked) throw new ConflictException(blocked);
     // Confirmação digitada: o endereço exato do negócio (quem apertou sem olhar não exclui).
     if (input.confirmSlug.trim() !== tenant.slug) {
       throw new BadRequestException("A confirmação não confere com o endereço do negócio.");
     }
-    // Antes de 90 dias só com motivo registrado (pedido do titular, por exemplo).
+    // Motivo registrado sempre que não for a limpeza normal: negócio que ainda tem acesso, ou antes dos 90 dias.
     const reason = input.reason?.trim() ?? "";
-    if (!status.eligible && (reason.length < MIN_REASON || reason.length > MAX_REASON)) {
+    const needsReason = !status.deletable || !status.eligible;
+    if (needsReason && (reason.length < MIN_REASON || reason.length > MAX_REASON)) {
       throw new BadRequestException(
-        `O prazo de ${DELETION_RETENTION_DAYS} dias ainda não terminou. Informe o motivo da exclusão antecipada (de ${MIN_REASON} a ${MAX_REASON} caracteres).`,
+        status.deletable
+          ? `O prazo de ${DELETION_RETENTION_DAYS} dias ainda não terminou. Informe o motivo da exclusão antecipada (de ${MIN_REASON} a ${MAX_REASON} caracteres).`
+          : `Este negócio ainda tem acesso. Informe o motivo da exclusão (de ${MIN_REASON} a ${MAX_REASON} caracteres).`,
       );
     }
 
@@ -235,9 +261,11 @@ export class TenantDeletionService {
             action: AUDIT_TENANT_PURGED,
             actor,
             tenantId,
-            detail: `slug=${originalSlug}; acesso terminou em ${status.accessEndedAt?.toISOString().slice(0, 10)}; ${
-              status.eligible ? `prazo de ${DELETION_RETENTION_DAYS} dias cumprido` : `exclusão antecipada: ${reason}`
-            }`,
+            detail: !status.deletable
+              ? `slug=${originalSlug}; negócio ainda com acesso (${status.billingStatus}); motivo: ${reason}`
+              : `slug=${originalSlug}; acesso terminou em ${status.accessEndedAt?.toISOString().slice(0, 10)}; ${
+                  status.eligible ? `prazo de ${DELETION_RETENTION_DAYS} dias cumprido` : `exclusão antecipada: ${reason}`
+                }`,
           },
         });
 

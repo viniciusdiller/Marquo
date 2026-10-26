@@ -62,6 +62,11 @@ export default async function ExclusaoDetalhePage({ params }: { params: Promise<
 
       <section className="rounded-2xl border border-red-200 p-5 dark:border-red-500/30">
         <h2 className="font-display text-lg font-semibold text-red-700 dark:text-red-300">Excluir os dados</h2>
+        {preview.hasAccess ? (
+          <p className="mt-1 text-sm text-zinc-600 dark:text-stone-300">
+            Este negócio ainda tem acesso ao Marquo. A exclusão é permitida, mas exige um motivo registrado na auditoria.
+          </p>
+        ) : null}
         {preview.accessEndedAt ? (
           <p className="mt-1 text-sm text-zinc-600 dark:text-stone-300">
             Acesso terminou em {formatDateTime(preview.accessEndedAt)}.{" "}
@@ -71,11 +76,11 @@ export default async function ExclusaoDetalhePage({ params }: { params: Promise<
           </p>
         ) : null}
         <div className="mt-5">
-          {preview.deletable ? (
-            <DeleteTenantForm tenantId={preview.id} slug={preview.slug} eligible={preview.eligible} />
+          {preview.purgeable ? (
+            <DeleteTenantForm tenantId={preview.id} slug={preview.slug} eligible={preview.deletable && preview.eligible} />
           ) : (
-            <p className="text-sm text-zinc-600 dark:text-stone-300">
-              Este negócio não pode ser excluído agora (ainda tem acesso ou já foi excluído).
+            <p role="alert" className="text-sm text-zinc-600 dark:text-stone-300">
+              {preview.blockedReason ?? "Este negócio não pode ser excluído agora."}
             </p>
           )}
         </div>

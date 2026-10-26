@@ -59,6 +59,7 @@ export const AUDIT_LABEL: Record<string, string> = {
   TENANT_PURGED: "Dados do negócio excluídos",
   TRIAL_SET: "Teste grátis definido",
   PLAN_PRICE_SET: "Preço de plano alterado",
+  CONSUMER_DELETED: "Conta de cliente excluída",
 };
 
 export interface PlatformOverview {
@@ -228,6 +229,10 @@ export interface PlatformDeletionPreview {
   deletable: boolean;
   eligible: boolean;
   eligibleOn: string | null;
+  // Pode ser excluído agora (só não pode com assinatura paga em vigor) e, se não, por quê. `hasAccess` = ainda usa o Marquo.
+  purgeable: boolean;
+  blockedReason: string | null;
+  hasAccess: boolean;
   retentionDays: number;
   counts: {
     users: number;
@@ -289,4 +294,15 @@ export interface PlatformPlanPrice {
   maxProfessionals: number | null;
   // Assinantes de cartão ativos: continuam no valor combinado no provedor, só o novo preço vale para quem assina depois.
   cardSubscribers: number;
+}
+
+// Cliente final (conta global). `salons` = salões com vínculo; `reviews` = avaliações que somem junto com a conta.
+export interface PlatformConsumerRow {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string;
+  createdAt: string;
+  salons: number;
+  reviews: number;
 }
