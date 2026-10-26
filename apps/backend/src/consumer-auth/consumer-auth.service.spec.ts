@@ -1,9 +1,10 @@
-import { BadRequestException, ConflictException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 import { JwtService } from "@nestjs/jwt";
 import { passwordVersion } from "./types/consumer-auth-user";
 import { ConsumerAuthService } from "./consumer-auth.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { ConsumerEmailCodeService, RegisterCodeMode } from "./consumer-email-code.service";
 
 const CORRECT_PASSWORD = "senha-correta-123";
 // bcrypt de verdade (não mockado): o timing/comparação é parte do que os testes de lockout
@@ -24,7 +25,11 @@ const BASE_CONSUMER = {
 
 // Simula a semântica de UPDATE ... SET x = x + 1 (estado mutável compartilhado entre
 // chamadas), senão o teste de corrida não pega a regressão de lockout sob concorrência.
-function build(initialConsumer: Record<string, unknown> | null = null, over: Record<string, unknown> = {}) {
+function build(
+  initialConsumer: Record<string, unknown> | null = null,
+  over: Record<string, unknown> = {},
+  codeMode: RegisterCodeMode = "skip",
+) {
   const state: Record<string, unknown> = initialConsumer ? { ...initialConsumer } : {};
   const prisma: Record<string, unknown> = {
     consumer: {
@@ -64,7 +69,14 @@ function build(initialConsumer: Record<string, unknown> | null = null, over: Rec
   };
   prisma.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
   const jwt = { sign: jest.fn().mockReturnValue("tok") } as unknown as JwtService;
-  return { service: new ConsumerAuthService(prisma as unknown as PrismaService, jwt), prisma: prisma as any, jwt };
+  // Padrão "skip" (e-mail desligado, desenvolvimento): o cadastro não exige código e os testes antigos seguem valendo.
+  const emailCodes = { mode: jest.fn().mockReturnValue(codeMode), check: jest.fn().mockReturnValue("ok"), consume: jest.fn() };
+  return {
+    service: new ConsumerAuthService(prisma as unknown as PrismaService, jwt, emailCodes as unknown as ConsumerEmailCodeService),
+    prisma: prisma as any,
+    jwt,
+    emailCodes,
+  };
 }
 
 describe("ConsumerAuthService.login", () => {
@@ -457,5 +469,63 @@ describe("ConsumerAuthService.ensureLink", () => {
     expect(tx.client.upsert).toHaveBeenCalled();
     expect(tx.consumerTenantLink.upsert).toHaveBeenCalled();
     expect(prisma.client.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("ConsumerAuthService.register: código de confirmação do e-mail", () => {
+  const dto = { name: "Ana", phone: PHONE, email: "Ana@Example.com", password: CORRECT_PASSWORD, consent: true };
+
+  it("com e-mail configurado e código CERTO: cadastra e consome o código (uso único)", async () => {
+    const { service, emailCodes, prisma } = build(null, {}, "required");
+    await service.register({ ...dto, emailCode: "123456" });
+
+    expect(emailCodes.check).toHaveBeenCalledWith("ana@example.com", "123456");
+    expect(prisma.consumer.create).toHaveBeenCalledTimes(1);
+    expect(emailCodes.consume).toHaveBeenCalledWith("ana@example.com");
+  });
+
+  it("código errado, vencido ou ausente: 400 ANTES de qualquer custo (nem bcrypt nem banco) e nada é criado", async () => {
+    for (const emailCode of ["000000", undefined]) {
+      const { service, emailCodes, prisma } = build(null, {}, "required");
+      emailCodes.check.mockReturnValue("invalid");
+      await expect(service.register({ ...dto, emailCode })).rejects.toThrow(BadRequestException);
+      expect(prisma.consumer.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(emailCodes.consume).not.toHaveBeenCalled();
+    }
+  });
+
+  it("código ausente é conferido como string vazia (nunca passa por 'undefined == ok')", async () => {
+    const { service, emailCodes } = build(null, {}, "required");
+    emailCodes.check.mockReturnValue("invalid");
+    await service.register({ ...dto }).catch(() => undefined);
+    expect(emailCodes.check).toHaveBeenCalledWith("ana@example.com", "");
+  });
+
+  it("código travado/expirado também é recusado", async () => {
+    for (const result of ["expired", "locked"]) {
+      const { service, emailCodes } = build(null, {}, "required");
+      emailCodes.check.mockReturnValue(result);
+      await expect(service.register({ ...dto, emailCode: "123456" })).rejects.toThrow(BadRequestException);
+    }
+  });
+
+  it("sem e-mail configurado em desenvolvimento: não exige código e não o consome", async () => {
+    const { service, emailCodes } = build(null, {}, "skip");
+    await expect(service.register(dto)).resolves.toBeDefined();
+    expect(emailCodes.check).not.toHaveBeenCalled();
+    expect(emailCodes.consume).not.toHaveBeenCalled();
+  });
+
+  it("sem e-mail em PRODUÇÃO: recusa o cadastro (503), fail closed", async () => {
+    const { service, prisma } = build(null, {}, "unavailable");
+    await expect(service.register(dto)).rejects.toThrow(ServiceUnavailableException);
+    expect(prisma.consumer.create).not.toHaveBeenCalled();
+  });
+
+  it("cadastro que falha depois do código (telefone já tem conta: 409) NÃO consome o código", async () => {
+    const { service, emailCodes } = build({ ...BASE_CONSUMER }, {}, "required");
+    await expect(service.register({ ...dto, emailCode: "123456" })).rejects.toThrow(ConflictException);
+    expect(emailCodes.consume).not.toHaveBeenCalled();
   });
 });

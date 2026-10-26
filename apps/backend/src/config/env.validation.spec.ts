@@ -117,6 +117,32 @@ describe("validateEnv: FRONTEND_URL", () => {
     });
   });
 
+  describe("2FA da plataforma (PLATFORM_ADMIN_2FA)", () => {
+    const strong = { ...base, JWT_SECRET: "a".repeat(40) };
+    const hash = "$2b$12$" + "a".repeat(53);
+    const admin = { PLATFORM_ADMIN_EMAIL: "admin@marquo.com.br", PLATFORM_ADMIN_PASSWORD_HASH: hash };
+    const mail = { RESEND_API_KEY: "re_" + "k".repeat(24), EMAIL_FROM: "avisos@marquo.com.br" };
+
+    it("é opcional: desligado por padrão", () => {
+      expect(() => validateEnv({ ...strong, ...admin })).not.toThrow();
+    });
+
+    it("ligado com conta da plataforma e e-mail configurados, sobe", () => {
+      expect(() => validateEnv({ ...strong, ...admin, ...mail, PLATFORM_ADMIN_2FA: "email" })).not.toThrow();
+    });
+
+    // Ligar o 2FA sem como entregar o código trancaria o admin para fora: tem que falhar no boot.
+    it("ligado sem e-mail configurado, sem conta ou sem hash: recusa subir (fail closed)", () => {
+      expect(() => validateEnv({ ...strong, ...admin, PLATFORM_ADMIN_2FA: "email" })).toThrow(/RESEND_API_KEY/);
+      expect(() => validateEnv({ ...strong, ...mail, PLATFORM_ADMIN_2FA: "email" })).toThrow(/PLATFORM_ADMIN_EMAIL/);
+    });
+
+    it("só aceita o valor 'email'", () => {
+      expect(() => validateEnv({ ...strong, ...admin, ...mail, PLATFORM_ADMIN_2FA: "sms" })).toThrow();
+      expect(() => validateEnv({ ...strong, ...admin, ...mail, PLATFORM_ADMIN_2FA: "true" })).toThrow();
+    });
+  });
+
   describe("conta da plataforma (PLATFORM_ADMIN_*)", () => {
     const strong = { ...base, JWT_SECRET: "a".repeat(40) };
     const hash = "$2b$12$" + "a".repeat(53);

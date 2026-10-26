@@ -56,7 +56,7 @@ export const publicApi = {
   // IP do backend precisa enxergar o IP do visitante. Por Server Action ele veria só o IP do
   // servidor Next e o limite valeria para o produto inteiro.
   signup: (input: SignupInput) =>
-    request<{ slug: string }>("/public/signup", { method: "POST", body: JSON.stringify(input) }),
+    request<{ slug: string; emailVerificationRequired?: boolean }>("/public/signup", { method: "POST", body: JSON.stringify(input) }),
 
   getTenant: (slug: string) => request<PublicTenant>(`/public/tenants/${encodeURIComponent(slug)}`),
 

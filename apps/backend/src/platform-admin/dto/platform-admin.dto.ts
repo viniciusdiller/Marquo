@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -33,6 +34,17 @@ export class PlatformLoginDto {
   @IsNotEmpty()
   @MaxLength(72)
   password!: string;
+}
+
+// Segunda etapa do login com 2FA. challengeId é o identificador opaco (24 bytes em hex) devolvido pelo login.
+export class PlatformVerifyCodeDto {
+  @IsString()
+  @Matches(/^[0-9a-f]{48}$/, { message: "Desafio inválido." })
+  challengeId!: string;
+
+  @IsString()
+  @Matches(/^\d{6}$/, { message: "O código tem 6 dígitos." })
+  code!: string;
 }
 
 // Filtros de estado de cobrança da lista de negócios. "SUSPENDED" e os estados calculados
@@ -201,3 +213,21 @@ export class UpdateOwnerPhoneDto {
   @IsBrazilianPhone()
   phone!: string;
 }
+
+// Confirmação da exclusão dos dados de um negócio. `confirmSlug` é o endereço digitado; o service compara com o do banco.
+export class DeleteTenantDto {
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  confirmSlug!: string;
+
+  // Obrigatório só quando o prazo de 90 dias ainda não terminou (exclusão antecipada). Sem dado pessoal: vai para a auditoria.
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(300)
+  reason?: string;
+}
+
+export class PlatformDeletionQueryDto extends PaginationQueryDto {}

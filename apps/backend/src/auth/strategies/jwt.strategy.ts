@@ -40,11 +40,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         tenantId: true,
         role: true,
         isActive: true,
+        emailVerifiedAt: true,
         passwordChangedAt: true,
         professional: { select: { id: true } },
       },
     });
     if (!user || !user.isActive) {
+      throw new UnauthorizedException();
+    }
+    // Defesa em profundidade: conta sem e-mail confirmado não tem sessão (o login já barra; isto cobre token emitido por
+    // outro caminho).
+    if (!user.emailVerifiedAt) {
       throw new UnauthorizedException();
     }
     // Senha redefinida depois da emissão deste token: a sessão antiga não vale mais.

@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { BadRequestException, ConflictException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ServiceUnavailableException } from "@nestjs/common";
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import * as bcrypt from "bcrypt";
@@ -11,6 +11,8 @@ import { computeBillingStatus, hasBillingAccess } from "../billing/billing-statu
 import { CouponsService } from "../coupons/coupons.service";
 import { SignupDto } from "./dto/signup.dto";
 import { EMAIL_TAKEN_MESSAGE, SignupService, TERMS_OUTDATED_MESSAGE } from "./signup.service";
+import { EmailVerificationService, VerificationMode } from "../auth/email-verification.service";
+import { hashPasswordSetToken } from "../common/utils/password-set-token.util";
 
 // bcrypt real (o teste de senha compara o hash de verdade); só embrulha `hash` num jest.fn para
 // poder checar a ORDEM das chamadas.
@@ -62,14 +64,21 @@ function buildPrisma(overrides: { tenantSlugsTaken?: string[]; userCreate?: jest
   return { prisma, tx };
 }
 
+// Padrão "skip" (e-mail desligado, desenvolvimento): a conta nasce confirmada e os testes antigos seguem valendo.
+function verifier(mode: VerificationMode = "skip") {
+  const sendVerificationEmail = jest.fn().mockResolvedValue(true);
+  const service = { mode: () => mode, sendVerificationEmail } as unknown as EmailVerificationService;
+  return Object.assign(service, { sendVerificationEmail });
+}
+
 describe("SignupService", () => {
   it("cria Tenant em trial de 14 dias e OWNER, sem Subscription", async () => {
     const { prisma, tx } = buildPrisma();
     const before = Date.now();
 
-    const result = await new SignupService(prisma, new CouponsService()).signup(DTO);
+    const result = await new SignupService(prisma, new CouponsService(), verifier()).signup(DTO);
 
-    expect(result).toEqual({ slug: "barbearia-do-ze" });
+    expect(result).toEqual({ slug: "barbearia-do-ze", emailVerificationRequired: false });
     const tenantData = tx.tenant.create.mock.calls[0][0].data;
     expect(tenantData.name).toBe("Barbearia do Zé");
     expect(tenantData.slug).toBe("barbearia-do-ze");
@@ -83,7 +92,7 @@ describe("SignupService", () => {
   it("papel OWNER e tenantId são definidos pelo servidor, e a senha é guardada em bcrypt", async () => {
     const { prisma, tx } = buildPrisma();
 
-    await new SignupService(prisma, new CouponsService()).signup(DTO);
+    await new SignupService(prisma, new CouponsService(), verifier()).signup(DTO);
 
     const userData = tx.user.create.mock.calls[0][0].data;
     expect(userData.role).toBe(Role.OWNER);
@@ -93,13 +102,14 @@ describe("SignupService", () => {
     expect(userData.phone).toBe("11912345678");
     expect(userData.passwordHash).not.toBe(DTO.password);
     await expect(bcrypt.compare(DTO.password, userData.passwordHash)).resolves.toBe(true);
-    // emailVerifiedAt fica nulo: nada exige verificação na v1.
-    expect(userData).not.toHaveProperty("emailVerifiedAt");
+    // A confirmação de e-mail agora é decidida SEMPRE pelo servidor (nunca pelo body): este teste usa o modo "skip"
+    // (e-mail desligado, desenvolvimento), em que a conta nasce confirmada. O modo "verify" está coberto abaixo.
+    expect(userData.emailVerifiedAt).toBeInstanceOf(Date);
   });
 
   it("um tenant recém-criado tem acesso (TRIALING) e, vencido o trial, é bloqueado", async () => {
     const { prisma, tx } = buildPrisma();
-    await new SignupService(prisma, new CouponsService()).signup(DTO);
+    await new SignupService(prisma, new CouponsService(), verifier()).signup(DTO);
     const { trialEndsAt } = tx.tenant.create.mock.calls[0][0].data;
 
     const active = computeBillingStatus({ trialEndsAt }, null);
@@ -122,7 +132,7 @@ describe("SignupService", () => {
     async (name) => {
       const { prisma, tx } = buildPrisma();
 
-      const { slug } = await new SignupService(prisma, new CouponsService()).signup({ ...DTO, businessName: name });
+      const { slug } = await new SignupService(prisma, new CouponsService(), verifier()).signup({ ...DTO, businessName: name });
 
       expect(slug).toMatch(/-2$/);
       expect(tx.tenant.create.mock.calls[0][0].data.slug).toBe(slug);
@@ -132,7 +142,7 @@ describe("SignupService", () => {
   it("slug já usado por outro tenant recebe sufixo", async () => {
     const { prisma } = buildPrisma({ tenantSlugsTaken: ["barbearia-do-ze", "barbearia-do-ze-2"] });
 
-    const { slug } = await new SignupService(prisma, new CouponsService()).signup(DTO);
+    const { slug } = await new SignupService(prisma, new CouponsService(), verifier()).signup(DTO);
 
     expect(slug).toBe("barbearia-do-ze-3");
   });
@@ -142,7 +152,7 @@ describe("SignupService", () => {
       userCreate: jest.fn().mockRejectedValue(uniqueViolation(["email"])),
     });
 
-    const attempt = new SignupService(prisma, new CouponsService()).signup(DTO);
+    const attempt = new SignupService(prisma, new CouponsService(), verifier()).signup(DTO);
 
     await expect(attempt).rejects.toBeInstanceOf(ConflictException);
     await expect(attempt).rejects.toMatchObject({ message: EMAIL_TAKEN_MESSAGE });
@@ -155,13 +165,13 @@ describe("SignupService", () => {
       .mockResolvedValue({ id: "u-1" });
     const { prisma } = buildPrisma({ userCreate });
 
-    await expect(new SignupService(prisma, new CouponsService()).signup(DTO)).resolves.toEqual({ slug: "barbearia-do-ze" });
+    await expect(new SignupService(prisma, new CouponsService(), verifier()).signup(DTO)).resolves.toEqual({ slug: "barbearia-do-ze", emailVerificationRequired: false });
     expect(userCreate).toHaveBeenCalledTimes(2);
 
     const alwaysSlug = buildPrisma({
       userCreate: jest.fn().mockRejectedValue(uniqueViolation(["slug"])),
     });
-    await expect(new SignupService(alwaysSlug.prisma, new CouponsService()).signup(DTO)).rejects.toBeInstanceOf(
+    await expect(new SignupService(alwaysSlug.prisma, new CouponsService(), verifier()).signup(DTO)).rejects.toBeInstanceOf(
       Prisma.PrismaClientKnownRequestError,
     );
   });
@@ -170,7 +180,7 @@ describe("SignupService", () => {
     const boom = new Error("conexão perdida");
     const { prisma } = buildPrisma({ userCreate: jest.fn().mockRejectedValue(boom) });
 
-    await expect(new SignupService(prisma, new CouponsService()).signup(DTO)).rejects.toBe(boom);
+    await expect(new SignupService(prisma, new CouponsService(), verifier()).signup(DTO)).rejects.toBe(boom);
   });
 
   it("hasheia a senha antes de tocar no banco (mesmo custo com e-mail novo ou repetido)", async () => {
@@ -181,7 +191,7 @@ describe("SignupService", () => {
     });
 
     // Mesmo no caminho de e-mail repetido (409) o bcrypt já rodou antes da transação.
-    await expect(new SignupService(prisma, new CouponsService()).signup(DTO)).rejects.toBeInstanceOf(ConflictException);
+    await expect(new SignupService(prisma, new CouponsService(), verifier()).signup(DTO)).rejects.toBeInstanceOf(ConflictException);
 
     const hashOrder = hashMock.mock.invocationCallOrder[0];
     const dbOrder = (prisma.$transaction as jest.Mock).mock.invocationCallOrder[0];
@@ -195,7 +205,7 @@ describe("SignupService: aceite dos termos", () => {
     const { prisma, tx } = buildPrisma();
     const before = Date.now();
 
-    await new SignupService(prisma, new CouponsService()).signup(DTO);
+    await new SignupService(prisma, new CouponsService(), verifier()).signup(DTO);
 
     const userData = tx.user.create.mock.calls[0][0].data;
     expect(userData.termsVersion).toBe(LEGAL_DOCS_VERSION);
@@ -212,7 +222,7 @@ describe("SignupService: aceite dos termos", () => {
       hashMock.mockClear();
       const { prisma } = buildPrisma();
 
-      const attempt = new SignupService(prisma, new CouponsService()).signup({ ...DTO, acceptedTermsVersion: version });
+      const attempt = new SignupService(prisma, new CouponsService(), verifier()).signup({ ...DTO, acceptedTermsVersion: version });
 
       await expect(attempt).rejects.toBeInstanceOf(BadRequestException);
       await expect(attempt).rejects.toMatchObject({ message: TERMS_OUTDATED_MESSAGE });
@@ -292,7 +302,7 @@ describe("SignupService: cupom", () => {
     const { prisma, tx } = withCoupon(COUPON);
     const before = Date.now();
 
-    await new SignupService(prisma, new CouponsService()).signup({ ...DTO, couponCode: " promo30 " });
+    await new SignupService(prisma, new CouponsService(), verifier()).signup({ ...DTO, couponCode: " promo30 " });
 
     expect(tx.coupon.findUnique.mock.calls[0][0].where).toEqual({ code: "PROMO30" });
     const trialMs = tx.tenant.create.mock.calls[0][0].data.trialEndsAt.getTime() - before;
@@ -303,7 +313,7 @@ describe("SignupService: cupom", () => {
 
   it("sem cupom: trial padrão e nada de resgate", async () => {
     const { prisma, tx } = withCoupon(COUPON);
-    await new SignupService(prisma, new CouponsService()).signup(DTO);
+    await new SignupService(prisma, new CouponsService(), verifier()).signup(DTO);
     expect(tx.coupon.findUnique).not.toHaveBeenCalled();
     expect(tx.couponRedemption.create).not.toHaveBeenCalled();
   });
@@ -312,7 +322,7 @@ describe("SignupService: cupom", () => {
   it("cupom de desconto não mexe no trial, mas registra o resgate", async () => {
     const { prisma, tx } = withCoupon({ ...COUPON, kind: "PERCENT", value: 20 });
     const before = Date.now();
-    await new SignupService(prisma, new CouponsService()).signup({ ...DTO, couponCode: "DESC20" });
+    await new SignupService(prisma, new CouponsService(), verifier()).signup({ ...DTO, couponCode: "DESC20" });
     const trialMs = tx.tenant.create.mock.calls[0][0].data.trialEndsAt.getTime() - before;
     expect(trialMs).toBeLessThanOrEqual(TRIAL_DAYS * DAY_MS + 5000);
     expect(tx.couponRedemption.create).toHaveBeenCalled();
@@ -329,7 +339,7 @@ describe("SignupService: cupom", () => {
     const { prisma, tx } = withCoupon(coupon as Record<string, unknown> | null, reserved as number);
 
     await expect(
-      new SignupService(prisma, new CouponsService()).signup({ ...DTO, couponCode: "PROMO30" }),
+      new SignupService(prisma, new CouponsService(), verifier()).signup({ ...DTO, couponCode: "PROMO30" }),
     ).rejects.toThrow("Cupom inválido ou expirado.");
 
     expect(tx.tenant.create).not.toHaveBeenCalled();
@@ -339,8 +349,62 @@ describe("SignupService: cupom", () => {
   it("código com formato inválido é recusado sem nem consultar o banco", async () => {
     const { prisma, tx } = withCoupon(COUPON);
     await expect(
-      new SignupService(prisma, new CouponsService()).signup({ ...DTO, couponCode: "x'; DROP--" }),
+      new SignupService(prisma, new CouponsService(), verifier()).signup({ ...DTO, couponCode: "x'; DROP--" }),
     ).rejects.toThrow("Cupom inválido ou expirado.");
     expect(tx.coupon.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("SignupService: confirmação de e-mail do dono", () => {
+  it("com e-mail configurado: a conta nasce SEM confirmação, só o hash do token vai ao banco e o link sai por e-mail", async () => {
+    const { prisma, tx } = buildPrisma();
+    const v = verifier("verify");
+
+    const result = await new SignupService(prisma, new CouponsService(), v).signup(DTO);
+
+    const data = tx.user.create.mock.calls[0][0].data;
+    expect(data.emailVerifiedAt).toBeNull();
+    expect(data.emailVerificationExpiresAt.getTime()).toBeGreaterThan(Date.now() + 23 * 60 * 60 * 1000);
+
+    const [user, token] = v.sendVerificationEmail.mock.calls[0];
+    expect(user).toEqual({ name: "José Silva", email: "ze@barbearia.com" });
+    expect(token).toMatch(/^[0-9a-f]{64}$/);
+    expect(data.emailVerificationTokenHash).toBe(hashPasswordSetToken(token));
+    expect(data.emailVerificationTokenHash).not.toBe(token);
+    expect(result.emailVerificationRequired).toBe(true);
+  });
+
+  it("sem e-mail em desenvolvimento: a conta nasce confirmada (senão ninguém entraria) e não envia nada", async () => {
+    const { prisma, tx } = buildPrisma();
+    const v = verifier("skip");
+    const result = await new SignupService(prisma, new CouponsService(), v).signup(DTO);
+
+    expect(tx.user.create.mock.calls[0][0].data.emailVerifiedAt).toBeInstanceOf(Date);
+    expect(tx.user.create.mock.calls[0][0].data.emailVerificationTokenHash).toBeNull();
+    expect(v.sendVerificationEmail).not.toHaveBeenCalled();
+    expect(result.emailVerificationRequired).toBe(false);
+  });
+
+  it("sem e-mail em PRODUÇÃO: recusa o cadastro (503) antes de criar qualquer coisa", async () => {
+    const { prisma, tx } = buildPrisma();
+    await expect(new SignupService(prisma, new CouponsService(), verifier("unavailable")).signup(DTO)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.user.create).not.toHaveBeenCalled();
+  });
+
+  it("falha ao enviar o e-mail não desfaz o cadastro", async () => {
+    const { prisma } = buildPrisma();
+    const v = verifier("verify");
+    v.sendVerificationEmail.mockRejectedValue(new Error("provedor fora"));
+    await expect(new SignupService(prisma, new CouponsService(), v).signup(DTO)).resolves.toMatchObject({ slug: "barbearia-do-ze" });
+  });
+
+  it("e-mail já cadastrado (409): nenhum e-mail de confirmação sai", async () => {
+    const { prisma } = buildPrisma({ userCreate: jest.fn().mockRejectedValue(uniqueViolation(["email"])) });
+    const v = verifier("verify");
+    await expect(new SignupService(prisma, new CouponsService(), v).signup(DTO)).rejects.toThrow(ConflictException);
+    expect(v.sendVerificationEmail).not.toHaveBeenCalled();
   });
 });

@@ -43,6 +43,8 @@ export class ProfessionalsService {
           passwordHash,
           name: dto.name,
           role: Role.PROFESSIONAL,
+          // Criado por um dono autenticado (que define a senha inicial): não passa pela confirmação do cadastro público.
+          emailVerifiedAt: new Date(),
         },
       });
 

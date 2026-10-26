@@ -115,6 +115,7 @@ async function seedDemoTenant() {
       name: "Dona Marta",
       phone: "11999990001",
       role: Role.OWNER,
+      emailVerifiedAt: new Date(),
     },
   });
 
@@ -125,6 +126,7 @@ async function seedDemoTenant() {
       passwordHash,
       name: "Rita Recepção",
       role: Role.RECEPTIONIST,
+      emailVerifiedAt: new Date(),
     },
   });
 
@@ -142,6 +144,7 @@ async function seedDemoTenant() {
         passwordHash,
         name: p.name,
         role: Role.PROFESSIONAL,
+        emailVerifiedAt: new Date(),
       },
     });
     const professional = await prisma.professional.create({
@@ -615,6 +618,7 @@ async function seedMarketplaceDemoTenant(def: MarketplaceDemoDef, consumerId: st
       // Telefone fictício estável (só para a demo mostrar o contato no painel da plataforma).
       phone: `1198888${String(def.slug.length * 137 % 10000).padStart(4, "0")}`,
       role: Role.OWNER,
+      emailVerifiedAt: new Date(),
     },
   });
 
@@ -627,6 +631,7 @@ async function seedMarketplaceDemoTenant(def: MarketplaceDemoDef, consumerId: st
         passwordHash,
         name: p.name,
         role: Role.PROFESSIONAL,
+        emailVerifiedAt: new Date(),
       },
     });
     const professional = await prisma.professional.create({

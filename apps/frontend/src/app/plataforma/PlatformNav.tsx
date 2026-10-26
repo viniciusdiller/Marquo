@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/plataforma/assinaturas", label: "Assinaturas" },
   { href: "/plataforma/cupons", label: "Cupons" },
   { href: "/plataforma/usuarios", label: "Usuários" },
+  { href: "/plataforma/exclusao", label: "Exclusão de dados" },
   { href: "/plataforma/auditoria", label: "Auditoria" },
 ];
 

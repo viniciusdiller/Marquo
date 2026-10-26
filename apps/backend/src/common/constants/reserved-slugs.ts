@@ -9,6 +9,7 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "dashboard",
   "definir-senha",
   "esqueci-senha",
+  "verificar-email",
   "descobrir",
   "para-donos",
   "plataforma",

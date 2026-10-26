@@ -529,6 +529,8 @@ export class PlatformAdminService {
               name: dto.ownerName,
               phone: normalizePhone(dto.ownerPhone),
               role: Role.OWNER,
+              // A plataforma criou o negócio e entrega o link de definir senha ao dono: já é um e-mail atestado por ela.
+              emailVerifiedAt: new Date(),
               passwordHash: unusablePasswordHash,
               passwordSetTokenHash: hashPasswordSetToken(token),
               passwordSetTokenExpiresAt: expiresAt,
