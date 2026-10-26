@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseEnumPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -13,6 +14,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
+import { PlanTier } from "@marquo/database";
 import { Public } from "../common/decorators/public.decorator";
 import { CurrentPlatformAdmin } from "./decorators/current-platform-admin.decorator";
 import { PlatformAdminGuard } from "./platform-admin.guard";
@@ -20,6 +22,7 @@ import { PlatformAuthService } from "./platform-auth.service";
 import { PlatformAdminService } from "./platform-admin.service";
 import { PlatformCouponsService } from "./platform-coupons.service";
 import { TenantDeletionService } from "./tenant-deletion.service";
+import { PlanPricingService } from "./plan-pricing.service";
 import { TrialsService } from "./trials.service";
 import { AuthenticatedPlatformAdmin } from "./platform-admin.config";
 import {
@@ -37,6 +40,7 @@ import {
   PlatformTenantsQueryDto,
   PlatformUsersQueryDto,
   PlatformVerifyCodeDto,
+  SetPlanPriceDto,
   SetTrialDto,
   SuspendTenantDto,
   UpdateCouponDto,
@@ -55,6 +59,7 @@ export class PlatformAdminController {
     private readonly coupons: PlatformCouponsService,
     private readonly deletion: TenantDeletionService,
     private readonly trials: TrialsService,
+    private readonly pricing: PlanPricingService,
   ) {}
 
   @Post("auth/login")
@@ -237,6 +242,25 @@ export class PlatformAdminController {
   @Get("audit")
   audit(@Query() query: PlatformAuditQueryDto) {
     return this.platform.listAudit(query);
+  }
+
+  // ───────── Preço dos planos (só baixa e volta até o preço de tabela) ─────────
+
+  @UseGuards(PlatformAdminGuard)
+  @Get("plans")
+  listPlans() {
+    return this.pricing.list();
+  }
+
+  @UseGuards(PlatformAdminGuard)
+  @Put("plans/:tier/price")
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  setPlanPrice(
+    @Param("tier", new ParseEnumPipe(PlanTier)) tier: PlanTier,
+    @Body() dto: SetPlanPriceDto,
+    @CurrentPlatformAdmin() admin: AuthenticatedPlatformAdmin,
+  ) {
+    return this.pricing.setPrice(tier, dto.priceCents, admin.email);
   }
 
   // ───────── Exclusão de dados (promessa dos termos: 90 dias depois do fim do acesso) ─────────

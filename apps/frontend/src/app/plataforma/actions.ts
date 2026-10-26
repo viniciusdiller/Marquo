@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ApiError } from "@/lib/api";
+import { moneyToCents } from "@/lib/masks";
 import { clearPlatformToken, platformFetch } from "@/lib/platform-session";
 
 // Ações do painel. Toda chamada leva o cookie da plataforma e o backend revalida a sessão e as regras
@@ -79,6 +80,23 @@ export async function setTrialAction(id: string, days: number): Promise<Platform
       method: "POST",
       body: JSON.stringify({ days }),
     });
+    revalidatePath("/plataforma", "layout");
+    return { ok: true };
+  } catch (err) {
+    return toError(err);
+  }
+}
+
+const PLAN_TIERS = ["ESSENCIAL", "PROFISSIONAL", "PREMIUM"];
+
+// Novo preço mensal do plano, digitado em reais ("39,90"). Só confere o formato para dar erro rápido: o backend limita entre
+// o piso da cobrança e o preço de tabela, e exige plano maior mais caro que o menor.
+export async function setPlanPriceAction(tier: string, price: string): Promise<PlatformActionResult> {
+  if (!PLAN_TIERS.includes(tier)) return { ok: false, error: "Plano inválido." };
+  const priceCents = moneyToCents(price);
+  if (priceCents === null || priceCents <= 0) return { ok: false, error: "Informe um valor válido, como 39,90." };
+  try {
+    await platformFetch(`/platform/plans/${tier}/price`, { method: "PUT", body: JSON.stringify({ priceCents }) });
     revalidatePath("/plataforma", "layout");
     return { ok: true };
   } catch (err) {

@@ -92,6 +92,14 @@ export class SetTrialDto {
   days!: number;
 }
 
+// Novo preço mensal do plano, em centavos. O servidor limita entre o piso da cobrança e o preço do catálogo.
+export class SetPlanPriceDto {
+  @IsInt()
+  @Min(1)
+  @Max(100_000_00)
+  priceCents!: number;
+}
+
 export class PlatformUsersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @Transform(trim)
