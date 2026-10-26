@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { ApiError, publicApi } from "@/lib/api";
 import type { PlanTier } from "@/lib/billing";
 import { planCookieValue } from "@/lib/signup-plan";
-import { loginAction } from "../entrar/actions";
+import { loginAction, resendVerificationAction } from "../entrar/actions";
 
 // Espelham SignupDto (backend): a validação de verdade é lá; isto só evita ida e volta.
 const MIN_PASSWORD = 8;
@@ -45,6 +45,17 @@ export function SignupForm({ selectedTier = null }: { selectedTier?: PlanTier | 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [accepted, setAccepted] = useState(false);
+  // Conta criada, falta confirmar o e-mail: guarda o endereço para mostrar a tela de "confira sua caixa de entrada".
+  const [awaitingEmail, setAwaitingEmail] = useState<string | null>(null);
+  const [resendNote, setResendNote] = useState<string | null>(null);
+
+  function handleResend() {
+    setResendNote(null);
+    startTransition(async () => {
+      const result = await resendVerificationAction(awaitingEmail ?? "");
+      setResendNote(result.ok ? "Enviamos um novo link. Veja também a caixa de spam." : result.error);
+    });
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,8 +75,9 @@ export function SignupForm({ selectedTier = null }: { selectedTier?: PlanTier | 
     }
 
     startTransition(async () => {
+      let created: { slug: string; emailVerificationRequired?: boolean };
       try {
-        await publicApi.signup({
+        created = await publicApi.signup({
           businessName,
           ownerName,
           email,
@@ -83,17 +95,54 @@ export function SignupForm({ selectedTier = null }: { selectedTier?: PlanTier | 
       // não envia plano ao backend e nada é cobrado por isto).
       if (selectedTier) document.cookie = planCookieValue(selectedTier);
 
+      // Conta que exige confirmar o e-mail não entra ainda: mostra onde clicar, em vez de tentar o login.
+      if (created.emailVerificationRequired) {
+        setAwaitingEmail(email);
+        return;
+      }
+
       // Conta criada: já entra (mesma sessão NextAuth do /entrar). Se o login falhar por algum
       // motivo, a conta existe e o usuário só precisa entrar manualmente.
       const result = await loginAction(email, password, "/dashboard/agenda");
       if ("error" in result) {
+        if (result.code === "EMAIL_NOT_VERIFIED") {
+          setAwaitingEmail(email);
+          return;
+        }
         setError("Conta criada! Entre com seu e-mail e senha para continuar.");
+        router.replace("/entrar");
+        return;
+      }
+      // Conta de negócio recém-criada nunca é a da plataforma, então o código de 2FA não se aplica; trata só por completude.
+      if ("needsCode" in result) {
         router.replace("/entrar");
         return;
       }
       router.replace(result.redirectTo);
       router.refresh();
     });
+  }
+
+  if (awaitingEmail) {
+    return (
+      <div role="status" className="flex flex-col gap-4">
+        <h2 className="font-display text-xl font-semibold text-zinc-900 dark:text-white">Confirme seu e-mail</h2>
+        <p className="text-sm text-zinc-600 dark:text-stone-300">
+          Sua conta foi criada. Enviamos um link de confirmação para <strong>{awaitingEmail}</strong>. Abra o e-mail e
+          clique no link para entrar. Ele vale por 24 horas.
+        </p>
+        <p className="text-sm text-zinc-500 dark:text-stone-400">Não chegou? Veja a caixa de spam ou peça um novo link.</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" onClick={handleResend} disabled={pending} className="disabled:opacity-60">
+            Reenviar e-mail
+          </Button>
+          <Link href="/entrar" className="text-sm font-semibold text-accent-600 dark:text-accent-300">
+            Ir para o login
+          </Link>
+        </div>
+        {resendNote ? <p className="text-sm text-zinc-500 dark:text-stone-400">{resendNote}</p> : null}
+      </div>
+    );
   }
 
   return (

@@ -7,7 +7,14 @@ import clsx from "clsx";
 import { Input } from "@/components/ui/Input";
 import { MaskedInput } from "@/components/ui/MaskedInput";
 import { Button } from "@/components/ui/Button";
-import { loginAction, registerAction } from "./actions";
+import {
+  loginAction,
+  registerAction,
+  requestRegisterCodeAction,
+  resendVerificationAction,
+  verifyPlatformCodeAction,
+  type LoginResult,
+} from "./actions";
 
 const MIN_PASSWORD = 8;
 
@@ -18,6 +25,12 @@ export function LoginForm({ next }: { next?: string }) {
   const [pending, startTransition] = useTransition();
   const [mode, setMode] = useState<Mode>("login");
   const [error, setError] = useState<string | null>(null);
+  // Conta cujo e-mail ainda não foi confirmado: o erro vem com um botão para reenviar o link.
+  const [unverified, setUnverified] = useState(false);
+  const [resendNote, setResendNote] = useState<string | null>(null);
+  // Conta da plataforma com 2FA: depois da senha, a tela pede o código enviado por e-mail.
+  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [code, setCode] = useState("");
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -27,25 +40,74 @@ export function LoginForm({ next }: { next?: string }) {
   const [email, setEmail] = useState("");
   const [confirm, setConfirm] = useState("");
   const [consent, setConsent] = useState(false);
+  // Cadastro de cliente em duas etapas: 1) dados e pedido do código, 2) código recebido no e-mail digitado.
+  const [codeSent, setCodeSent] = useState(false);
+  const [emailCode, setEmailCode] = useState("");
+  const [codeNote, setCodeNote] = useState<string | null>(null);
 
   function switchMode(next: Mode) {
     setMode(next);
     setError(null);
+    setUnverified(false);
+    setResendNote(null);
+    setCodeSent(false);
+    setEmailCode("");
+    setCodeNote(null);
     setPassword("");
   }
 
-  function finish(result: { redirectTo: string } | { error: string }) {
+  function finish(result: LoginResult) {
+    if ("needsCode" in result) {
+      setChallengeId(result.challengeId);
+      setCode("");
+      setPassword("");
+      return;
+    }
     if ("error" in result) {
       setError(result.error);
+      setUnverified(result.code === "EMAIL_NOT_VERIFIED");
+      setResendNote(null);
       return;
     }
     router.replace(result.redirectTo);
     router.refresh();
   }
 
+  function handleVerifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!challengeId) return;
+    startTransition(async () => {
+      const result = await verifyPlatformCodeAction(challengeId, code);
+      if ("error" in result) {
+        setError(result.error);
+        if (result.restart) setCode("");
+        return;
+      }
+      router.replace(result.redirectTo);
+      router.refresh();
+    });
+  }
+
+  function cancelCode() {
+    setChallengeId(null);
+    setCode("");
+    setError(null);
+  }
+
+  function handleResend() {
+    setResendNote(null);
+    startTransition(async () => {
+      const result = await resendVerificationAction(identifier);
+      setResendNote(result.ok ? "Se o e-mail estiver cadastrado, enviamos um novo link. Veja também a caixa de spam." : result.error);
+    });
+  }
+
   function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setUnverified(false);
+    setResendNote(null);
     startTransition(async () => finish(await loginAction(identifier, password, next)));
   }
 
@@ -64,8 +126,78 @@ export function LoginForm({ next }: { next?: string }) {
       setError("É necessário aceitar os termos e a política de privacidade.");
       return;
     }
-    startTransition(async () =>
-      finish(await registerAction({ name, phone, email, password, consent }, next)),
+
+    startTransition(async () => {
+      // Etapa 1: pede o código ao e-mail digitado (a menos que o sistema esteja sem e-mail, em desenvolvimento).
+      if (!codeSent) {
+        const requested = await requestRegisterCodeAction(email);
+        if (!requested.ok) {
+          setError(requested.error);
+          return;
+        }
+        if (requested.required) {
+          setCodeSent(true);
+          setCodeNote("Enviamos um código de 6 dígitos para o seu e-mail. Veja também a caixa de spam.");
+          return;
+        }
+      } else if (!/^\d{6}$/.test(emailCode)) {
+        setError("Digite o código de 6 dígitos que enviamos para o seu e-mail.");
+        return;
+      }
+
+      finish(
+        await registerAction(
+          { name, phone, email, password, consent, ...(codeSent ? { emailCode } : {}) },
+          next,
+        ),
+      );
+    });
+  }
+
+  function handleResendCode() {
+    setError(null);
+    setCodeNote(null);
+    startTransition(async () => {
+      const requested = await requestRegisterCodeAction(email);
+      setCodeNote(
+        requested.ok
+          ? "Se o e-mail estiver correto, enviamos um novo código. Ele só pode ser reenviado a cada minuto."
+          : requested.error,
+      );
+    });
+  }
+
+  function changeEmail() {
+    setCodeSent(false);
+    setEmailCode("");
+    setCodeNote(null);
+    setError(null);
+  }
+
+  if (challengeId) {
+    return (
+      <form onSubmit={handleVerifyCode} className="flex flex-col gap-4">
+        <p className="text-sm text-zinc-600 dark:text-stone-300">
+          Enviamos um código de 6 dígitos para o e-mail da conta. Digite-o abaixo para concluir o acesso.
+        </p>
+        <Input
+          label="Código de acesso"
+          name="code"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          required
+          maxLength={6}
+        />
+        {error ? <p role="alert" className="animate-rise-in text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+        <Button type="submit" disabled={pending || code.length !== 6} className="w-full disabled:opacity-60">
+          {pending ? "Verificando..." : "Confirmar código"}
+        </Button>
+        <button type="button" onClick={cancelCode} className="self-start text-sm font-semibold text-accent-600 dark:text-accent-300">
+          Voltar e entrar de novo
+        </button>
+      </form>
     );
   }
 
@@ -120,6 +252,24 @@ export function LoginForm({ next }: { next?: string }) {
 
           {error ? <p role="alert" className="animate-rise-in text-sm text-red-600 dark:text-red-400">{error}</p> : null}
 
+          {unverified ? (
+            <div className="flex flex-col gap-2 text-sm">
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={pending}
+                className="self-start font-semibold text-accent-600 disabled:opacity-60 dark:text-accent-300"
+              >
+                Reenviar e-mail de confirmação
+              </button>
+              {resendNote ? (
+                <p role="status" className="text-zinc-500 dark:text-stone-400">
+                  {resendNote}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <Button type="submit" disabled={pending} className="mt-2 w-full disabled:opacity-60">
             {pending ? "Entrando..." : "Entrar"}
           </Button>
@@ -167,7 +317,35 @@ export function LoginForm({ next }: { next?: string }) {
             onChange={(e) => setEmail(e.target.value)}
             required
             maxLength={254}
+            readOnly={codeSent}
           />
+          {codeSent ? (
+            <div className="flex flex-col gap-2">
+              <Input
+                label="Código enviado ao e-mail"
+                name="emailCode"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={emailCode}
+                onChange={(e) => setEmailCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                required
+                maxLength={6}
+              />
+              {codeNote ? (
+                <p role="status" className="text-xs text-zinc-500 dark:text-stone-400">
+                  {codeNote}
+                </p>
+              ) : null}
+              <div className="flex gap-4 text-sm">
+                <button type="button" onClick={handleResendCode} disabled={pending} className="font-semibold text-accent-600 disabled:opacity-60 dark:text-accent-300">
+                  Reenviar código
+                </button>
+                <button type="button" onClick={changeEmail} className="font-semibold text-accent-600 dark:text-accent-300">
+                  Alterar e-mail
+                </button>
+              </div>
+            </div>
+          ) : null}
           <Input
             label="Crie uma senha"
             name="new-password"
@@ -211,7 +389,7 @@ export function LoginForm({ next }: { next?: string }) {
           {error ? <p role="alert" className="animate-rise-in text-sm text-red-600 dark:text-red-400">{error}</p> : null}
 
           <Button type="submit" disabled={pending} className="mt-2 w-full disabled:opacity-60">
-            {pending ? "Criando..." : "Criar conta"}
+            {pending ? "Criando..." : codeSent ? "Criar conta" : "Continuar"}
           </Button>
         </form>
       )}

@@ -48,6 +48,26 @@ export async function suspendTenantAction(id: string, reason: string): Promise<P
   }
 }
 
+// Exclusão dos dados de um negócio (irreversível). A confirmação digitada e o motivo são REVALIDADOS no backend, que
+// também decide se o negócio pode ser excluído (acesso encerrado) e se o prazo de 90 dias já terminou.
+export async function purgeTenantDataAction(
+  id: string,
+  confirmSlug: string,
+  reason: string,
+): Promise<PlatformActionResult> {
+  if (!confirmSlug.trim()) return { ok: false, error: "Digite o endereço do negócio para confirmar." };
+  try {
+    await platformFetch(`/platform/tenants/${encodeURIComponent(id)}/delete`, {
+      method: "POST",
+      body: JSON.stringify({ confirmSlug, ...(reason.trim() ? { reason: reason.trim() } : {}) }),
+    });
+    revalidatePath("/plataforma", "layout");
+    return { ok: true };
+  } catch (err) {
+    return toError(err);
+  }
+}
+
 export async function reactivateTenantAction(id: string): Promise<PlatformActionResult> {
   try {
     await platformFetch(`/platform/tenants/${encodeURIComponent(id)}/reactivate`, { method: "POST" });

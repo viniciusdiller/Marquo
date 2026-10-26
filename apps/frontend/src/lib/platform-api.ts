@@ -56,6 +56,7 @@ export const AUDIT_LABEL: Record<string, string> = {
   COURTESY_REMOVED: "Plano de cortesia removido",
   OWNER_PHONE_UPDATED: "Telefone do dono atualizado",
   PASSWORD_RESET_LINK: "Link de redefinição de senha",
+  TENANT_PURGED: "Dados do negócio excluídos",
 };
 
 export interface PlatformOverview {
@@ -202,3 +203,53 @@ export interface PlatformAuditRow {
 }
 
 export type PlatformPage<T> = Paginated<T>;
+
+// Exclusão de dados (promessa dos termos: 90 dias depois do fim do acesso). Só apresentação: o backend decide tudo.
+export interface PlatformDeletionCandidate {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+  billingStatus: PlatformBillingStatus;
+  accessEndedAt: string | null;
+  eligible: boolean;
+  eligibleOn: string | null;
+}
+
+export interface PlatformDeletionPreview {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+  billingStatus: PlatformBillingStatus;
+  accessEndedAt: string | null;
+  deletable: boolean;
+  eligible: boolean;
+  eligibleOn: string | null;
+  retentionDays: number;
+  counts: {
+    users: number;
+    professionals: number;
+    clients: number;
+    appointments: number;
+    tickets: number;
+    products: number;
+    financialEntries: number;
+    reviews: number;
+    intakeResponses: number;
+    galleryImages: number;
+  };
+}
+
+export const DELETION_COUNT_LABEL: Record<keyof PlatformDeletionPreview["counts"], string> = {
+  users: "Usuários (dono e equipe)",
+  professionals: "Profissionais",
+  clients: "Clientes",
+  appointments: "Agendamentos",
+  tickets: "Comandas",
+  products: "Produtos",
+  financialEntries: "Lançamentos financeiros",
+  reviews: "Avaliações",
+  intakeResponses: "Fichas de anamnese respondidas",
+  galleryImages: "Fotos da galeria",
+};

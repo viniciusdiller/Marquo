@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import type { JWT } from "next-auth/jwt";
 import { decodeJwtExpiryMs } from "./jwt-decode";
 import { backendFetch } from "./backend-fetch";
+import { EmailNotVerifiedError } from "./auth-errors";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -112,6 +113,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
 
         if (!response.ok) {
+          // O backend só diz que falta confirmar o e-mail depois de a senha estar certa; qualquer outra falha
+          // continua sendo o "credenciais inválidas" genérico.
+          if (response.status === 403) {
+            const body = (await response.json().catch(() => null)) as { code?: string } | null;
+            if (body?.code === "EMAIL_NOT_VERIFIED") throw new EmailNotVerifiedError();
+          }
           return null;
         }
 
