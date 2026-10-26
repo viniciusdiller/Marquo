@@ -69,6 +69,29 @@ export class PlatformTenantsQueryDto extends PaginationQueryDto {
   status?: TenantStatusFilter;
 }
 
+export const TRIAL_STATUS_FILTERS = ["ACTIVE", "EXPIRED"] as const;
+
+// Lista do teste grátis: só negócios sem assinatura. status = ainda em teste (ACTIVE) ou vencido (EXPIRED).
+export class PlatformTrialsQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsIn(TRIAL_STATUS_FILTERS)
+  status?: (typeof TRIAL_STATUS_FILTERS)[number];
+}
+
+// Quanto teste o negócio tem a partir de HOJE (0 encerra agora). A data final é calculada no servidor.
+export class SetTrialDto {
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  days!: number;
+}
+
 export class PlatformUsersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @Transform(trim)

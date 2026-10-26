@@ -20,6 +20,7 @@ import { PlatformAuthService } from "./platform-auth.service";
 import { PlatformAdminService } from "./platform-admin.service";
 import { PlatformCouponsService } from "./platform-coupons.service";
 import { TenantDeletionService } from "./tenant-deletion.service";
+import { TrialsService } from "./trials.service";
 import { AuthenticatedPlatformAdmin } from "./platform-admin.config";
 import {
   CreateCouponDto,
@@ -32,9 +33,11 @@ import {
   PlatformDeletionQueryDto,
   PlatformLoginDto,
   PlatformSubscriptionsQueryDto,
+  PlatformTrialsQueryDto,
   PlatformTenantsQueryDto,
   PlatformUsersQueryDto,
   PlatformVerifyCodeDto,
+  SetTrialDto,
   SuspendTenantDto,
   UpdateCouponDto,
   UpdateOwnerPhoneDto,
@@ -51,6 +54,7 @@ export class PlatformAdminController {
     private readonly platform: PlatformAdminService,
     private readonly coupons: PlatformCouponsService,
     private readonly deletion: TenantDeletionService,
+    private readonly trials: TrialsService,
   ) {}
 
   @Post("auth/login")
@@ -118,6 +122,26 @@ export class PlatformAdminController {
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   reactivate(@Param("id", ParseUUIDPipe) id: string, @CurrentPlatformAdmin() admin: AuthenticatedPlatformAdmin) {
     return this.platform.reactivate(id, admin.email);
+  }
+
+  // ───────── Teste grátis: ver quanto falta e DEFINIR quanto tempo cada negócio tem ─────────
+
+  @UseGuards(PlatformAdminGuard)
+  @Get("trials")
+  listTrials(@Query() query: PlatformTrialsQueryDto) {
+    return this.trials.list(query);
+  }
+
+  @UseGuards(PlatformAdminGuard)
+  @Post("tenants/:id/set-trial")
+  @HttpCode(200)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  setTrial(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: SetTrialDto,
+    @CurrentPlatformAdmin() admin: AuthenticatedPlatformAdmin,
+  ) {
+    return this.trials.setRemaining(id, dto.days, admin.email);
   }
 
   @UseGuards(PlatformAdminGuard)
