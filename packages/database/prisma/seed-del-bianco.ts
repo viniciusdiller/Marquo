@@ -105,6 +105,7 @@ async function create() {
       name: "Dono Del Bianco",
       phone: "22988887777",
       role: Role.OWNER,
+      emailVerifiedAt: new Date(),
     },
   });
 
@@ -115,6 +116,7 @@ async function create() {
       passwordHash,
       name: "Del Bianco",
       role: Role.PROFESSIONAL,
+      emailVerifiedAt: new Date(),
     },
   });
   const professional = await prisma.professional.create({

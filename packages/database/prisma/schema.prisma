@@ -138,6 +138,11 @@ model Tenant {
   suspendedAt     DateTime? @db.Timestamptz(6)
   suspendedReason String?
 
+  // Dados apagados pela plataforma (ver TenantDeletionService): a linha do negócio fica ANONIMIZADA, junto com a
+  // assinatura e as tentativas de cobrança, porque os termos prometem guardar registros de pagamento pelo prazo legal.
+  // Nenhum dado de cliente, equipe, agenda ou financeiro do negócio sobrevive.
+  deletedAt DateTime? @db.Timestamptz(6)
+
   // Perfil público exibido em /[slug] — todos opcionais, editados pelo dono no dashboard.
   description    String?
   address        String?
@@ -238,10 +243,15 @@ model User {
   passwordSetTokenHash      String?   @unique
   passwordSetTokenExpiresAt DateTime? @db.Timestamptz(6)
 
-  // Preparado para a verificação de e-mail na área do cliente (v2, quando houver provedor de
-  // e-mail transacional). Hoje o cadastro público (/public/signup) não envia e-mail nem exige
-  // este campo: fica nulo e NADA no backend depende dele. Ver CLAUDE.md > Autenticação.
+  // Confirmação de que o dono do e-mail é quem se cadastrou. Cadastro PÚBLICO nasce sem confirmação e não entra até
+  // clicar no link enviado ao e-mail (ver AuthService.login e EmailVerificationService). Contas criadas por quem já tem
+  // autoridade (plataforma, dono criando equipe) e as anteriores a este campo nascem confirmadas. Redefinir a senha pelo
+  // link enviado ao e-mail também confirma (o link só chega a quem controla a caixa).
   emailVerifiedAt DateTime? @db.Timestamptz(6)
+
+  // Link de confirmação de e-mail: só o hash, com validade e uso único (mesmo padrão do passwordSetTokenHash).
+  emailVerificationTokenHash String?   @unique
+  emailVerificationExpiresAt DateTime? @db.Timestamptz(6)
 
   // Aceite dos Termos de Uso e da Política de Privacidade no cadastro público (/public/signup):
   // só a data e a versão aceita (LEGAL_DOCS_VERSION). Sem IP, por minimização de dados. Nulo em
