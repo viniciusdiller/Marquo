@@ -2,6 +2,7 @@ import { BadGatewayException, BadRequestException, ConflictException, NotFoundEx
 import { PrismaService } from "../prisma/prisma.service";
 import { MercadoPagoClient } from "../billing/payments/mercadopago.client";
 import {
+  AUDIT_TENANT_DELETION_SCHEDULED,
   AUDIT_TENANT_PURGED,
   DELETION_RETENTION_DAYS,
   evaluateDeletion,
@@ -103,6 +104,10 @@ function build(options: { tenantRow?: unknown; failAt?: string; mp?: Record<stri
     update: jest.fn(async () => {
       calls.push("tenant.update");
       return {};
+    }),
+    updateMany: jest.fn(async () => {
+      calls.push("tenant.updateMany");
+      return { count: 1 };
     }),
   };
   const tx = new Proxy({} as Record<string, unknown>, {
@@ -456,5 +461,71 @@ describe("TenantDeletionService.listCandidates", () => {
     const page = await service.listCandidates({ page: 2, pageSize: 10 }, NOW);
     expect(page.items).toHaveLength(10);
     expect(page).toMatchObject({ total: 25, page: 2, pageSize: 10, pageCount: 3 });
+  });
+});
+
+describe("TenantDeletionService.scheduleDeletion (Aguardar 90 dias)", () => {
+  beforeEach(() => rmMock.mockClear());
+
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: TENANT_ID,
+    name: "S",
+    slug: "salao-teste",
+    createdAt: ago(5),
+    trialEndsAt: new Date(NOW.getTime() + 5 * DAY),
+    suspendedAt: null,
+    deletedAt: null,
+    subscription: null,
+    ...over,
+  });
+
+  it("negócio com acesso: suspende agora, audita e NÃO apaga nada; eligível em 90 dias", async () => {
+    const { service, calls, tenantDelegate, adminAuditLog } = build({ tenantRow: row() });
+
+    const result = await service.scheduleDeletion(TENANT_ID, { confirmSlug: "salao-teste", reason: "pedido do titular" }, "a@b.com", NOW);
+
+    expect(result).toEqual({ scheduled: true, slug: "salao-teste", eligibleOn: new Date(NOW.getTime() + DELETION_RETENTION_DAYS * DAY) });
+    expect(tenantDelegate.updateMany).toHaveBeenCalledWith({
+      where: { id: TENANT_ID, deletedAt: null, suspendedAt: null },
+      data: { suspendedAt: NOW, suspendedReason: "Exclusão agendada: aguardando 90 dias" },
+    });
+    expect(calls).toEqual(["tenant.updateMany", "adminAuditLog"]);
+    expect(tenantDelegate.update).not.toHaveBeenCalled();
+    expect(adminAuditLog.create.mock.calls[0][0].data).toMatchObject({ action: AUDIT_TENANT_DELETION_SCHEDULED, actor: "a@b.com", tenantId: TENANT_ID });
+    expect(rmMock).not.toHaveBeenCalled();
+  });
+
+  it("já sem acesso (teste vencido): não suspende de novo e a contagem segue do fim do acesso", async () => {
+    const { service, tenantDelegate } = build({ tenantRow: row({ trialEndsAt: ago(30) }) });
+    const result = await service.scheduleDeletion(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW);
+    expect(tenantDelegate.updateMany).not.toHaveBeenCalled();
+    expect(result.eligibleOn).toEqual(new Date(ago(30).getTime() + DELETION_RETENTION_DAYS * DAY));
+  });
+
+  it("cartão recorrente: cancela no provedor antes; se falhar, nada é suspenso", async () => {
+    const card = sub({ status: "ACTIVE", currentPeriodEnd: new Date(NOW.getTime() + 10 * DAY), providerSubscriptionId: "pre-1" });
+    const ok = build({ tenantRow: row({ subscription: card }) });
+    await ok.service.scheduleDeletion(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW);
+    expect(ok.mp.cancelPreapproval).toHaveBeenCalledWith("pre-1");
+
+    const fail = build({
+      tenantRow: row({ subscription: card }),
+      mp: { cancelPreapproval: jest.fn().mockRejectedValue(new Error("fora")), getPreapproval: jest.fn().mockResolvedValue({ status: "authorized" }) },
+    });
+    await expect(fail.service.scheduleDeletion(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).rejects.toThrow(BadGatewayException);
+    expect(fail.tenantDelegate.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("confirmação errada: 400; já excluído: 409; inexistente: 404; motivo curto: 400 — e nada é escrito", async () => {
+    const wrong = build({ tenantRow: row() });
+    await expect(wrong.service.scheduleDeletion(TENANT_ID, { confirmSlug: "outro" }, "a@b.com", NOW)).rejects.toThrow(BadRequestException);
+    await expect(wrong.service.scheduleDeletion(TENANT_ID, { confirmSlug: "salao-teste", reason: "curto" }, "a@b.com", NOW)).rejects.toThrow(BadRequestException);
+    expect(wrong.prisma.$transaction).not.toHaveBeenCalled();
+
+    const gone = build({ tenantRow: row({ deletedAt: ago(1) }) });
+    await expect(gone.service.scheduleDeletion(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).rejects.toThrow(ConflictException);
+
+    const missing = build({ tenantRow: null });
+    await expect(missing.service.scheduleDeletion(TENANT_ID, { confirmSlug: "x" }, "a@b.com", NOW)).rejects.toThrow(NotFoundException);
   });
 });

@@ -11,6 +11,7 @@ import {
   grantCourtesyAction,
   passwordResetLinkAction,
   purgeTenantDataAction,
+  scheduleTenantDeletionAction,
   reactivateTenantAction,
   removeCourtesyAction,
   suspendTenantAction,
@@ -115,6 +116,7 @@ export function TenantActionsMenu({
   const [reason, setReason] = useState("");
   const [confirmSlug, setConfirmSlug] = useState("");
   const [understood, setUnderstood] = useState(false);
+  const [wait90, setWait90] = useState(false);
   const [days, setDays] = useState("14");
   const [tier, setTier] = useState<Tier>("PROFISSIONAL");
   const [courtesyDays, setCourtesyDays] = useState("30");
@@ -165,6 +167,7 @@ export function TenantActionsMenu({
     setCopied(false);
     setConfirmSlug("");
     setUnderstood(false);
+    setWait90(false);
     setReason("");
     setDialog(next);
   }
@@ -295,7 +298,7 @@ export function TenantActionsMenu({
       {dialog === "delete" ? (
         <Modal title={`Excluir ${tenantName}`} onClose={close}>
           <p className="text-sm text-zinc-600 dark:text-stone-300">
-            Apaga na hora clientes, agenda, comandas, financeiro, equipe e fotos. Ficam só o registro de pagamento, a auditoria e
+            Por padrão apaga na hora clientes, agenda, comandas, financeiro, equipe e fotos. Ficam só o registro de pagamento, a auditoria e
             um esqueleto anônimo do negócio. Não há como desfazer. Se o negócio paga no cartão, a cobrança recorrente é cancelada no Mercado Pago antes de apagar (se o cancelamento falhar, nada é excluído).
           </p>
           <label className="text-sm font-medium text-zinc-900 dark:text-white" htmlFor={`confirm-${tenantId}`}>
@@ -322,10 +325,22 @@ export function TenantActionsMenu({
             placeholder="Vai para a auditoria, sem dados pessoais"
             className={FIELD}
           />
-          <label className="flex items-start gap-2 text-sm text-zinc-800 dark:text-stone-100">
-            <input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} className="mt-1" />
-            <span>Entendo que a exclusão é definitiva e não pode ser desfeita.</span>
+          <label className="flex items-start gap-2 text-sm font-medium text-zinc-900 dark:text-white">
+            <input type="checkbox" checked={wait90} onChange={(e) => setWait90(e.target.checked)} className="mt-1" />
+            <span>
+              Aguardar 90 dias
+              <span className="block text-xs font-normal text-zinc-600 dark:text-stone-300">
+                Em vez de apagar agora: o negócio é suspenso hoje (perde o acesso, a cobrança no cartão é cancelada) e entra na
+                fila de &quot;Exclusão de dados&quot;, onde você apaga depois dos 90 dias. Reativar o negócio cancela a espera.
+              </span>
+            </span>
           </label>
+          {!wait90 ? (
+            <label className="flex items-start gap-2 text-sm text-zinc-800 dark:text-stone-100">
+              <input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} className="mt-1" />
+              <span>Entendo que a exclusão é definitiva e não pode ser desfeita.</span>
+            </label>
+          ) : null}
           <ErrorLine message={error} />
           <div className="flex justify-end gap-2">
             <button type="button" className={NEUTRAL} onClick={close}>
@@ -334,19 +349,30 @@ export function TenantActionsMenu({
             <button
               type="button"
               className={DANGER}
-              disabled={pending || confirmSlug.trim() !== tenantSlug || !understood || (reason.trim().length > 0 && reason.trim().length < 10)}
+              disabled={
+                pending ||
+                confirmSlug.trim() !== tenantSlug ||
+                (!wait90 && !understood) ||
+                (reason.trim().length > 0 && reason.trim().length < 10)
+              }
               onClick={() =>
-                run(
-                  () => purgeTenantDataAction(tenantId, confirmSlug, reason),
-                  "Negócio excluído.",
-                  () => {
-                    router.replace("/plataforma/negocios");
-                    router.refresh();
-                  },
-                )
+                wait90
+                  ? run(
+                      () => scheduleTenantDeletionAction(tenantId, confirmSlug, reason),
+                      "Negócio suspenso. A exclusão fica liberada em 90 dias.",
+                      () => router.refresh(),
+                    )
+                  : run(
+                      () => purgeTenantDataAction(tenantId, confirmSlug, reason),
+                      "Negócio excluído.",
+                      () => {
+                        router.replace("/plataforma/negocios");
+                        router.refresh();
+                      },
+                    )
               }
             >
-              {pending ? "Excluindo..." : "Excluir definitivamente"}
+              {pending ? (wait90 ? "Agendando..." : "Excluindo...") : wait90 ? "Suspender e aguardar 90 dias" : "Excluir definitivamente"}
             </button>
           </div>
         </Modal>

@@ -70,6 +70,22 @@ export async function purgeTenantDataAction(
   }
 }
 
+// "Aguardar 90 dias": suspende o negócio agora e o deixa na fila da tela "Exclusão de dados" (nada é apagado). O backend
+// revalida a confirmação digitada e cancela a recorrência do cartão no provedor.
+export async function scheduleTenantDeletionAction(id: string, confirmSlug: string, reason: string): Promise<PlatformActionResult> {
+  if (!confirmSlug.trim()) return { ok: false, error: "Digite o endereço do negócio para confirmar." };
+  try {
+    await platformFetch(`/platform/tenants/${encodeURIComponent(id)}/schedule-deletion`, {
+      method: "POST",
+      body: JSON.stringify({ confirmSlug, ...(reason.trim() ? { reason: reason.trim() } : {}) }),
+    });
+    revalidatePath("/plataforma", "layout");
+    return { ok: true };
+  } catch (err) {
+    return toError(err);
+  }
+}
+
 // Exclusão da conta de um cliente final (irreversível). O telefone digitado e o motivo são REVALIDADOS no backend.
 export async function deleteConsumerAction(id: string, confirmPhone: string, reason: string): Promise<PlatformActionResult> {
   if (!confirmPhone.trim()) return { ok: false, error: "Digite o telefone da conta para confirmar." };

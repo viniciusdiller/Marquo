@@ -7,11 +7,13 @@ const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, refresh }) }));
 
 const purgeTenantDataAction = vi.fn();
+const scheduleTenantDeletionAction = vi.fn();
 vi.mock("./actions", () => ({
   extendTrialAction: vi.fn(),
   grantCourtesyAction: vi.fn(),
   passwordResetLinkAction: vi.fn(),
   purgeTenantDataAction: (...args: unknown[]) => purgeTenantDataAction(...args),
+  scheduleTenantDeletionAction: (...args: unknown[]) => scheduleTenantDeletionAction(...args),
   reactivateTenantAction: vi.fn(),
   removeCourtesyAction: vi.fn(),
   suspendTenantAction: vi.fn(),
@@ -42,6 +44,7 @@ const confirm = () => screen.getByRole("button", { name: /excluir definitivament
 describe("TenantActionsMenu: excluir negócio", () => {
   beforeEach(() => {
     purgeTenantDataAction.mockReset();
+    scheduleTenantDeletionAction.mockReset();
     replace.mockReset();
     refresh.mockReset();
   });
@@ -58,14 +61,14 @@ describe("TenantActionsMenu: excluir negócio", () => {
 
     await userEvent.type(screen.getByLabelText(/digite o endereço/i), "salao-da-ana");
     expect(confirm()).toBeDisabled();
-    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("checkbox", { name: /entendo que a exclusão é definitiva/i }));
     expect(confirm()).toBeEnabled();
   });
 
   it("endereço diferente mantém travado (inclusive maiúscula)", async () => {
     await openDeleteDialog();
     await userEvent.type(screen.getByLabelText(/digite o endereço/i), "Salao-da-Ana");
-    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("checkbox", { name: /entendo que a exclusão é definitiva/i }));
     expect(confirm()).toBeDisabled();
   });
 
@@ -73,7 +76,7 @@ describe("TenantActionsMenu: excluir negócio", () => {
     purgeTenantDataAction.mockResolvedValue({ ok: true });
     await openDeleteDialog();
     await userEvent.type(screen.getByLabelText(/digite o endereço/i), "salao-da-ana");
-    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("checkbox", { name: /entendo que a exclusão é definitiva/i }));
     await userEvent.click(confirm());
 
     await waitFor(() => expect(purgeTenantDataAction).toHaveBeenCalledWith(ID, "salao-da-ana", ""));
@@ -85,10 +88,36 @@ describe("TenantActionsMenu: excluir negócio", () => {
     purgeTenantDataAction.mockResolvedValue({ ok: false, error: "Não foi possível falar com o serviço de pagamento agora." });
     await openDeleteDialog();
     await userEvent.type(screen.getByLabelText(/digite o endereço/i), "salao-da-ana");
-    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("checkbox", { name: /entendo que a exclusão é definitiva/i }));
     await userEvent.click(confirm());
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/serviço de pagamento/i);
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("'Aguardar 90 dias' marcado: não apaga, agenda (suspende) e fica na lista; não pede o 'definitivo'", async () => {
+    scheduleTenantDeletionAction.mockResolvedValue({ ok: true });
+    await openDeleteDialog();
+    await userEvent.click(screen.getByRole("checkbox", { name: /aguardar 90 dias/i }));
+    expect(screen.queryByRole("checkbox", { name: /entendo que a exclusão é definitiva/i })).not.toBeInTheDocument();
+
+    const wait = screen.getByRole("button", { name: /suspender e aguardar 90 dias/i });
+    expect(wait).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/digite o endereço/i), "salao-da-ana");
+    expect(wait).toBeEnabled();
+    await userEvent.click(wait);
+
+    await waitFor(() => expect(scheduleTenantDeletionAction).toHaveBeenCalledWith(ID, "salao-da-ana", ""));
+    expect(purgeTenantDataAction).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("desmarcar 'Aguardar 90 dias' volta ao modo de exclusão imediata", async () => {
+    await openDeleteDialog();
+    const box = screen.getByRole("checkbox", { name: /aguardar 90 dias/i });
+    await userEvent.click(box);
+    await userEvent.click(box);
+    expect(screen.getByRole("button", { name: /excluir definitivamente/i })).toBeInTheDocument();
   });
 });

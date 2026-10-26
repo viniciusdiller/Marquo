@@ -60,6 +60,7 @@ export const AUDIT_LABEL: Record<string, string> = {
   TRIAL_SET: "Teste grátis definido",
   PLAN_PRICE_SET: "Preço de plano alterado",
   CONSUMER_DELETED: "Conta de cliente excluída",
+  TENANT_DELETION_SCHEDULED: "Exclusão agendada (90 dias)",
 };
 
 export interface PlatformOverview {

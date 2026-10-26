@@ -16,6 +16,8 @@ import {
 
 export const DELETION_RETENTION_DAYS = 90;
 export const AUDIT_TENANT_PURGED = "TENANT_PURGED";
+export const AUDIT_TENANT_DELETION_SCHEDULED = "TENANT_DELETION_SCHEDULED";
+const SCHEDULED_SUSPENSION_REASON = "Exclusão agendada: aguardando 90 dias";
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Teto de negócios lidos para montar a lista de candidatos (o estado de cobrança é calculado, não é coluna).
 const CANDIDATE_SCAN_CAP = 2_000;
@@ -299,6 +301,61 @@ export class TenantDeletionService {
 
     this.logger.log(`Dados do negócio ${tenantId} excluídos por ${actor}.`);
     return { purged: true, slug: originalSlug };
+  }
+
+  // "Aguardar 90 dias": em vez de apagar agora, tira o acesso e deixa o negócio na fila da tela "Exclusão de dados", onde os
+  // dados são apagados (por uma pessoa, nunca sozinho) quando o prazo de 90 dias cumprir. O acesso termina na hora pela
+  // SUSPENSÃO (reversível: reativar cancela a espera), a recorrência do cartão é cancelada no provedor e a contagem parte
+  // da suspensão. Negócio que já está sem acesso não é suspenso de novo: o prazo segue contando do fim do acesso dele.
+  async scheduleDeletion(
+    tenantId: string,
+    input: { confirmSlug: string; reason?: string },
+    actor: string,
+    now: Date = new Date(),
+  ): Promise<{ scheduled: true; slug: string; eligibleOn: Date }> {
+    const tenant = await this.findTenant(tenantId);
+    if (tenant.deletedAt) throw new ConflictException("Os dados deste negócio já foram excluídos.");
+    if (input.confirmSlug.trim() !== tenant.slug) {
+      throw new BadRequestException("A confirmação não confere com o endereço do negócio.");
+    }
+    const reason = input.reason?.trim() ?? "";
+    if (reason.length > MAX_REASON || (reason.length > 0 && reason.length < MIN_REASON)) {
+      throw new BadRequestException(`O motivo, quando informado, precisa ter de ${MIN_REASON} a ${MAX_REASON} caracteres.`);
+    }
+
+    const before = evaluateDeletion(tenant, tenant.subscription, now);
+    const cardCancelled = await this.cancelCardRecurrence(tenant.subscription);
+    const suspendNow = !before.deletable;
+
+    const accessEndedAt = await this.prisma.$transaction(async (tx) => {
+      if (suspendNow) {
+        // `suspendedAt: null` e `deletedAt: null` no WHERE: não sobrescreve uma suspensão feita no meio do caminho.
+        await tx.tenant.updateMany({
+          where: { id: tenantId, deletedAt: null, suspendedAt: null },
+          data: { suspendedAt: now, suspendedReason: SCHEDULED_SUSPENSION_REASON },
+        });
+      }
+      const ended = suspendNow ? now : (before.accessEndedAt as Date);
+      const eligibleOn = new Date(ended.getTime() + DELETION_RETENTION_DAYS * DAY_MS);
+      await tx.adminAuditLog.create({
+        data: {
+          action: AUDIT_TENANT_DELETION_SCHEDULED,
+          actor,
+          tenantId,
+          detail: [
+            `slug=${tenant.slug}`,
+            suspendNow ? "acesso encerrado agora (suspenso)" : `já sem acesso desde ${ended.toISOString().slice(0, 10)}`,
+            `exclusão liberada em ${eligibleOn.toISOString().slice(0, 10)}`,
+            ...(cardCancelled ? ["recorrência do cartão cancelada no provedor"] : []),
+            ...(reason ? [`motivo: ${reason}`] : []),
+          ].join("; "),
+        },
+      });
+      return ended;
+    });
+
+    this.logger.log(`Exclusão do negócio ${tenantId} agendada (90 dias) por ${actor}.`);
+    return { scheduled: true, slug: tenant.slug, eligibleOn: new Date(accessEndedAt.getTime() + DELETION_RETENTION_DAYS * DAY_MS) };
   }
 
   private hasCardRecurrence(subscription: SubscriptionForStatus): boolean {

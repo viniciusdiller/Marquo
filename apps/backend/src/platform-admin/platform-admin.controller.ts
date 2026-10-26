@@ -282,6 +282,19 @@ export class PlatformAdminController {
     return this.deletion.preview(id);
   }
 
+  // "Aguardar 90 dias": suspende agora e deixa o negócio na fila da tela "Exclusão de dados".
+  @UseGuards(PlatformAdminGuard)
+  @Post("tenants/:id/schedule-deletion")
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  scheduleTenantDeletion(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: DeleteTenantDto,
+    @CurrentPlatformAdmin() admin: AuthenticatedPlatformAdmin,
+  ) {
+    return this.deletion.scheduleDeletion(id, dto, admin.email);
+  }
+
   @UseGuards(PlatformAdminGuard)
   @Post("tenants/:id/delete")
   @HttpCode(200)
