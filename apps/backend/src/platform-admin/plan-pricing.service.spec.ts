@@ -7,7 +7,7 @@ import { PlatformAdminController } from "./platform-admin.controller";
 import { PlatformAdminGuard } from "./platform-admin.guard";
 import { SetPlanPriceDto } from "./dto/platform-admin.dto";
 import { AUDIT_PLAN_PRICE_SET, PlanPricingService } from "./plan-pricing.service";
-import { MIN_CHARGE_CENTS } from "../billing/payments/pricing";
+import { MAX_PLAN_PRICE_CENTS, MIN_CHARGE_CENTS } from "../billing/payments/pricing";
 import { PrismaService } from "../prisma/prisma.service";
 
 const LIST = Object.fromEntries(PLAN_CATALOG.map((p) => [p.tier, p.priceCents])) as Record<string, number>;
@@ -39,10 +39,10 @@ describe("PlanPricingService.list", () => {
       priceCents: 3990,
       listPriceCents: LIST.ESSENCIAL,
       minPriceCents: MIN_CHARGE_CENTS,
-      discounted: true,
+      maxPriceCents: MAX_PLAN_PRICE_CENTS,
       cardSubscribers: 3,
     });
-    expect(profissional).toMatchObject({ discounted: false, cardSubscribers: 0 });
+    expect(profissional).toMatchObject({ priceCents: LIST.PROFISSIONAL, cardSubscribers: 0 });
   });
 });
 
@@ -66,10 +66,20 @@ describe("PlanPricingService.setPrice", () => {
     expect(tx.plan.updateMany.mock.calls[0][0].data).toEqual({ priceCents: LIST.ESSENCIAL, priceOverrideCents: null });
   });
 
-  it("recusa acima do preço de tabela (reajuste é migração deliberada)", async () => {
+  it("permite subir acima do preço de tabela e grava o override", async () => {
     const { service, tx } = build();
-    await expect(service.setPrice("ESSENCIAL", LIST.ESSENCIAL + 1, "a")).rejects.toThrow(BadRequestException);
-    expect(tx.plan.updateMany).not.toHaveBeenCalled();
+    await service.setPrice("ESSENCIAL", LIST.ESSENCIAL + 1000, "admin@x.com");
+    expect(tx.plan.updateMany.mock.calls[0][0].data).toEqual({
+      priceCents: LIST.ESSENCIAL + 1000,
+      priceOverrideCents: LIST.ESSENCIAL + 1000,
+    });
+    expect(tx.adminAuditLog.create.mock.calls[0][0].data.detail).toBe("Essencial: R$ 49,90 → R$ 59,90");
+  });
+
+  it("recusa acima do teto (zero a mais por engano)", async () => {
+    const top = build({ ...LIST, PREMIUM: LIST.PREMIUM });
+    await expect(top.service.setPrice("PREMIUM", MAX_PLAN_PRICE_CENTS + 1, "a")).rejects.toThrow(BadRequestException);
+    expect(top.tx.plan.updateMany).not.toHaveBeenCalled();
   });
 
   it.each([MIN_CHARGE_CENTS - 1, 0, -100, 39.9, NaN])("recusa valor abaixo do piso ou não inteiro (%s)", async (value) => {
@@ -116,7 +126,7 @@ describe("rotas de preço dos planos", () => {
   it("o DTO recusa texto, decimal, zero e campo extra de valor", async () => {
     const check = async (body: unknown) => (await validate(plainToInstance(SetPlanPriceDto, body as object))).length;
     expect(await check({ priceCents: 3990 })).toBe(0);
-    for (const bad of [{ priceCents: "3990" }, { priceCents: 39.9 }, { priceCents: 0 }, { priceCents: -1 }, {}]) {
+    for (const bad of [{ priceCents: "3990" }, { priceCents: 39.9 }, { priceCents: 0 }, { priceCents: -1 }, { priceCents: MAX_PLAN_PRICE_CENTS + 1 }, {}]) {
       expect(await check(bad)).toBeGreaterThan(0);
     }
   });

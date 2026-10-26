@@ -4,6 +4,8 @@ import { DateTime } from "luxon";
 // Menor valor que cobramos numa tentativa. Cupom nenhum deixa a cobrança abaixo disto: o Mercado Pago tem valor
 // mínimo por transação e uma cobrança de centavos não vale a tentativa.
 export const MIN_CHARGE_CENTS = 500;
+// Teto de um plano mensal definido pelo painel: barra o zero a mais por engano (R$ 49,90 digitado como R$ 499,00).
+export const MAX_PLAN_PRICE_CENTS = 100_000;
 
 export interface PriceQuote {
   listPriceCents: number;

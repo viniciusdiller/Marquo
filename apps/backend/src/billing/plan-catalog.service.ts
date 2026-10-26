@@ -5,8 +5,8 @@ import { PrismaService } from "../prisma/prisma.service";
 
 // A tabela `Plan` é ESPELHO do catálogo (packages/shared-types/src/index.ts): a cada boot ela é regravada a partir
 // dele. Mudar limite ou preço de tabela = editar o catálogo + deploy (a migration `seed_plans` guarda valores antigos
-// de propósito, e este sync os corrige no primeiro boot). Única exceção: o preço REBAIXADO pelo painel da plataforma
-// (`priceOverrideCents`), que sobrevive ao boot, sempre limitado ao preço do catálogo.
+// de propósito, e este sync os corrige no primeiro boot). Única exceção: o preço definido pelo painel da plataforma
+// (`priceOverrideCents`, para menos ou para mais que a tabela), que sobrevive ao boot.
 @Injectable()
 export class PlanCatalogService implements OnModuleInit {
   private readonly logger = new Logger(PlanCatalogService.name);
@@ -24,8 +24,7 @@ export class PlanCatalogService implements OnModuleInit {
       const override = current?.priceOverrideCents ?? null;
       const values = {
         name: entry.name,
-        // Catálogo mais barato que o desconto antigo (deploy baixou o preço): vale o menor, nunca cobra acima da tabela.
-        priceCents: override === null ? entry.priceCents : Math.min(override, entry.priceCents),
+        priceCents: override ?? entry.priceCents,
         maxProfessionals: entry.maxProfessionals,
       };
       await this.prisma.plan.upsert({ where: { tier }, update: values, create: { tier, ...values } });
