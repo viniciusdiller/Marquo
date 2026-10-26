@@ -118,7 +118,7 @@ describe("rotas de preço dos planos", () => {
 
   it("alterar usa o e-mail da conta como autor e só o preço do corpo", async () => {
     const setPrice = jest.fn().mockResolvedValue({});
-    const controller = new PlatformAdminController({} as never, {} as never, {} as never, {} as never, {} as never, { setPrice } as never);
+    const controller = new PlatformAdminController({} as never, {} as never, {} as never, {} as never, {} as never, { setPrice } as never, {} as never);
     await controller.setPlanPrice("ESSENCIAL" as never, { priceCents: 3990 }, { email: "admin@x.com" } as never);
     expect(setPrice).toHaveBeenCalledWith("ESSENCIAL", 3990, "admin@x.com");
   });

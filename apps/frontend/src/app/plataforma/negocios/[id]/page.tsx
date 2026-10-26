@@ -80,6 +80,20 @@ export default async function NegocioDetalhePage({ params }: { params: Promise<{
         </div>
       </section>
 
+      <section className="rounded-2xl border border-red-200 p-5 dark:border-red-500/30">
+        <h2 className="font-display text-lg font-semibold text-red-700 dark:text-red-300">Excluir negócio</h2>
+        <p className="mt-1 text-sm text-zinc-600 dark:text-stone-300">
+          Apaga clientes, agenda, comandas, financeiro, equipe e fotos. Pede o motivo e a confirmação digitada, e não há como
+          desfazer. Negócio com assinatura paga em vigor não pode ser excluído.
+        </p>
+        <Link
+          href={`/plataforma/exclusao/${tenant.id}`}
+          className="mt-4 inline-flex rounded-lg px-4 py-2 text-sm font-semibold text-red-700 ring-1 ring-red-300 ring-inset hover:bg-red-50 dark:text-red-300 dark:ring-red-500/40 dark:hover:bg-red-500/10"
+        >
+          Simular e excluir…
+        </Link>
+      </section>
+
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-zinc-200 p-5 dark:border-white/10">
           <h2 className="font-display text-lg font-semibold text-zinc-900 dark:text-white">Cobrança</h2>

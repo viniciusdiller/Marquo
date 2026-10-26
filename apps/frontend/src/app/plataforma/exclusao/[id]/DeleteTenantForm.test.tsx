@@ -65,7 +65,7 @@ describe("DeleteTenantForm", () => {
 
     await userEvent.click(button());
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/plataforma/exclusao"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/plataforma/negocios"));
     expect(purgeTenantDataAction).toHaveBeenCalledWith(ID, "salao-teste", "Pedido do titular em 22/10");
   });
 

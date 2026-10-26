@@ -50,7 +50,8 @@ export async function suspendTenantAction(id: string, reason: string): Promise<P
 }
 
 // Exclusão dos dados de um negócio (irreversível). A confirmação digitada e o motivo são REVALIDADOS no backend, que
-// também decide se o negócio pode ser excluído (acesso encerrado) e se o prazo de 90 dias já terminou.
+// também decide se o negócio pode ser excluído (nunca com assinatura paga em vigor) e se exige motivo (ainda com
+// acesso, ou antes do prazo de 90 dias).
 export async function purgeTenantDataAction(
   id: string,
   confirmSlug: string,
@@ -61,6 +62,22 @@ export async function purgeTenantDataAction(
     await platformFetch(`/platform/tenants/${encodeURIComponent(id)}/delete`, {
       method: "POST",
       body: JSON.stringify({ confirmSlug, ...(reason.trim() ? { reason: reason.trim() } : {}) }),
+    });
+    revalidatePath("/plataforma", "layout");
+    return { ok: true };
+  } catch (err) {
+    return toError(err);
+  }
+}
+
+// Exclusão da conta de um cliente final (irreversível). O telefone digitado e o motivo são REVALIDADOS no backend.
+export async function deleteConsumerAction(id: string, confirmPhone: string, reason: string): Promise<PlatformActionResult> {
+  if (!confirmPhone.trim()) return { ok: false, error: "Digite o telefone da conta para confirmar." };
+  if (reason.trim().length < 10) return { ok: false, error: "Informe o motivo (mínimo de 10 caracteres)." };
+  try {
+    await platformFetch(`/platform/consumers/${encodeURIComponent(id)}/delete`, {
+      method: "POST",
+      body: JSON.stringify({ confirmPhone: confirmPhone.trim(), reason: reason.trim() }),
     });
     revalidatePath("/plataforma", "layout");
     return { ok: true };

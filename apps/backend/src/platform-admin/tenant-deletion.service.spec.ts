@@ -206,12 +206,78 @@ describe("TenantDeletionService.purge", () => {
     expect(rmMock).not.toHaveBeenCalled();
   });
 
-  it("negócio que ainda tem acesso: 409, mesmo com a confirmação certa", async () => {
-    const { service, prisma } = build({
-      tenantRow: { id: TENANT_ID, name: "S", slug: "salao-teste", createdAt: ago(5), trialEndsAt: new Date(NOW.getTime() + 5 * DAY), suspendedAt: null, deletedAt: null, subscription: null },
+  describe("negócio que ainda tem acesso (ex.: conta de teste)", () => {
+    const active = (subscription: unknown = null, over: Record<string, unknown> = {}) => ({
+      id: TENANT_ID,
+      name: "S",
+      slug: "salao-teste",
+      createdAt: ago(5),
+      trialEndsAt: new Date(NOW.getTime() + 5 * DAY),
+      suspendedAt: null,
+      deletedAt: null,
+      subscription,
+      ...over,
     });
-    await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).rejects.toThrow(ConflictException);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+
+    it("em teste: exclui com a confirmação certa E um motivo, e audita o motivo", async () => {
+      const { service, adminAuditLog, calls } = build({ tenantRow: active() });
+      await expect(
+        service.purge(TENANT_ID, { confirmSlug: "salao-teste", reason: "conta de teste do time" }, "a@b.com", NOW),
+      ).resolves.toEqual({ purged: true, slug: "salao-teste" });
+      expect(calls[0]).toBe("adminAuditLog");
+      const detail = (adminAuditLog.create.mock.calls[0][0] as { data: { detail: string } }).data.detail;
+      expect(detail).toContain("ainda com acesso");
+      expect(detail).toContain("conta de teste do time");
+    });
+
+    it("sem motivo (ou curto): 400 e NADA é escrito", async () => {
+      const { service, prisma } = build({ tenantRow: active() });
+      await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).rejects.toThrow(/ainda tem acesso/);
+      await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste", reason: "teste" }, "a@b.com", NOW)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("confirmação digitada errada continua barrando", async () => {
+      const { service, prisma } = build({ tenantRow: active() });
+      await expect(
+        service.purge(TENANT_ID, { confirmSlug: "outro", reason: "conta de teste do time" }, "a@b.com", NOW),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("com assinatura PAGA em vigor (cartão ativo ou em atraso): 409, mesmo com confirmação e motivo", async () => {
+      for (const status of ["ACTIVE", "PAST_DUE"]) {
+        const { service, prisma } = build({
+          tenantRow: active(sub({ status, currentPeriodEnd: new Date(NOW.getTime() + 10 * DAY) })),
+        });
+        await expect(
+          service.purge(TENANT_ID, { confirmSlug: "salao-teste", reason: "pedido do titular" }, "a@b.com", NOW),
+        ).rejects.toThrow(/assinatura paga em vigor/);
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      }
+    });
+
+    it("cortesia não é assinatura paga: pode excluir (com motivo)", async () => {
+      const { service } = build({
+        tenantRow: active(sub({ courtesy: true, method: null, currentPeriodEnd: new Date(NOW.getTime() + 10 * DAY) })),
+      });
+      await expect(
+        service.purge(TENANT_ID, { confirmSlug: "salao-teste", reason: "cortesia encerrada a pedido" }, "a@b.com", NOW),
+      ).resolves.toMatchObject({ purged: true });
+    });
+
+    it("simulação (preview) avisa quando está bloqueado pela assinatura paga e quando tem acesso", async () => {
+      const paid = build({ tenantRow: active(sub({ currentPeriodEnd: new Date(NOW.getTime() + 10 * DAY) })) });
+      await expect(paid.service.preview(TENANT_ID, NOW)).resolves.toMatchObject({
+        purgeable: false,
+        hasAccess: true,
+        blockedReason: expect.stringContaining("assinatura paga"),
+      });
+      const trial = build({ tenantRow: active() });
+      await expect(trial.service.preview(TENANT_ID, NOW)).resolves.toMatchObject({ purgeable: true, hasAccess: true, blockedReason: null });
+    });
   });
 
   it("negócio já excluído: 409 com mensagem própria", async () => {

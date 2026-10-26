@@ -254,7 +254,7 @@ export class DeleteTenantDto {
   @MaxLength(120)
   confirmSlug!: string;
 
-  // Obrigatório só quando o prazo de 90 dias ainda não terminou (exclusão antecipada). Sem dado pessoal: vai para a auditoria.
+  // Obrigatório quando o negócio ainda tem acesso ou o prazo de 90 dias não terminou (exclusão antecipada). Sem dado pessoal: vai para a auditoria.
   @IsOptional()
   @Transform(trim)
   @IsString()
@@ -263,3 +263,27 @@ export class DeleteTenantDto {
 }
 
 export class PlatformDeletionQueryDto extends PaginationQueryDto {}
+
+export class PlatformConsumersQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+}
+
+// Exclusão da conta de um cliente final. `confirmPhone` é o telefone digitado (o service compara com o do banco, só
+// dígitos); o motivo vai para a auditoria, sem dado pessoal.
+export class DeleteConsumerDto {
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(30)
+  confirmPhone!: string;
+
+  @Transform(trim)
+  @IsString()
+  @MinLength(10)
+  @MaxLength(300)
+  reason!: string;
+}

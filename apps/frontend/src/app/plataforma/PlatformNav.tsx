@@ -12,6 +12,7 @@ const ITEMS = [
   { href: "/plataforma/precos", label: "Preços" },
   { href: "/plataforma/cupons", label: "Cupons" },
   { href: "/plataforma/usuarios", label: "Usuários" },
+  { href: "/plataforma/clientes", label: "Clientes" },
   { href: "/plataforma/exclusao", label: "Exclusão de dados" },
   { href: "/plataforma/auditoria", label: "Auditoria" },
 ];

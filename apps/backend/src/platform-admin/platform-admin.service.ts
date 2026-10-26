@@ -189,7 +189,8 @@ export class PlatformAdminService {
   async listTenants(query: PlatformTenantsQueryDto) {
     const pagination = resolvePagination(query);
     const search = query.search?.trim();
-    const and: Prisma.TenantWhereInput[] = [];
+    // Negócio já excluído vira só um esqueleto anônimo (registro de pagamento): não aparece na lista.
+    const and: Prisma.TenantWhereInput[] = [{ deletedAt: null }];
 
     if (search) {
       and.push({
