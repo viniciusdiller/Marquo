@@ -71,6 +71,7 @@ export default async function NegocioDetalhePage({ params }: { params: Promise<{
             variant="buttons"
             tenantId={tenant.id}
             tenantName={tenant.name}
+            tenantSlug={tenant.slug}
             suspended={tenant.suspendedAt !== null}
             hasSubscription={tenant.subscription !== null}
             courtesy={tenant.subscription?.courtesy ?? false}
@@ -84,7 +85,7 @@ export default async function NegocioDetalhePage({ params }: { params: Promise<{
         <h2 className="font-display text-lg font-semibold text-red-700 dark:text-red-300">Excluir negócio</h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-stone-300">
           Apaga clientes, agenda, comandas, financeiro, equipe e fotos. Pede o motivo e a confirmação digitada, e não há como
-          desfazer. Negócio com assinatura paga em vigor não pode ser excluído.
+          desfazer. Se o negócio paga no cartão, a cobrança recorrente é cancelada no Mercado Pago antes.
         </p>
         <Link
           href={`/plataforma/exclusao/${tenant.id}`}

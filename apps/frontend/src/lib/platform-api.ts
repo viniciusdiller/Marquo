@@ -229,9 +229,11 @@ export interface PlatformDeletionPreview {
   deletable: boolean;
   eligible: boolean;
   eligibleOn: string | null;
-  // Pode ser excluído agora (só não pode com assinatura paga em vigor) e, se não, por quê. `hasAccess` = ainda usa o Marquo.
+  // Pode ser excluído agora (só não pode o que já foi excluído) e, se não, por quê. `hasAccess` = ainda usa o Marquo.
   purgeable: boolean;
   blockedReason: string | null;
+  // Paga no cartão: a recorrência é cancelada no Mercado Pago junto com a exclusão.
+  cancelsCardSubscription: boolean;
   hasAccess: boolean;
   retentionDays: number;
   counts: {

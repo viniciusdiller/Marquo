@@ -15,6 +15,6 @@ import { MercadoPagoWebhookController } from "./payments/mercadopago-webhook.con
   imports: [CouponsModule],
   controllers: [BillingController, PaymentsController, MercadoPagoWebhookController],
   providers: [PlanLimitService, BillingService, PlanCatalogService, MercadoPagoClient, PaymentsService],
-  exports: [PlanLimitService],
+  exports: [PlanLimitService, MercadoPagoClient],
 })
 export class BillingModule {}

@@ -62,9 +62,14 @@ export default async function ExclusaoDetalhePage({ params }: { params: Promise<
 
       <section className="rounded-2xl border border-red-200 p-5 dark:border-red-500/30">
         <h2 className="font-display text-lg font-semibold text-red-700 dark:text-red-300">Excluir os dados</h2>
+        {preview.cancelsCardSubscription ? (
+          <p className="mt-1 text-sm font-medium text-amber-700 dark:text-amber-300">
+            Este negócio paga no cartão: a cobrança recorrente será cancelada no Mercado Pago antes de apagar.
+          </p>
+        ) : null}
         {preview.hasAccess ? (
           <p className="mt-1 text-sm text-zinc-600 dark:text-stone-300">
-            Este negócio ainda tem acesso ao Marquo. A exclusão é permitida, mas exige um motivo registrado na auditoria.
+            Este negócio ainda tem acesso ao Marquo. A exclusão é permitida a qualquer momento, sem esperar prazo.
           </p>
         ) : null}
         {preview.accessEndedAt ? (
@@ -72,12 +77,12 @@ export default async function ExclusaoDetalhePage({ params }: { params: Promise<
             Acesso terminou em {formatDateTime(preview.accessEndedAt)}.{" "}
             {preview.eligible
               ? `O prazo de ${preview.retentionDays} dias foi cumprido.`
-              : `O prazo de ${preview.retentionDays} dias termina em ${formatDateTime(preview.eligibleOn)}: antes disso, só com motivo registrado.`}
+              : `O prazo de ${preview.retentionDays} dias termina em ${formatDateTime(preview.eligibleOn)}, mas você pode excluir agora.`}
           </p>
         ) : null}
         <div className="mt-5">
           {preview.purgeable ? (
-            <DeleteTenantForm tenantId={preview.id} slug={preview.slug} eligible={preview.deletable && preview.eligible} />
+            <DeleteTenantForm tenantId={preview.id} slug={preview.slug} />
           ) : (
             <p role="alert" className="text-sm text-zinc-600 dark:text-stone-300">
               {preview.blockedReason ?? "Este negócio não pode ser excluído agora."}
