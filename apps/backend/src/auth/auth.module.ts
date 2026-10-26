@@ -7,6 +7,7 @@ import { AuthController } from "./auth.controller";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { RefreshTokenService } from "./refresh-token.service";
 import { PasswordResetService } from "./password-reset.service";
+import { EmailVerificationService } from "./email-verification.service";
 import { EmailModule } from "../email/email.module";
 
 @Module({
@@ -23,9 +24,9 @@ import { EmailModule } from "../email/email.module";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, RefreshTokenService, PasswordResetService, JwtStrategy],
+  providers: [AuthService, RefreshTokenService, PasswordResetService, EmailVerificationService, JwtStrategy],
   // JwtModule exportado para o consumer-auth reaproveitar o mesmo JwtService (mesmo
   // JWT_SECRET) sem reconfigurar — ver consumer-auth/consumer-auth.module.ts.
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, EmailVerificationService, JwtModule],
 })
 export class AuthModule {}

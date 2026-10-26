@@ -19,18 +19,22 @@ import { PlatformAdminGuard } from "./platform-admin.guard";
 import { PlatformAuthService } from "./platform-auth.service";
 import { PlatformAdminService } from "./platform-admin.service";
 import { PlatformCouponsService } from "./platform-coupons.service";
+import { TenantDeletionService } from "./tenant-deletion.service";
 import { AuthenticatedPlatformAdmin } from "./platform-admin.config";
 import {
   CreateCouponDto,
   CreatePlatformTenantDto,
+  DeleteTenantDto,
   ExtendTrialDto,
   GrantCourtesyDto,
   PlatformAuditQueryDto,
   PlatformCouponsQueryDto,
+  PlatformDeletionQueryDto,
   PlatformLoginDto,
   PlatformSubscriptionsQueryDto,
   PlatformTenantsQueryDto,
   PlatformUsersQueryDto,
+  PlatformVerifyCodeDto,
   SuspendTenantDto,
   UpdateCouponDto,
   UpdateOwnerPhoneDto,
@@ -46,6 +50,7 @@ export class PlatformAdminController {
     private readonly auth: PlatformAuthService,
     private readonly platform: PlatformAdminService,
     private readonly coupons: PlatformCouponsService,
+    private readonly deletion: TenantDeletionService,
   ) {}
 
   @Post("auth/login")
@@ -53,6 +58,14 @@ export class PlatformAdminController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   login(@Body() dto: PlatformLoginDto) {
     return this.auth.login(dto.email, dto.password);
+  }
+
+  // Segunda etapa do login (só existe com PLATFORM_ADMIN_2FA=email): troca o código recebido por e-mail pela sessão.
+  @Post("auth/verify")
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  verify(@Body() dto: PlatformVerifyCodeDto) {
+    return this.auth.verifyCode(dto.challengeId, dto.code);
   }
 
   @UseGuards(PlatformAdminGuard)
@@ -200,5 +213,32 @@ export class PlatformAdminController {
   @Get("audit")
   audit(@Query() query: PlatformAuditQueryDto) {
     return this.platform.listAudit(query);
+  }
+
+  // ───────── Exclusão de dados (promessa dos termos: 90 dias depois do fim do acesso) ─────────
+  // Nada é apagado sozinho: lista, simulação e uma ação confirmada, sempre com auditoria.
+
+  @UseGuards(PlatformAdminGuard)
+  @Get("deletion/candidates")
+  deletionCandidates(@Query() query: PlatformDeletionQueryDto) {
+    return this.deletion.listCandidates(query);
+  }
+
+  @UseGuards(PlatformAdminGuard)
+  @Get("tenants/:id/deletion-preview")
+  deletionPreview(@Param("id", ParseUUIDPipe) id: string) {
+    return this.deletion.preview(id);
+  }
+
+  @UseGuards(PlatformAdminGuard)
+  @Post("tenants/:id/delete")
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  deleteTenantData(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: DeleteTenantDto,
+    @CurrentPlatformAdmin() admin: AuthenticatedPlatformAdmin,
+  ) {
+    return this.deletion.purge(id, dto, admin.email);
   }
 }

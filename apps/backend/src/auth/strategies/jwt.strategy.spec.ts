@@ -13,7 +13,7 @@ function build(user: Record<string, unknown> | null) {
   return { strategy: new JwtStrategy(config, prisma), prisma };
 }
 
-const ROW = { tenantId: "t-1", role: Role.OWNER, isActive: true, passwordChangedAt: null, professional: null };
+const ROW = { tenantId: "t-1", role: Role.OWNER, isActive: true, emailVerifiedAt: new Date("2026-01-01"), passwordChangedAt: null, professional: null };
 const payload = (over: Record<string, unknown> = {}) => ({ sub: "u-1", tenantId: "t-1", role: Role.OWNER, iat: CHANGED_SEC, ...over });
 
 describe("JwtStrategy.validate: sessão depois da redefinição de senha", () => {
@@ -35,6 +35,14 @@ describe("JwtStrategy.validate: sessão depois da redefinição de senha", () =>
   it("sem redefinição nada muda; usuário desativado continua 401", async () => {
     await expect(build(ROW).strategy.validate(payload({ iat: 1 }))).resolves.toBeDefined();
     await expect(build({ ...ROW, isActive: false }).strategy.validate(payload())).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+});
+
+describe("JwtStrategy.validate: e-mail não confirmado", () => {
+  it("conta sem e-mail confirmado não tem sessão (401), mesmo com token válido", async () => {
+    await expect(build({ ...ROW, emailVerifiedAt: null }).strategy.validate(payload({ iat: 1 }))).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
   });

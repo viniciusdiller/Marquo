@@ -1,6 +1,7 @@
 import { plainToInstance } from "class-transformer";
 import {
   IsEmail,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -124,6 +125,13 @@ class EnvironmentVariables {
   @IsEmail()
   PLATFORM_ADMIN_EMAIL?: string;
 
+  // Segundo fator do login da plataforma. "email" = a senha certa manda um código de 6 dígitos ao PLATFORM_ADMIN_EMAIL,
+  // que precisa ser uma caixa que você lê. Opcional (desligado por padrão: ligar sem o e-mail funcionando trancaria você
+  // para fora); exige conta da plataforma e e-mail configurados, conferido em validateEnv.
+  @IsOptional()
+  @IsIn(["email"], { message: 'PLATFORM_ADMIN_2FA só aceita "email".' })
+  PLATFORM_ADMIN_2FA?: string;
+
   @ValidateIf((o) => o.PLATFORM_ADMIN_EMAIL !== undefined || o.PLATFORM_ADMIN_PASSWORD_HASH !== undefined)
   @Matches(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/, {
     message: "PLATFORM_ADMIN_PASSWORD_HASH deve ser um hash bcrypt (gere com `pnpm --filter backend platform:hash`).",
@@ -139,6 +147,21 @@ export function validateEnv(config: Record<string, unknown>) {
 
   if (errors.length > 0) {
     throw new Error(`Config inválida: ${errors.toString()}`);
+  }
+
+  // 2FA ligado sem como entregar o código = ninguém mais entra no painel. Falha no boot, não no primeiro login.
+  if (validated.PLATFORM_ADMIN_2FA === "email") {
+    const missing = [
+      ["PLATFORM_ADMIN_EMAIL", validated.PLATFORM_ADMIN_EMAIL],
+      ["PLATFORM_ADMIN_PASSWORD_HASH", validated.PLATFORM_ADMIN_PASSWORD_HASH],
+      ["RESEND_API_KEY", validated.RESEND_API_KEY],
+      ["EMAIL_FROM", validated.EMAIL_FROM],
+    ]
+      .filter(([, value]) => !value)
+      .map(([name]) => name);
+    if (missing.length > 0) {
+      throw new Error(`Config inválida: PLATFORM_ADMIN_2FA=email exige também ${missing.join(", ")}.`);
+    }
   }
 
   return validated;

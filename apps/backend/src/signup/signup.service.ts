@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 import { Prisma, Role } from "@marquo/database";
 import { LEGAL_DOCS_VERSION } from "@marquo/shared-types";
@@ -9,6 +9,7 @@ import { CouponsService } from "../coupons/coupons.service";
 import { isReservedSlug } from "../common/constants/reserved-slugs";
 import { TRIAL_DAYS } from "../billing/trial.constants";
 import { SignupDto } from "./dto/signup.dto";
+import { EmailVerificationService, newVerificationToken } from "../auth/email-verification.service";
 
 const BCRYPT_ROUNDS = 12;
 const MAX_SLUG_ATTEMPTS = 3;
@@ -38,15 +39,24 @@ export class SignupService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly coupons: CouponsService,
+    private readonly verification: EmailVerificationService,
   ) {}
 
   // Cria Tenant + OWNER em trial, tudo numa transação. Nasce SEM Subscription: o status de
   // billing vem de computeBillingStatus (TRIALING até trialEndsAt, depois TRIAL_EXPIRED).
-  async signup(dto: SignupDto): Promise<{ slug: string }> {
+  async signup(dto: SignupDto): Promise<{ slug: string; emailVerificationRequired: boolean }> {
     // Antes de qualquer custo (bcrypt, banco): sem o aceite da versão vigente não há conta.
     if (dto.acceptedTermsVersion !== LEGAL_DOCS_VERSION) {
       throw new BadRequestException(TERMS_OUTDATED_MESSAGE);
     }
+
+    // Confirmação de e-mail: sem como enviar o link em produção, recusa ANTES de criar qualquer coisa (conta que ninguém
+    // consegue confirmar só ficaria presa). Em desenvolvimento sem e-mail a conta nasce confirmada.
+    const mode = this.verification.mode();
+    if (mode === "unavailable") {
+      throw new ServiceUnavailableException("Não foi possível concluir o cadastro agora. Tente novamente mais tarde.");
+    }
+    const verification = mode === "verify" ? newVerificationToken() : null;
 
     // O hash roda ANTES de qualquer consulta, então o custo de CPU é o mesmo com e-mail novo ou
     // repetido (não há atalho barato que diferencie os caminhos pelo tempo).
@@ -56,7 +66,7 @@ export class SignupService {
 
     for (let attempt = 1; ; attempt++) {
       try {
-        return await this.prisma.$transaction(async (tx) => {
+        const result = await this.prisma.$transaction(async (tx) => {
           // Cupom ANTES de criar o negócio, na mesma transação: cupom inválido derruba o cadastro inteiro e o uso
           // reservado volta junto se qualquer passo seguinte falhar.
           const coupon = couponCode ? await this.coupons.reserve(tx, couponCode) : null;
@@ -88,6 +98,10 @@ export class SignupService {
               // Data e versão vêm do servidor (a versão é a vigente, já conferida acima).
               termsAcceptedAt: new Date(),
               termsVersion: LEGAL_DOCS_VERSION,
+              // Sem confirmação até o dono do e-mail abrir o link (ver AuthService.login).
+              emailVerifiedAt: verification ? null : new Date(),
+              emailVerificationTokenHash: verification?.hash ?? null,
+              emailVerificationExpiresAt: verification?.expiresAt ?? null,
             },
           });
 
@@ -95,6 +109,14 @@ export class SignupService {
 
           return { slug };
         });
+
+        // Só depois do commit; falha de e-mail não desfaz o cadastro (o link pode ser reenviado pela tela de entrada).
+        if (verification) {
+          void this.verification
+            .sendVerificationEmail({ name: dto.ownerName, email: dto.email }, verification.token)
+            .catch(() => undefined);
+        }
+        return { ...result, emailVerificationRequired: verification !== null };
       } catch (error) {
         // A unicidade de e-mail é decidida pelo banco (sem "checar antes, inserir depois"),
         // então dois cadastros simultâneos com o mesmo e-mail não passam os dois.

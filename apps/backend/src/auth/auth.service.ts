@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { Role } from "@marquo/database";
@@ -11,6 +11,7 @@ import { RefreshDto } from "./dto/refresh.dto";
 import { SetPasswordDto } from "./dto/set-password.dto";
 import { JwtPayload, RefreshTokenPayload } from "./types/auth-user";
 import { RefreshTokenService, TokenFamily } from "./refresh-token.service";
+import { EMAIL_NOT_VERIFIED_CODE } from "./email-verification.service";
 
 const BCRYPT_ROUNDS = 12;
 
@@ -58,6 +59,15 @@ export class AuthService {
       await this.prisma.user.update({
         where: { id: user.id },
         data: { failedLoginAttempts: 0, lockedUntil: null },
+      });
+    }
+
+    // Só DEPOIS de acertar a senha: quem não sabe a senha nunca descobre que a conta existe nem que falta confirmar (o
+    // 401 genérico acima é idêntico). Conta criada pelo cadastro público não entra até confirmar o e-mail.
+    if (!user.emailVerifiedAt) {
+      throw new ForbiddenException({
+        code: EMAIL_NOT_VERIFIED_CODE,
+        message: "Confirme seu e-mail para entrar. Enviamos um link para o endereço do cadastro.",
       });
     }
 
@@ -171,6 +181,11 @@ export class AuthService {
         passwordHash,
         passwordSetTokenHash: null,
         passwordSetTokenExpiresAt: null,
+        // O link de definir senha só chegou a quem controla a caixa de e-mail (ou foi entregue pelo suporte depois de
+        // confirmar a identidade): isso também comprova o e-mail e destrava a conta.
+        emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+        emailVerificationTokenHash: null,
+        emailVerificationExpiresAt: null,
         // Derruba as sessões emitidas antes desta troca (ver isSessionRevoked).
         passwordChangedAt: new Date(),
         // Recuperar a conta também zera o bloqueio por tentativas erradas.

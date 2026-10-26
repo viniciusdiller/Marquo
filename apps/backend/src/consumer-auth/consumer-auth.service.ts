@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
   UnauthorizedException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { JwtService } from "@nestjs/jwt";
@@ -22,6 +23,7 @@ import {
   UpdateConsumerProfileDto,
 } from "./dto/consumer-dtos";
 import { AuthenticatedConsumer, ConsumerJwtPayload, passwordVersion } from "./types/consumer-auth-user";
+import { ConsumerEmailCodeService } from "./consumer-email-code.service";
 
 // Validade de cada sessão/token e também o que o JWT carrega em `exp`. Sozinho seria só um
 // prazo fixo mais curto que os 30 dias de antes — o que faz a sessão "nunca sair" é o
@@ -52,6 +54,7 @@ export class ConsumerAuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly emailCodes: ConsumerEmailCodeService,
   ) {}
 
   // Cadastro E reivindicação de conta antiga, no mesmo formulário: se o telefone já tinha
@@ -66,6 +69,17 @@ export class ConsumerAuthService {
     }
     const phone = this.normalize(dto.phone);
     const email = dto.email.trim().toLowerCase();
+
+    // Antes de qualquer custo: o e-mail precisa ser de quem está se cadastrando. Com e-mail configurado o código é
+    // obrigatório; sem e-mail em produção o cadastro é recusado (não há como entregar o código).
+    const codeMode = this.emailCodes.mode();
+    if (codeMode === "unavailable") {
+      throw new ServiceUnavailableException("Não foi possível concluir o cadastro agora. Tente novamente mais tarde.");
+    }
+    if (codeMode === "required" && this.emailCodes.check(email, dto.emailCode ?? "") !== "ok") {
+      throw new BadRequestException("Código inválido ou expirado. Peça um novo código.");
+    }
+
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     const consumer = await this.prisma.$transaction(async (tx) => {
@@ -89,6 +103,8 @@ export class ConsumerAuthService {
       return target;
     });
 
+    // Cadastro concluído: o código é de uso único.
+    if (codeMode === "required") this.emailCodes.consume(email);
     return this.issueSession(consumer, userAgent);
   }
 

@@ -1,4 +1,4 @@
-import { BadRequestException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, UnauthorizedException } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 import { Role } from "@marquo/database";
 import { AuthService } from "./auth.service";
@@ -67,6 +67,8 @@ const ACTIVE_USER = {
   passwordHash: PASSWORD_HASH,
   failedLoginAttempts: 0,
   lockedUntil: null as Date | null,
+  // Conta com e-mail confirmado (o fixture padrão de quem consegue entrar).
+  emailVerifiedAt: new Date("2026-01-01T00:00:00Z") as Date | null,
 };
 
 describe("AuthService.login", () => {
@@ -433,5 +435,32 @@ describe("AuthService.logout", () => {
     const access = buildJwtService({ verify: jest.fn().mockReturnValue({ sub: "u-1", role: Role.OWNER }) });
     await expect(new AuthService(buildPrisma(), access, refreshTokens).logout("access")).resolves.toBeUndefined();
     expect(refreshTokens.revokeFamily).not.toHaveBeenCalled();
+  });
+});
+
+describe("AuthService.login: e-mail não confirmado", () => {
+  const unverified = { ...ACTIVE_USER, emailVerifiedAt: null };
+
+  it("senha certa mas e-mail sem confirmação: 403 EMAIL_NOT_VERIFIED e nenhuma sessão é emitida", async () => {
+    const prisma = buildPrisma(unverified);
+    const refreshTokens = buildRefreshTokens();
+    const service = new AuthService(prisma, buildJwtService(), refreshTokens);
+
+    const error = await service.login({ email: unverified.email, password: CORRECT_PASSWORD }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect(error.getResponse()).toMatchObject({ code: "EMAIL_NOT_VERIFIED" });
+    expect(refreshTokens.issue).not.toHaveBeenCalled();
+  });
+
+  // Não pode virar oráculo: quem não sabe a senha tem de receber o mesmo 401 de sempre.
+  it("senha errada em conta sem confirmação continua sendo o 401 genérico (não revela que a conta existe)", async () => {
+    const service = new AuthService(buildPrisma(unverified), buildJwtService(), buildRefreshTokens());
+    await expect(service.login({ email: unverified.email, password: "senha-errada" })).rejects.toThrow(UnauthorizedException);
+  });
+
+  it("depois de confirmar (emailVerifiedAt preenchido) o mesmo usuário entra", async () => {
+    const service = new AuthService(buildPrisma(ACTIVE_USER), buildJwtService(), buildRefreshTokens());
+    await expect(service.login({ email: ACTIVE_USER.email, password: CORRECT_PASSWORD })).resolves.toBeDefined();
   });
 });

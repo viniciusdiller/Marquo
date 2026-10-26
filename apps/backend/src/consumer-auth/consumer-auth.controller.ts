@@ -1,12 +1,27 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  ServiceUnavailableException,
+  UseGuards,
+} from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { ConsumerAuthService } from "./consumer-auth.service";
 import {
   ChangeConsumerPasswordDto,
   ConsumerLoginDto,
   RegisterConsumerDto,
+  RequestRegisterCodeDto,
   UpdateConsumerProfileDto,
 } from "./dto/consumer-dtos";
+import { ConsumerEmailCodeService } from "./consumer-email-code.service";
 import { ConsumerJwtAuthGuard } from "./guards/consumer-jwt-auth.guard";
 import { CurrentConsumer } from "./decorators/current-consumer.decorator";
 import { AuthenticatedConsumer } from "./types/consumer-auth-user";
@@ -15,7 +30,26 @@ import { Public } from "../common/decorators/public.decorator";
 
 @Controller("public/consumer")
 export class ConsumerAuthController {
-  constructor(private readonly consumerAuth: ConsumerAuthService) {}
+  constructor(
+    private readonly consumerAuth: ConsumerAuthService,
+    private readonly emailCodes: ConsumerEmailCodeService,
+  ) {}
+
+  // Passo 1 do cadastro: pede o código de confirmação do e-mail. Cada pedido pode virar um e-mail, então o limite por IP é
+  // bem mais estrito que o do cadastro. A resposta é igual exista conta com esse e-mail ou não; `required` só diz se a tela
+  // precisa pedir o código (falso em desenvolvimento sem e-mail configurado).
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
+  @HttpCode(200)
+  @Post("register/code")
+  requestRegisterCode(@Body() dto: RequestRegisterCodeDto) {
+    const mode = this.emailCodes.mode();
+    if (mode === "unavailable") {
+      throw new ServiceUnavailableException("Não foi possível concluir o cadastro agora. Tente novamente mais tarde.");
+    }
+    this.emailCodes.request(dto.email);
+    return { required: mode === "required" };
+  }
 
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60_000 } })

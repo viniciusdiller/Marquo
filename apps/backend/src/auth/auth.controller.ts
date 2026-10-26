@@ -6,6 +6,8 @@ import { RefreshDto } from "./dto/refresh.dto";
 import { SetPasswordDto } from "./dto/set-password.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { PasswordResetService } from "./password-reset.service";
+import { EmailVerificationService } from "./email-verification.service";
+import { ResendVerificationDto, VerifyEmailDto } from "./dto/email-verification.dto";
 import { Public } from "../common/decorators/public.decorator";
 
 // Login/refresh/set-password só tinham o limite global (100 req/min por IP) — a maior
@@ -20,6 +22,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly passwordReset: PasswordResetService,
+    private readonly emailVerification: EmailVerificationService,
   ) {}
 
   @Public()
@@ -69,5 +72,25 @@ export class AuthController {
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     this.passwordReset.request(dto.email);
     return { message: "Se o e-mail estiver cadastrado, enviamos um link para redefinir a senha." };
+  }
+
+  // Confirma o e-mail do dono (link enviado no cadastro). Uso único; token inválido ou vencido = 400.
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @HttpCode(HttpStatus.OK)
+  @Post("verify-email")
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    await this.emailVerification.verify(dto.token);
+    return { message: "E-mail confirmado. Agora você já pode entrar." };
+  }
+
+  // Reenvio do link. Resposta idêntica exista a conta ou não, já confirmada ou não.
+  @Public()
+  @Throttle(FORGOT_PASSWORD_THROTTLE)
+  @HttpCode(HttpStatus.OK)
+  @Post("resend-verification")
+  resendVerification(@Body() dto: ResendVerificationDto) {
+    this.emailVerification.request(dto.email);
+    return { message: "Se a conta existir e ainda não estiver confirmada, enviamos um novo link." };
   }
 }
