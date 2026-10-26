@@ -277,14 +277,15 @@ export function trialRemainingLabel(item: Pick<PlatformTrialItem, "daysLeft" | "
   return item.daysLeft === 1 ? "Falta 1 dia" : `Faltam ${item.daysLeft} dias`;
 }
 
-// Preço dos planos: o atual vem do banco; o de tabela (teto) e o piso são os limites que o backend aplica.
+// Preço dos planos: o atual vem do banco; o de tabela é só referência (dá para ficar abaixo ou acima); piso e teto são
+// os limites que o backend aplica.
 export interface PlatformPlanPrice {
   tier: "ESSENCIAL" | "PROFISSIONAL" | "PREMIUM";
   name: string;
   priceCents: number;
   listPriceCents: number;
   minPriceCents: number;
-  discounted: boolean;
+  maxPriceCents: number;
   maxProfessionals: number | null;
   // Assinantes de cartão ativos: continuam no valor combinado no provedor, só o novo preço vale para quem assina depois.
   cardSubscribers: number;

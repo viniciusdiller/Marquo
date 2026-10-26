@@ -2,16 +2,17 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { BillingMethod, PlanTier, SubscriptionStatus } from "@marquo/database";
 import { PLAN_CATALOG, planCatalogEntry } from "@marquo/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
-import { MIN_CHARGE_CENTS } from "../billing/payments/pricing";
+import { MAX_PLAN_PRICE_CENTS, MIN_CHARGE_CENTS } from "../billing/payments/pricing";
 
 export const AUDIT_PLAN_PRICE_SET = "PLAN_PRICE_SET";
 
 const reais = (cents: number) => `R$ ${(cents / 100).toFixed(2).replace(".", ",")}`;
 
 // Preço de cada plano pelo painel da plataforma. O banco (`Plan.priceCents`) é o que a cobrança lê; o catálogo
-// (shared-types) é o TETO: dá para baixar e voltar até o preço de tabela, nunca acima (reajuste com cliente real é
-// migração deliberada, ver CLAUDE.md). O valor chega em centavos e é limitado aqui: piso = MIN_CHARGE_CENTS (o mesmo
-// piso do desconto de cupom) e planos maiores continuam estritamente mais caros que os menores.
+// (shared-types) é o preço de TABELA: referência e valor para onde "voltar" (override nulo). O preço pode ficar abaixo
+// ou acima dela. O valor chega em centavos e é limitado aqui: piso = MIN_CHARGE_CENTS (o mesmo piso do desconto de
+// cupom), teto = MAX_PLAN_PRICE_CENTS (barra o zero a mais por engano) e planos maiores continuam estritamente mais
+// caros que os menores. Quem já assina no cartão não muda de valor (a recorrência fica no provedor).
 @Injectable()
 export class PlanPricingService {
   private readonly logger = new Logger(PlanPricingService.name);
@@ -38,7 +39,7 @@ export class PlanPricingService {
         priceCents: plan?.priceCents ?? entry.priceCents,
         listPriceCents: entry.priceCents,
         minPriceCents: MIN_CHARGE_CENTS,
-        discounted: (plan?.priceCents ?? entry.priceCents) < entry.priceCents,
+        maxPriceCents: MAX_PLAN_PRICE_CENTS,
         maxProfessionals: entry.maxProfessionals,
         cardSubscribers: plan ? (cardByPlanId.get(plan.id) ?? 0) : 0,
       };
@@ -52,8 +53,8 @@ export class PlanPricingService {
     if (!Number.isInteger(priceCents) || priceCents < MIN_CHARGE_CENTS) {
       throw new BadRequestException(`O preço mínimo é ${reais(MIN_CHARGE_CENTS)}.`);
     }
-    if (priceCents > entry.priceCents) {
-      throw new BadRequestException(`O preço não pode passar do preço de tabela (${reais(entry.priceCents)}).`);
+    if (priceCents > MAX_PLAN_PRICE_CENTS) {
+      throw new BadRequestException(`O preço máximo é ${reais(MAX_PLAN_PRICE_CENTS)}.`);
     }
 
     const plans = await this.prisma.plan.findMany({ select: { tier: true, priceCents: true } });

@@ -18,6 +18,7 @@ import {
 } from "class-validator";
 import { CouponKind, PlanTier, Role, SubscriptionStatus } from "@marquo/database";
 import { PaginationQueryDto } from "../../common/pagination/pagination-query.dto";
+import { MAX_PLAN_PRICE_CENTS } from "../../billing/payments/pricing";
 import { NormalizeEmail } from "../../common/decorators/normalize-email.decorator";
 import { IsBrazilianPhone } from "../../common/validators/br-validators";
 
@@ -92,11 +93,11 @@ export class SetTrialDto {
   days!: number;
 }
 
-// Novo preço mensal do plano, em centavos. O servidor limita entre o piso da cobrança e o preço do catálogo.
+// Novo preço mensal do plano, em centavos. O servidor limita entre o piso da cobrança e o teto do plano.
 export class SetPlanPriceDto {
   @IsInt()
   @Min(1)
-  @Max(100_000_00)
+  @Max(MAX_PLAN_PRICE_CENTS)
   priceCents!: number;
 }
 

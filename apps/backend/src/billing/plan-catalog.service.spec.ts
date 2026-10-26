@@ -80,13 +80,13 @@ describe("PlanCatalogService.syncPlans", () => {
     expect(other.update.priceCents).toBe(planCatalogEntry("PROFISSIONAL")!.priceCents);
   });
 
-  it("nunca cobra acima do catálogo, mesmo com desconto antigo maior que o preço de tabela", async () => {
-    const { service, prisma } = buildSync({ ESSENCIAL: 999_999 });
+  it("mantém também um preço ACIMA da tabela definido pelo painel", async () => {
+    const { service, prisma } = buildSync({ ESSENCIAL: 5990 });
 
     await service.syncPlans();
 
     const call = prisma.plan.upsert.mock.calls.find(([arg]) => arg.where.tier === "ESSENCIAL")![0];
-    expect(call.update.priceCents).toBe(planCatalogEntry("ESSENCIAL")!.priceCents);
+    expect(call.update.priceCents).toBe(5990);
   });
 
   it("sincroniza no boot (onModuleInit)", async () => {

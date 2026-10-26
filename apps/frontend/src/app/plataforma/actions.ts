@@ -90,7 +90,7 @@ export async function setTrialAction(id: string, days: number): Promise<Platform
 const PLAN_TIERS = ["ESSENCIAL", "PROFISSIONAL", "PREMIUM"];
 
 // Novo preço mensal do plano, digitado em reais ("39,90"). Só confere o formato para dar erro rápido: o backend limita entre
-// o piso da cobrança e o preço de tabela, e exige plano maior mais caro que o menor.
+// o piso e o teto do plano, e exige plano maior mais caro que o menor.
 export async function setPlanPriceAction(tier: string, price: string): Promise<PlatformActionResult> {
   if (!PLAN_TIERS.includes(tier)) return { ok: false, error: "Plano inválido." };
   const priceCents = moneyToCents(price);

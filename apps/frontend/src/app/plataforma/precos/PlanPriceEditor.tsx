@@ -17,8 +17,11 @@ export function PlanPriceEditor({ plan }: { plan: PlatformPlanPrice }) {
   const [saved, setSaved] = useState(false);
 
   const cents = moneyToCents(value);
-  const inRange = cents !== null && cents >= plan.minPriceCents && cents <= plan.listPriceCents;
+  const inRange = cents !== null && cents >= plan.minPriceCents && cents <= plan.maxPriceCents;
   const changed = cents !== plan.priceCents;
+  const lowered = plan.priceCents < plan.listPriceCents;
+  const raised = plan.priceCents > plan.listPriceCents;
+  const increasing = cents !== null && cents > plan.priceCents;
 
   function save() {
     setError(null);
@@ -48,15 +51,20 @@ export function PlanPriceEditor({ plan }: { plan: PlatformPlanPrice }) {
           <dt className="text-xs text-zinc-500 dark:text-stone-400">Preço atual</dt>
           <dd className="font-semibold text-zinc-900 dark:text-white">
             {brl(plan.priceCents)}
-            {plan.discounted ? (
+            {lowered ? (
               <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
                 em promoção
+              </span>
+            ) : null}
+            {raised ? (
+              <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                reajustado
               </span>
             ) : null}
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-zinc-500 dark:text-stone-400">Preço de tabela (teto)</dt>
+          <dt className="text-xs text-zinc-500 dark:text-stone-400">Preço de tabela</dt>
           <dd className="text-zinc-700 dark:text-stone-300">{brl(plan.listPriceCents)}</dd>
         </div>
       </dl>
@@ -73,7 +81,7 @@ export function PlanPriceEditor({ plan }: { plan: PlatformPlanPrice }) {
         }}
       />
       <p className="-mt-2 text-xs text-zinc-500 dark:text-stone-400">
-        De {brl(plan.minPriceCents)} até {brl(plan.listPriceCents)}.
+        De {brl(plan.minPriceCents)} até {brl(plan.maxPriceCents)}.
       </p>
 
       {plan.cardSubscribers > 0 ? (
@@ -91,7 +99,7 @@ export function PlanPriceEditor({ plan }: { plan: PlatformPlanPrice }) {
         >
           {pending ? "Salvando..." : "Salvar preço"}
         </button>
-        {plan.discounted ? (
+        {lowered || raised ? (
           <button
             type="button"
             onClick={() => {
@@ -107,7 +115,12 @@ export function PlanPriceEditor({ plan }: { plan: PlatformPlanPrice }) {
 
       {cents !== null && !inRange ? (
         <p role="alert" className="text-xs text-red-600 dark:text-red-400">
-          O valor precisa ficar entre {brl(plan.minPriceCents)} e {brl(plan.listPriceCents)}.
+          O valor precisa ficar entre {brl(plan.minPriceCents)} e {brl(plan.maxPriceCents)}.
+        </p>
+      ) : null}
+      {increasing && inRange ? (
+        <p className="text-xs text-amber-700 dark:text-amber-300">
+          Aumento: vale para quem assinar, trocar de plano ou pagar o próximo Pix depois de salvar.
         </p>
       ) : null}
       {error ? (
