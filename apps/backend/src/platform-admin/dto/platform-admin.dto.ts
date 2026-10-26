@@ -254,7 +254,7 @@ export class DeleteTenantDto {
   @MaxLength(120)
   confirmSlug!: string;
 
-  // Obrigatório quando o negócio ainda tem acesso ou o prazo de 90 dias não terminou (exclusão antecipada). Sem dado pessoal: vai para a auditoria.
+  // Opcional (10 a 300 caracteres quando informado). Sem dado pessoal: vai para a auditoria.
   @IsOptional()
   @Transform(trim)
   @IsString()

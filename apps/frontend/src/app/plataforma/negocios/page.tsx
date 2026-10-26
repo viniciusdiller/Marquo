@@ -148,6 +148,7 @@ export default async function NegociosPage({
                     <TenantActionsMenu
                       tenantId={tenant.id}
                       tenantName={tenant.name}
+                      tenantSlug={tenant.slug}
                       suspended={tenant.suspendedAt !== null}
                       hasSubscription={tenant.planName !== null}
                       courtesy={tenant.courtesy}

@@ -1,5 +1,6 @@
-import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { MercadoPagoClient } from "../billing/payments/mercadopago.client";
 import {
   AUDIT_TENANT_PURGED,
   DELETION_RETENTION_DAYS,
@@ -80,7 +81,7 @@ describe("evaluateDeletion", () => {
 });
 
 // Transação falsa que REGISTRA a ordem das escritas e recusa qualquer tabela não esperada (ex.: Subscription).
-function build(options: { tenantRow?: unknown; failAt?: string } = {}) {
+function build(options: { tenantRow?: unknown; failAt?: string; mp?: Record<string, unknown> } = {}) {
   const calls: string[] = [];
   const wheres: Record<string, unknown> = {};
   const allowed = new Set(PURGE_STEPS.map((s) => s.model.charAt(0).toLowerCase() + s.model.slice(1)));
@@ -141,7 +142,13 @@ function build(options: { tenantRow?: unknown; failAt?: string } = {}) {
     tenantGalleryImage: { count },
     $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
   } as unknown as PrismaService;
-  return { service: new TenantDeletionService(prisma), prisma, calls, wheres, adminAuditLog, tenantDelegate, count };
+  const mp = {
+    isConfigured: jest.fn().mockReturnValue(true),
+    cancelPreapproval: jest.fn().mockResolvedValue({ status: "cancelled" }),
+    getPreapproval: jest.fn().mockResolvedValue({ status: "authorized" }),
+    ...options.mp,
+  };
+  return { service: new TenantDeletionService(prisma, mp as unknown as MercadoPagoClient), mp, prisma, calls, wheres, adminAuditLog, tenantDelegate, count };
 }
 
 describe("TenantDeletionService.purge", () => {
@@ -219,7 +226,7 @@ describe("TenantDeletionService.purge", () => {
       ...over,
     });
 
-    it("em teste: exclui com a confirmação certa E um motivo, e audita o motivo", async () => {
+    it("em teste: exclui com a confirmação certa e audita o motivo, quando informado", async () => {
       const { service, adminAuditLog, calls } = build({ tenantRow: active() });
       await expect(
         service.purge(TENANT_ID, { confirmSlug: "salao-teste", reason: "conta de teste do time" }, "a@b.com", NOW),
@@ -230,13 +237,9 @@ describe("TenantDeletionService.purge", () => {
       expect(detail).toContain("conta de teste do time");
     });
 
-    it("sem motivo (ou curto): 400 e NADA é escrito", async () => {
-      const { service, prisma } = build({ tenantRow: active() });
-      await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).rejects.toThrow(/ainda tem acesso/);
-      await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste", reason: "teste" }, "a@b.com", NOW)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(prisma.$transaction).not.toHaveBeenCalled();
+    it("sem motivo também exclui (motivo é opcional)", async () => {
+      const { service } = build({ tenantRow: active() });
+      await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).resolves.toMatchObject({ purged: true });
     });
 
     it("confirmação digitada errada continua barrando", async () => {
@@ -247,16 +250,55 @@ describe("TenantDeletionService.purge", () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it("com assinatura PAGA em vigor (cartão ativo ou em atraso): 409, mesmo com confirmação e motivo", async () => {
-      for (const status of ["ACTIVE", "PAST_DUE"]) {
-        const { service, prisma } = build({
-          tenantRow: active(sub({ status, currentPeriodEnd: new Date(NOW.getTime() + 10 * DAY) })),
-        });
-        await expect(
-          service.purge(TENANT_ID, { confirmSlug: "salao-teste", reason: "pedido do titular" }, "a@b.com", NOW),
-        ).rejects.toThrow(/assinatura paga em vigor/);
-        expect(prisma.$transaction).not.toHaveBeenCalled();
-      }
+    const cardSub = (over: Record<string, unknown> = {}) =>
+      sub({ status: "ACTIVE", currentPeriodEnd: new Date(NOW.getTime() + 10 * DAY), providerSubscriptionId: "pre-123", ...over });
+
+    it("com assinatura PAGA no cartão: cancela a recorrência no provedor ANTES de apagar e audita", async () => {
+      const { service, mp, calls, adminAuditLog } = build({ tenantRow: active(cardSub()) });
+      mp.cancelPreapproval.mockImplementation(async () => {
+        calls.push("mp.cancel");
+        return { status: "cancelled" };
+      });
+
+      await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).resolves.toMatchObject({ purged: true });
+
+      expect(mp.cancelPreapproval).toHaveBeenCalledWith("pre-123");
+      expect(calls[0]).toBe("mp.cancel");
+      expect(calls[1]).toBe("adminAuditLog");
+      expect((adminAuditLog.create.mock.calls[0][0] as { data: { detail: string } }).data.detail).toContain("recorrência do cartão cancelada");
+    });
+
+    it("falha ao cancelar no provedor: 502 e NADA é apagado (senão o cartão seguiria sendo cobrado)", async () => {
+      const { service, prisma, calls } = build({
+        tenantRow: active(cardSub()),
+        mp: { cancelPreapproval: jest.fn().mockRejectedValue(new Error("mp fora do ar")), getPreapproval: jest.fn().mockResolvedValue({ status: "authorized" }) },
+      });
+      await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).rejects.toThrow(BadGatewayException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(calls).toEqual([]);
+    });
+
+    it("recorrência já cancelada no provedor (exclusão repetida): segue e apaga", async () => {
+      const { service } = build({
+        tenantRow: active(cardSub()),
+        mp: { cancelPreapproval: jest.fn().mockRejectedValue(new Error("já cancelada")), getPreapproval: jest.fn().mockResolvedValue({ status: "cancelled" }) },
+      });
+      await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).resolves.toMatchObject({ purged: true });
+    });
+
+    it("cartão, mas o Mercado Pago não está configurado neste servidor: 503 e nada é apagado", async () => {
+      const { service, prisma } = build({ tenantRow: active(cardSub()), mp: { isConfigured: jest.fn().mockReturnValue(false) } });
+      await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).rejects.toThrow(ServiceUnavailableException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("Pix (sem recorrência no provedor) ou sem assinatura: exclui sem falar com o Mercado Pago", async () => {
+      const pix = build({ tenantRow: active(sub({ method: "PIX_MONTHLY", currentPeriodEnd: new Date(NOW.getTime() + 10 * DAY) })) });
+      await expect(pix.service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).resolves.toMatchObject({ purged: true });
+      expect(pix.mp.cancelPreapproval).not.toHaveBeenCalled();
+      const trial = build({ tenantRow: active() });
+      await trial.service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW);
+      expect(trial.mp.cancelPreapproval).not.toHaveBeenCalled();
     });
 
     it("cortesia não é assinatura paga: pode excluir (com motivo)", async () => {
@@ -268,15 +310,16 @@ describe("TenantDeletionService.purge", () => {
       ).resolves.toMatchObject({ purged: true });
     });
 
-    it("simulação (preview) avisa quando está bloqueado pela assinatura paga e quando tem acesso", async () => {
-      const paid = build({ tenantRow: active(sub({ currentPeriodEnd: new Date(NOW.getTime() + 10 * DAY) })) });
+    it("simulação (preview): sempre pode excluir; avisa quando vai cancelar a recorrência do cartão", async () => {
+      const paid = build({ tenantRow: active(cardSub()) });
       await expect(paid.service.preview(TENANT_ID, NOW)).resolves.toMatchObject({
-        purgeable: false,
+        purgeable: true,
         hasAccess: true,
-        blockedReason: expect.stringContaining("assinatura paga"),
+        blockedReason: null,
+        cancelsCardSubscription: true,
       });
       const trial = build({ tenantRow: active() });
-      await expect(trial.service.preview(TENANT_ID, NOW)).resolves.toMatchObject({ purgeable: true, hasAccess: true, blockedReason: null });
+      await expect(trial.service.preview(TENANT_ID, NOW)).resolves.toMatchObject({ purgeable: true, cancelsCardSubscription: false });
     });
   });
 
@@ -304,18 +347,24 @@ describe("TenantDeletionService.purge", () => {
       subscription: null,
     };
 
-    it("sem motivo (ou curto demais): 400 e nada é escrito", async () => {
-      const { service, prisma } = build({ tenantRow: early });
-      for (const reason of [undefined, "", "curto", "x".repeat(301)]) {
+    it("exclui NA HORA, sem esperar os 90 dias e sem motivo (só a confirmação digitada)", async () => {
+      const { service, adminAuditLog, calls } = build({ tenantRow: early });
+      await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).resolves.toMatchObject({ purged: true });
+      expect(calls[0]).toBe("adminAuditLog");
+      const detail = (adminAuditLog.create.mock.calls[0][0] as { data: { detail: string } }).data.detail;
+      expect(detail).toContain("slug=salao-teste");
+      expect(detail).not.toContain("motivo");
+    });
+
+    it("motivo é opcional: se vier, vai para a auditoria; curto demais ou longo demais é 400", async () => {
+      const { service, adminAuditLog, prisma } = build({ tenantRow: early });
+      for (const reason of ["curto", "x".repeat(301)]) {
         await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste", reason }, "a@b.com", NOW)).rejects.toThrow(BadRequestException);
       }
       expect(prisma.$transaction).not.toHaveBeenCalled();
-    });
 
-    it("com motivo: exclui e o motivo vai para a auditoria", async () => {
-      const { service, adminAuditLog } = build({ tenantRow: early });
       await service.purge(TENANT_ID, { confirmSlug: "salao-teste", reason: "Pedido do titular por e-mail" }, "a@b.com", NOW);
-      expect(adminAuditLog.create.mock.calls[0][0].data.detail).toContain("exclusão antecipada: Pedido do titular por e-mail");
+      expect(adminAuditLog.create.mock.calls[0][0].data.detail).toContain("motivo: Pedido do titular por e-mail");
     });
   });
 

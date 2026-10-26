@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { DotsThreeVertical } from "@phosphor-icons/react/dist/ssr";
 import { MaskedInput } from "@/components/ui/MaskedInput";
@@ -9,6 +10,7 @@ import {
   extendTrialAction,
   grantCourtesyAction,
   passwordResetLinkAction,
+  purgeTenantDataAction,
   reactivateTenantAction,
   removeCourtesyAction,
   suspendTenantAction,
@@ -17,7 +19,7 @@ import {
 } from "./actions";
 
 type Tier = "ESSENCIAL" | "PROFISSIONAL" | "PREMIUM";
-type DialogKey = "suspend" | "reactivate" | "trial" | "plan" | "removeCourtesy" | "phone" | "link";
+type DialogKey = "suspend" | "reactivate" | "trial" | "plan" | "removeCourtesy" | "phone" | "link" | "delete";
 
 const BTN = "rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:opacity-60";
 const NEUTRAL = `${BTN} text-zinc-800 ring-1 ring-zinc-300 ring-inset hover:bg-zinc-900/5 dark:text-stone-100 dark:ring-white/20 dark:hover:bg-white/10`;
@@ -73,6 +75,8 @@ function ErrorLine({ message }: { message: string | null }) {
 export interface TenantActionsMenuProps {
   tenantId: string;
   tenantName: string;
+  // Endereço do negócio: é o que se digita para confirmar a exclusão.
+  tenantSlug: string;
   suspended: boolean;
   hasSubscription: boolean;
   courtesy: boolean;
@@ -87,6 +91,7 @@ export interface TenantActionsMenuProps {
 export function TenantActionsMenu({
   tenantId,
   tenantName,
+  tenantSlug,
   suspended,
   hasSubscription,
   courtesy,
@@ -94,6 +99,7 @@ export function TenantActionsMenu({
   ownerPhone,
   variant = "menu",
 }: TenantActionsMenuProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   // Posição do menu em coordenadas da janela: a tabela rola na horizontal (overflow), o que cortaria um
   // menu absoluto nas últimas linhas.
@@ -107,6 +113,8 @@ export function TenantActionsMenu({
   const menuRef = useRef<HTMLDivElement>(null);
 
   const [reason, setReason] = useState("");
+  const [confirmSlug, setConfirmSlug] = useState("");
+  const [understood, setUnderstood] = useState(false);
   const [days, setDays] = useState("14");
   const [tier, setTier] = useState<Tier>("PROFISSIONAL");
   const [courtesyDays, setCourtesyDays] = useState("30");
@@ -155,6 +163,9 @@ export function TenantActionsMenu({
     setNotice(null);
     setLink(null);
     setCopied(false);
+    setConfirmSlug("");
+    setUnderstood(false);
+    setReason("");
     setDialog(next);
   }
 
@@ -174,6 +185,7 @@ export function TenantActionsMenu({
       show: hasActiveOwner,
     },
     { key: "link", label: "Link de redefinição de senha", show: hasActiveOwner },
+    { key: "delete", label: "Excluir negócio", show: true },
   ];
   const visible = items.filter((item) => item.show);
 
@@ -213,7 +225,7 @@ export function TenantActionsMenu({
                     onClick={() => openDialog(item.key)}
                     className={clsx(
                       "w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-900/5 dark:hover:bg-white/10",
-                      item.key === "suspend" ? "text-red-600 dark:text-red-400" : "text-zinc-800 dark:text-stone-100",
+                      item.key === "suspend" || item.key === "delete" ? "text-red-600 dark:text-red-400" : "text-zinc-800 dark:text-stone-100",
                     )}
                   >
                     {item.label}
@@ -230,7 +242,7 @@ export function TenantActionsMenu({
               key={item.key}
               type="button"
               onClick={() => openDialog(item.key)}
-              className={item.key === "suspend" ? DANGER : item.key === "reactivate" ? PRIMARY : NEUTRAL}
+              className={item.key === "suspend" || item.key === "delete" ? DANGER : item.key === "reactivate" ? PRIMARY : NEUTRAL}
             >
               {item.label}
             </button>
@@ -275,6 +287,66 @@ export function TenantActionsMenu({
               }
             >
               {pending ? "Suspendendo..." : "Suspender"}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+
+      {dialog === "delete" ? (
+        <Modal title={`Excluir ${tenantName}`} onClose={close}>
+          <p className="text-sm text-zinc-600 dark:text-stone-300">
+            Apaga na hora clientes, agenda, comandas, financeiro, equipe e fotos. Ficam só o registro de pagamento, a auditoria e
+            um esqueleto anônimo do negócio. Não há como desfazer. Se o negócio paga no cartão, a cobrança recorrente é cancelada no Mercado Pago antes de apagar (se o cancelamento falhar, nada é excluído).
+          </p>
+          <label className="text-sm font-medium text-zinc-900 dark:text-white" htmlFor={`confirm-${tenantId}`}>
+            Digite o endereço do negócio para confirmar: {tenantSlug}
+          </label>
+          <input
+            id={`confirm-${tenantId}`}
+            value={confirmSlug}
+            onChange={(e) => setConfirmSlug(e.target.value)}
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            className={FIELD}
+          />
+          <label className="text-sm font-medium text-zinc-900 dark:text-white" htmlFor={`del-reason-${tenantId}`}>
+            Motivo (opcional)
+          </label>
+          <textarea
+            id={`del-reason-${tenantId}`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            maxLength={300}
+            rows={2}
+            placeholder="Vai para a auditoria, sem dados pessoais"
+            className={FIELD}
+          />
+          <label className="flex items-start gap-2 text-sm text-zinc-800 dark:text-stone-100">
+            <input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} className="mt-1" />
+            <span>Entendo que a exclusão é definitiva e não pode ser desfeita.</span>
+          </label>
+          <ErrorLine message={error} />
+          <div className="flex justify-end gap-2">
+            <button type="button" className={NEUTRAL} onClick={close}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className={DANGER}
+              disabled={pending || confirmSlug.trim() !== tenantSlug || !understood || (reason.trim().length > 0 && reason.trim().length < 10)}
+              onClick={() =>
+                run(
+                  () => purgeTenantDataAction(tenantId, confirmSlug, reason),
+                  "Negócio excluído.",
+                  () => {
+                    router.replace("/plataforma/negocios");
+                    router.refresh();
+                  },
+                )
+              }
+            >
+              {pending ? "Excluindo..." : "Excluir definitivamente"}
             </button>
           </div>
         </Modal>

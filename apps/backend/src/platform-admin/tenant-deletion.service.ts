@@ -1,8 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { rm } from "fs/promises";
 import { join } from "path";
 import { BillingMethod, Prisma, SubscriptionStatus } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
+import { MercadoPagoClient, toBadGateway } from "../billing/payments/mercadopago.client";
 import { UPLOADS_DIR } from "../common/constants/uploads";
 import { resolvePagination, toPage } from "../common/pagination/paginate";
 import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
@@ -78,6 +79,7 @@ type SubscriptionForStatus = {
   cancelAtPeriodEnd: boolean;
   currentPeriodEnd: Date | null;
   updatedAt: Date;
+  providerSubscriptionId?: string | null;
 } | null;
 
 // Quando o acesso do negócio terminou, a partir do estado de cobrança JÁ calculado (computeBillingStatus, um só lugar).
@@ -110,21 +112,6 @@ export function evaluateDeletion(
   return { billingStatus, accessEndedAt, deletable: true, eligible: eligibleOn.getTime() <= now.getTime(), eligibleOn };
 }
 
-// Assinatura PAGA em vigor (cartão ou Pix cobrando): o negócio não é excluído enquanto ela existir. Cortesia não conta (a
-// plataforma concedeu). Pix cujo mês acabou ou assinatura cancelada/vencida já caem no caminho de "sem acesso".
-export function blockingSubscriptionMessage(
-  tenant: TenantForStatus,
-  subscription: SubscriptionForStatus,
-  now: Date = new Date(),
-): string | null {
-  const status = evaluateDeletion(tenant, subscription, now);
-  if (status.deletable || !subscription || subscription.courtesy) return null;
-  const paying = subscription.status === SubscriptionStatus.ACTIVE || subscription.status === SubscriptionStatus.PAST_DUE;
-  return paying
-    ? "Este negócio tem uma assinatura paga em vigor. Cancele a assinatura e espere o fim do período pago antes de excluir."
-    : null;
-}
-
 const SUBSCRIPTION_SELECT = {
   status: true,
   courtesy: true,
@@ -132,13 +119,14 @@ const SUBSCRIPTION_SELECT = {
   cancelAtPeriodEnd: true,
   currentPeriodEnd: true,
   updatedAt: true,
+  providerSubscriptionId: true,
 } as const;
 
-// Exclusão dos dados de um negócio. Dois caminhos, os dois com confirmação digitada e auditoria:
-//  - Negócio que deixou de usar o Marquo (promessa dos termos: 90 dias depois do fim do acesso): sem motivo depois dos 90
-//    dias, com motivo antes.
-//  - Negócio que AINDA tem acesso (teste, cortesia, suspenso... ex.: contas de teste): sempre com motivo. Só é recusado se
-//    tiver assinatura PAGA em vigor (cancele e espere o fim do período): apagar quem está pagando seria o erro caro.
+// Exclusão dos dados de um negócio, na hora e sem esperar prazo (os 90 dias dos termos são o MÁXIMO que se guarda, não
+// um mínimo: a plataforma pode apagar antes). Vale para qualquer negócio, com acesso ou não (teste, cortesia, suspenso,
+// com assinatura paga...). Exige a confirmação digitada do endereço; o motivo é opcional e vai para a auditoria junto
+// com o autor. Se o negócio paga no CARTÃO, a recorrência é cancelada no Mercado Pago ANTES de apagar (senão o provedor
+// seguiria cobrando um negócio que não existe mais); se o cancelamento falhar, nada é apagado.
 //
 // NADA é apagado sozinho: a plataforma vê a lista, simula e confirma digitando o endereço do negócio. Apaga tudo o que é
 // dado operacional (clientes, agenda, comandas, financeiro, equipe, fotos) e deixa só a linha do negócio ANONIMIZADA,
@@ -148,7 +136,10 @@ const SUBSCRIPTION_SELECT = {
 export class TenantDeletionService {
   private readonly logger = new Logger(TenantDeletionService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mp: MercadoPagoClient,
+  ) {}
 
   async listCandidates(query: PaginationQueryDto, now: Date = new Date()) {
     const pagination = resolvePagination(query);
@@ -206,9 +197,7 @@ export class TenantDeletionService {
         this.prisma.tenantGalleryImage.count({ where }),
       ]);
 
-    const blockedReason = tenant.deletedAt
-      ? "Os dados deste negócio já foram excluídos."
-      : blockingSubscriptionMessage(tenant, tenant.subscription, now);
+    const blockedReason = tenant.deletedAt ? "Os dados deste negócio já foram excluídos." : null;
 
     return {
       id: tenant.id,
@@ -216,8 +205,10 @@ export class TenantDeletionService {
       slug: tenant.slug,
       createdAt: tenant.createdAt,
       ...status,
-      // Pode ser excluído agora (sem assinatura paga em vigor). `deletable`/`eligible` seguem sendo só a regra dos 90 dias.
+      // Pode ser excluído agora (só não pode o que já foi excluído). `deletable`/`eligible` seguem sendo só a regra dos 90 dias.
       purgeable: blockedReason === null,
+      // Paga no cartão: a recorrência será cancelada no Mercado Pago junto com a exclusão.
+      cancelsCardSubscription: this.hasCardRecurrence(tenant.subscription),
       blockedReason,
       hasAccess: !status.deletable && !tenant.deletedAt,
       retentionDays: DELETION_RETENTION_DAYS,
@@ -235,22 +226,19 @@ export class TenantDeletionService {
     const status = evaluateDeletion(tenant, tenant.subscription, now);
 
     if (tenant.deletedAt) throw new ConflictException("Os dados deste negócio já foram excluídos.");
-    const blocked = blockingSubscriptionMessage(tenant, tenant.subscription, now);
-    if (blocked) throw new ConflictException(blocked);
     // Confirmação digitada: o endereço exato do negócio (quem apertou sem olhar não exclui).
     if (input.confirmSlug.trim() !== tenant.slug) {
       throw new BadRequestException("A confirmação não confere com o endereço do negócio.");
     }
-    // Motivo registrado sempre que não for a limpeza normal: negócio que ainda tem acesso, ou antes dos 90 dias.
+    // Motivo opcional; se vier, tem tamanho limitado (o DTO já barra; o service é chamado direto em testes).
     const reason = input.reason?.trim() ?? "";
-    const needsReason = !status.deletable || !status.eligible;
-    if (needsReason && (reason.length < MIN_REASON || reason.length > MAX_REASON)) {
-      throw new BadRequestException(
-        status.deletable
-          ? `O prazo de ${DELETION_RETENTION_DAYS} dias ainda não terminou. Informe o motivo da exclusão antecipada (de ${MIN_REASON} a ${MAX_REASON} caracteres).`
-          : `Este negócio ainda tem acesso. Informe o motivo da exclusão (de ${MIN_REASON} a ${MAX_REASON} caracteres).`,
-      );
+    if (reason.length > MAX_REASON || (reason.length > 0 && reason.length < MIN_REASON)) {
+      throw new BadRequestException(`O motivo, quando informado, precisa ter de ${MIN_REASON} a ${MAX_REASON} caracteres.`);
     }
+
+    // Cartão recorrente: cancela no provedor ANTES de apagar (fail closed). Se o banco falhar depois, a recorrência já está
+    // cancelada e a exclusão pode ser repetida (cancelar de novo é tolerado, ver cancelCardRecurrence).
+    const cardCancelled = await this.cancelCardRecurrence(tenant.subscription);
 
     const originalSlug = tenant.slug;
     await this.prisma.$transaction(
@@ -261,11 +249,14 @@ export class TenantDeletionService {
             action: AUDIT_TENANT_PURGED,
             actor,
             tenantId,
-            detail: !status.deletable
-              ? `slug=${originalSlug}; negócio ainda com acesso (${status.billingStatus}); motivo: ${reason}`
-              : `slug=${originalSlug}; acesso terminou em ${status.accessEndedAt?.toISOString().slice(0, 10)}; ${
-                  status.eligible ? `prazo de ${DELETION_RETENTION_DAYS} dias cumprido` : `exclusão antecipada: ${reason}`
-                }`,
+            detail: [
+              `slug=${originalSlug}`,
+              status.deletable
+                ? `acesso terminou em ${status.accessEndedAt?.toISOString().slice(0, 10)}${status.eligible ? `; prazo de ${DELETION_RETENTION_DAYS} dias cumprido` : ""}`
+                : `negócio ainda com acesso (${status.billingStatus})`,
+              ...(cardCancelled ? ['recorrência do cartão cancelada no provedor'] : []),
+              ...(reason ? [`motivo: ${reason}`] : []),
+            ].join("; "),
           },
         });
 
@@ -308,6 +299,35 @@ export class TenantDeletionService {
 
     this.logger.log(`Dados do negócio ${tenantId} excluídos por ${actor}.`);
     return { purged: true, slug: originalSlug };
+  }
+
+  private hasCardRecurrence(subscription: SubscriptionForStatus): boolean {
+    return !!subscription && !subscription.courtesy && subscription.method === BillingMethod.CARD_RECURRING && !!subscription.providerSubscriptionId;
+  }
+
+  // Devolve true se havia recorrência e ela foi cancelada (ou já estava cancelada no provedor).
+  private async cancelCardRecurrence(subscription: SubscriptionForStatus): Promise<boolean> {
+    if (!this.hasCardRecurrence(subscription)) return false;
+    const providerId = subscription!.providerSubscriptionId as string;
+    if (!this.mp.isConfigured()) {
+      throw new ServiceUnavailableException(
+        "Este negócio paga no cartão, mas o Mercado Pago não está configurado neste servidor para cancelar a cobrança. Nada foi excluído.",
+      );
+    }
+    try {
+      await this.mp.cancelPreapproval(providerId);
+    } catch (error) {
+      // Já estava cancelada (exclusão repetida)? Então segue; qualquer outra falha interrompe antes de apagar.
+      const already = await this.mp
+        .getPreapproval(providerId)
+        .then((p) => p.status === "cancelled")
+        .catch(() => false);
+      if (!already) {
+        this.logger.warn(`Cancelamento da recorrência ${providerId} falhou na exclusão do negócio: ${(error as Error).message}`);
+        throw toBadGateway();
+      }
+    }
+    return true;
   }
 
   private async findTenant(tenantId: string) {

@@ -21,7 +21,7 @@ describe("DeleteTenantForm", () => {
   });
 
   it("começa travado: nada de clique sem digitar o endereço e marcar a ciência", async () => {
-    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" eligible />);
+    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" />);
     expect(button()).toBeDisabled();
 
     await userEvent.type(screen.getByLabelText(/digite o endereço/i), "salao-teste");
@@ -32,35 +32,36 @@ describe("DeleteTenantForm", () => {
   });
 
   it("endereço digitado diferente do negócio mantém o botão travado (inclusive diferença de maiúscula)", async () => {
-    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" eligible />);
+    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" />);
     await userEvent.type(screen.getByLabelText(/digite o endereço/i), "Salao-Teste");
     await userEvent.click(screen.getByRole("checkbox"));
     expect(button()).toBeDisabled();
   });
 
-  it("dentro do prazo (elegível) não pede motivo", () => {
-    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" eligible />);
-    expect(screen.queryByLabelText(/motivo da exclusão antecipada/i)).not.toBeInTheDocument();
-  });
-
-  it("antes dos 90 dias exige motivo de ao menos 10 caracteres", async () => {
-    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" eligible={false} />);
+  it("o motivo é opcional: sem motivo já habilita (não há espera de 90 dias)", async () => {
+    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" />);
     await userEvent.type(screen.getByLabelText(/digite o endereço/i), "salao-teste");
     await userEvent.click(screen.getByRole("checkbox"));
+    expect(button()).toBeEnabled();
+  });
+
+  it("se o motivo for informado, precisa ter ao menos 10 caracteres", async () => {
+    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" />);
+    await userEvent.type(screen.getByLabelText(/digite o endereço/i), "salao-teste");
+    await userEvent.click(screen.getByRole("checkbox"));
+
+    await userEvent.type(screen.getByLabelText(/motivo \(opcional\)/i), "curto");
     expect(button()).toBeDisabled();
 
-    await userEvent.type(screen.getByLabelText(/motivo da exclusão antecipada/i), "curto");
-    expect(button()).toBeDisabled();
-
-    await userEvent.type(screen.getByLabelText(/motivo da exclusão antecipada/i), " e agora sim longo");
+    await userEvent.type(screen.getByLabelText(/motivo \(opcional\)/i), " e agora sim longo");
     expect(button()).toBeEnabled();
   });
 
   it("confirma: chama a ação com o id, o endereço e o motivo, e volta para a lista", async () => {
     purgeTenantDataAction.mockResolvedValue({ ok: true });
-    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" eligible={false} />);
+    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" />);
     await userEvent.type(screen.getByLabelText(/digite o endereço/i), "salao-teste");
-    await userEvent.type(screen.getByLabelText(/motivo da exclusão antecipada/i), "Pedido do titular em 22/10");
+    await userEvent.type(screen.getByLabelText(/motivo \(opcional\)/i), "Pedido do titular em 22/10");
     await userEvent.click(screen.getByRole("checkbox"));
 
     await userEvent.click(button());
@@ -71,7 +72,7 @@ describe("DeleteTenantForm", () => {
 
   it("erro do backend aparece e o formulário continua (nada de navegar)", async () => {
     purgeTenantDataAction.mockResolvedValue({ ok: false, error: "Este negócio ainda tem acesso ao Marquo." });
-    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" eligible />);
+    render(<DeleteTenantForm tenantId={ID} slug="salao-teste" />);
     await userEvent.type(screen.getByLabelText(/digite o endereço/i), "salao-teste");
     await userEvent.click(screen.getByRole("checkbox"));
 
