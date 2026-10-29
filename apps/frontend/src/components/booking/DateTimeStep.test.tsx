@@ -62,7 +62,7 @@ describe("DateTimeStep: faixa de dias", () => {
     const user = userEvent.setup();
     const { onSelectDate } = renderStep();
     const next = today().plus({ days: 3 });
-    await user.click(screen.getByRole("button", { name: next.setLocale("pt-BR").toFormat("cccc, d 'de' LLLL"), exact: true }));
+    await user.click(screen.getByRole("button", { name: next.setLocale("pt-BR").toFormat("cccc, d 'de' LLLL") }));
     expect(onSelectDate).toHaveBeenCalledWith(next.toISODate());
   });
 

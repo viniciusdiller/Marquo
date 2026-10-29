@@ -65,7 +65,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @marquo/database db:generate
       - run: pnpm --filter @marquo/database db:deploy
-      - run: pnpm --filter @marquo/database db:seed
+      - run: pnpm --filter @marquo/database exec ts-node --project ../../tsconfig.base.json prisma/seed.ts
       - run: pnpm build
       - run: pnpm --filter frontend exec playwright install --with-deps chromium
       - name: Start backend against disposable services
