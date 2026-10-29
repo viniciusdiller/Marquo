@@ -1,7 +1,7 @@
 name: CI
 
 # Roda em todo PR para a main e a cada push na main. Não precisa de banco nem de segredos: os testes de backend usam
-# Prisma mockado, e o build do frontend não chama a API.
+# Prisma mockado; uma etapa separada valida PostgreSQL + Redis reais.
 on:
   pull_request:
     branches: [main]
@@ -52,3 +52,40 @@ jobs:
 
       - name: Testes do frontend
         run: pnpm --filter frontend test
+
+  integration:
+    name: PostgreSQL and Redis integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: marquo_test
+          POSTGRES_PASSWORD: integration_only
+          POSTGRES_DB: marquo_integration
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U marquo_test -d marquo_integration"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      INTEGRATION_TESTS: "1"
+      DATABASE_URL: postgresql://marquo_test:integration_only@localhost:5432/marquo_integration
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @marquo/database db:generate
+      - run: pnpm --filter @marquo/database db:deploy
+      - run: pnpm --filter backend test:integration

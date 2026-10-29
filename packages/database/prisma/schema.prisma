@@ -179,6 +179,7 @@ model Tenant {
   users               User[]
   professionals       Professional[]
   services            Service[]
+  notificationOutbox  NotificationOutbox[]
   appointments        Appointment[]
   timeBlocks          TimeBlock[]
   waitlist            WaitlistEntry[]
@@ -413,8 +414,8 @@ model Appointment {
   noShowAt         DateTime?         @db.Timestamptz(6)
   rescheduledCount Int               @default(0)
   // Lembrete por e-mail ao cliente (ver ReminderService). Não nulo = já foi enviado OU não é mais necessário (marcado
-  // com menos de 24 h de antecedência: a confirmação acabou de sair). Voltar a nulo ao remarcar. A reivindicação é
-  // atômica (UPDATE condicional), então nenhum atendimento é lembrado duas vezes.
+  // com menos de 24 h de antecedência: a confirmação acabou de sair). Voltar a nulo ao remarcar. A fila persistente usa chave
+  // única por versão do agendamento e idempotência no provedor.
   reminderSentAt   DateTime?         @db.Timestamptz(6)
   createdAt        DateTime          @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime          @updatedAt @db.Timestamptz(6)
@@ -422,6 +423,7 @@ model Appointment {
   tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   professional    Professional      @relation(fields: [professionalId], references: [id], onDelete: Restrict)
   client          Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  notificationOutbox NotificationOutbox[]
   items           AppointmentItem[]
   intakeResponses IntakeResponse[]
   ticket          Ticket?
@@ -1125,4 +1127,38 @@ model AdminAuditLog {
 
   @@index([tenantId, createdAt])
   @@index([createdAt])
+}
+
+// Durable email jobs. Payload is an immutable template snapshot, deleted with the appointment/tenant.
+enum NotificationStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model NotificationOutbox {
+  id                 String @id @default(uuid())
+  tenantId           String
+  appointmentId      String
+  event              String
+  appointmentVersion Int
+  deduplicationKey   String @unique
+  payload            Json
+  status             NotificationStatus @default(PENDING)
+  attempts           Int @default(0)
+  availableAt        DateTime @default(now()) @db.Timestamptz(6)
+  lockedUntil        DateTime? @db.Timestamptz(6)
+  lockToken          String?
+  firstAttemptAt     DateTime? @db.Timestamptz(6)
+  sentAt             DateTime? @db.Timestamptz(6)
+  lastError          String?
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  tenant             Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment        Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@index([appointmentId, event, appointmentVersion])
+  @@index([tenantId, createdAt])
 }

@@ -1,3 +1,5 @@
+import { SharedStateService } from "../shared-state/shared-state.service";
+import { sharedStateFake } from "../../test/shared-state.fake";
 import "reflect-metadata";
 import { Controller, Get, INestApplication, Post, Req } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -32,6 +34,7 @@ async function buildApp(secret: string | null = SECRET) {
     controllers: [ProbeController],
     providers: [
       { provide: ConfigService, useValue: { get: (key: string) => (key === "INTERNAL_API_SECRET" ? (secret ?? undefined) : undefined) } },
+      { provide: SharedStateService, useValue: sharedStateFake() },
       InternalAuthGuard,
       { provide: APP_GUARD, useExisting: InternalAuthGuard },
     ],

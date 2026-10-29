@@ -1,3 +1,6 @@
+import { SharedStateModule } from "./shared-state/shared-state.module";
+import { SharedStateService } from "./shared-state/shared-state.service";
+import { RedisThrottlerStorage } from "./shared-state/redis-throttler.storage";
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
@@ -40,7 +43,15 @@ import { ReportsModule } from './reports/reports.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    SharedStateModule,
+    ThrottlerModule.forRootAsync({
+      imports: [SharedStateModule],
+      inject: [SharedStateService],
+      useFactory: (state: SharedStateService) => ({
+        throttlers: [{ ttl: 60_000, limit: 100 }],
+        storage: new RedisThrottlerStorage(state),
+      }),
+    }),
     ServeStaticModule.forRoot({ rootPath: UPLOADS_DIR, serveRoot: UPLOADS_URL_PREFIX }),
     PrismaModule,
     AuthModule,

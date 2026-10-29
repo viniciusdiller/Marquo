@@ -1,8 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Role } from "@marquo/database";
+import { REMINDER_LEAD_MS } from "../appointments/reminder.constants";
+import { Prisma, Role } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
-import { EmailService } from "./email.service";
+import { EmailMessage, EmailService } from "./email.service";
 import {
   AppointmentEmailData,
   AppointmentEmailEvent,
@@ -22,12 +23,8 @@ export interface NotifyOptions {
   notifyProfessional?: boolean;
 }
 
-// Dispara os e-mails de agendamento DEPOIS que o atendimento já foi gravado. Nunca lança e nunca é esperado
-// por quem chama (fire-and-forget): falha de e-mail não pode desfazer nem atrasar a resposta de um agendamento.
-//
-// Os destinatários NUNCA vêm do request: são relidos do banco, com tenantId no WHERE (equipe: dono ativo +
-// profissional ativo do atendimento; cliente: e-mail da conta de cliente, ou o e-mail do cadastro quando a
-// recepção marcou). O conteúdo é um template fixo: ninguém consegue usar isto para mandar texto livre.
+// Templates and recipients are snapshotted inside the appointment transaction.
+// External email delivery is handled by NotificationWorkerService after commit.
 @Injectable()
 export class AppointmentNotifierService {
   private readonly logger = new Logger(AppointmentNotifierService.name);
@@ -38,20 +35,6 @@ export class AppointmentNotifierService {
     private readonly config: ConfigService,
   ) {}
 
-  // Ponto de entrada para quem agenda: engole qualquer erro (inclusive de banco) e devolve já.
-  notify(
-    event: AppointmentEmailEvent,
-    appointmentId: string,
-    tenantId: string,
-    actor: NotificationActor,
-    options: NotifyOptions = {},
-  ): void {
-    if (!this.email.isConfigured()) return;
-    void this.deliver(event, appointmentId, tenantId, actor, options).catch((error: unknown) => {
-      this.logger.warn(`Falha ao preparar e-mail de agendamento (${event}): ${(error as Error).name}`);
-    });
-  }
-
   async deliver(
     event: AppointmentEmailEvent,
     appointmentId: string,
@@ -59,17 +42,65 @@ export class AppointmentNotifierService {
     actor: NotificationActor,
     options: NotifyOptions = {},
   ): Promise<void> {
-    const appointment = await this.load(appointmentId, tenantId);
+    const messages = await this.messages(this.prisma, event, appointmentId, tenantId, actor, options);
+    await Promise.all(messages.map((message) => this.email.send(message)));
+  }
+
+  async enqueue(
+    tx: Prisma.TransactionClient,
+    event: AppointmentEmailEvent,
+    appointmentId: string,
+    tenantId: string,
+    actor: NotificationActor,
+    options: NotifyOptions = {},
+  ): Promise<void> {
+    // Still persist when email is disabled: jobs wait until the provider is configured.
+    const appointment = await this.load(appointmentId, tenantId, tx);
     if (!appointment) return;
+    const messages = await this.messages(tx, event, appointmentId, tenantId, actor, options);
+    await this.persist(tx, event, appointment, tenantId, messages);
+  }
+
+  async enqueueReminder(tx: Prisma.TransactionClient, appointmentId: string, tenantId: string): Promise<void> {
+    const appointment = await this.load(appointmentId, tenantId, tx);
+    if (!appointment || appointment.reminderSentAt || !["SCHEDULED", "CONFIRMED"].includes(appointment.status) || appointment.startAt <= new Date() || appointment.startAt.getTime() > Date.now() + REMINDER_LEAD_MS) return;
+    const clientEmail = this.clientEmail(appointment);
+    const messages: EmailMessage[] = clientEmail ? [{
+      to: [clientEmail], ...buildAppointmentEmail({ ...this.buildBase("REMINDER", appointment), audience: "CLIENT" }),
+    }] : [];
+    await this.persist(tx, "REMINDER", appointment, tenantId, messages);
+  }
+
+  private async persist(tx: Prisma.TransactionClient, event: AppointmentEmailEvent, appointment: LoadedAppointment, tenantId: string, messages: EmailMessage[]) {
+    // Empty recipient lists also leave a SKIPPED marker so the scanner can advance.
+    const rows = messages.length ? messages : [null];
+    await tx.notificationOutbox.createMany({
+      data: rows.map((message, index) => ({
+        tenantId, appointmentId: appointment.id, event,
+        appointmentVersion: appointment.rescheduledCount,
+        deduplicationKey: `${appointment.id}:${event}:${appointment.rescheduledCount}:${index}`,
+        payload: JSON.parse(JSON.stringify(message ?? {})) as Prisma.InputJsonValue,
+        status: message ? "PENDING" : "SKIPPED",
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  private async messages(
+    tx: Prisma.TransactionClient, event: AppointmentEmailEvent, appointmentId: string, tenantId: string,
+    actor: NotificationActor, options: NotifyOptions,
+  ): Promise<EmailMessage[]> {
+    const appointment = await this.load(appointmentId, tenantId, tx);
+    if (!appointment) return [];
     const base = this.buildBase(event, appointment);
 
-    const sends: Promise<boolean>[] = [];
+    const sends: EmailMessage[] = [];
     // O dono pode desligar os avisos da EQUIPE; o que o cliente recebe não depende disso.
     const staffAllowed = appointment.tenant.notifyStaffByEmail;
 
     if (staffAllowed && actor === "STAFF" && options.notifyProfessional && appointment.professional.user.isActive) {
       sends.push(
-        this.email.send({
+        ({
           to: [appointment.professional.user.email],
           ...buildAppointmentEmail({ ...base, audience: "STAFF" }),
         }),
@@ -82,18 +113,18 @@ export class AppointmentNotifierService {
         ...(appointment.professional.user.isActive ? [appointment.professional.user.email] : []),
       ];
       if (staff.length > 0) {
-        sends.push(this.email.send({ to: staff, ...buildAppointmentEmail({ ...base, audience: "STAFF" }) }));
+        sends.push(({ to: staff, ...buildAppointmentEmail({ ...base, audience: "STAFF" }) }));
       }
     }
 
     if (actor === "STAFF" || options.alsoConfirmToClient) {
       const clientEmail = this.clientEmail(appointment);
       if (clientEmail) {
-        sends.push(this.email.send({ to: [clientEmail], ...buildAppointmentEmail({ ...base, audience: "CLIENT" }) }));
+        sends.push(({ to: [clientEmail], ...buildAppointmentEmail({ ...base, audience: "CLIENT" }) }));
       }
     }
 
-    await Promise.all(sends);
+    return sends;
   }
 
   // Lembrete ao CLIENTE (nunca à equipe). Devolve o que aconteceu, para o ReminderService decidir se devolve a
@@ -114,11 +145,13 @@ export class AppointmentNotifierService {
     return appointment.client?.consumerLink?.consumer.email ?? appointment.client?.email ?? null;
   }
 
-  private load(appointmentId: string, tenantId: string) {
-    return this.prisma.appointment.findFirst({
+  private load(appointmentId: string, tenantId: string, tx: Prisma.TransactionClient = this.prisma) {
+    return tx.appointment.findFirst({
       where: { id: appointmentId, tenantId },
       select: {
         id: true,
+        status: true,
+        reminderSentAt: true,
         clientName: true,
         clientPhone: true,
         startAt: true,

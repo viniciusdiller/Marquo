@@ -27,7 +27,7 @@ function buildConsumerAuthMock() {
 const consumer = { consumerId: "consumer-1", sessionId: "session-1" };
 
 function buildNotifierMock() {
-  return { notify: jest.fn() } as unknown as AppointmentNotifierService;
+  return { enqueue: jest.fn().mockResolvedValue(undefined) } as unknown as AppointmentNotifierService;
 }
 
 // Um atendimento "hidratado" como o APPOINTMENT_INCLUDE devolve — usado pelo serialize().
@@ -756,22 +756,21 @@ describe("AppointmentsService", () => {
     });
   });
 
-  // E-mail é efeito colateral DEPOIS da gravação: dispara com o ator certo (quem recebe o aviso depende dele)
-  // e uma falha na gravação NÃO dispara nada.
+  // A notificação é persistida na MESMA transação da gravação, com o ator e o tenant corretos.
   describe("notificações por e-mail", () => {
     function setup(appointmentOverrides: Record<string, unknown> = {}) {
       const tx = buildTxMock();
       const prisma = buildPrismaMock(tx);
       (prisma.appointment.findFirst as jest.Mock).mockResolvedValue(hydratedAppointment(appointmentOverrides));
-      const notify = jest.fn();
-      const service = new AppointmentsService(prisma, clientsService, consumerAuth, { notify } as unknown as AppointmentNotifierService);
+      const notify = jest.fn().mockResolvedValue(undefined);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, { enqueue: notify } as unknown as AppointmentNotifierService);
       return { tx, prisma, notify, service };
     }
 
     it("agendamento público: avisa a equipe e confirma ao cliente, escopo no tenant do slug", async () => {
       const { service, notify } = setup();
       await service.createFromPublicLink("slug", baseDto, consumer);
-      expect(notify).toHaveBeenCalledWith("CREATED", "appt-1", "tenant-1", "CLIENT", { alsoConfirmToClient: true });
+      expect(notify).toHaveBeenCalledWith(expect.any(Object), "CREATED", "appt-1", "tenant-1", "CLIENT", { alsoConfirmToClient: true });
     });
 
     it("agendamento pela recepção: avisa o cliente (ator STAFF)", async () => {
@@ -783,19 +782,19 @@ describe("AppointmentsService", () => {
         clientName: "Novo Cliente",
         clientPhone: "11988887777",
       });
-      expect(notify).toHaveBeenCalledWith("CREATED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
+      expect(notify).toHaveBeenCalledWith(expect.any(Object), "CREATED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
     });
 
     it("conflito de horário (nada gravado) não dispara e-mail", async () => {
       const tx = buildTxMock({
         appointment: { findFirst: jest.fn().mockResolvedValue({ id: "existing" }), create: jest.fn() },
       });
-      const notify = jest.fn();
+      const notify = jest.fn().mockResolvedValue(undefined);
       const service = new AppointmentsService(
         buildPrismaMock(tx),
         clientsService,
         consumerAuth,
-        { notify } as unknown as AppointmentNotifierService,
+        { enqueue: notify } as unknown as AppointmentNotifierService,
       );
       await expect(service.createFromPublicLink("slug", baseDto, consumer)).rejects.toThrow(ConflictException);
       expect(notify).not.toHaveBeenCalled();
@@ -804,21 +803,21 @@ describe("AppointmentsService", () => {
     it("cliente cancela: ator CLIENT; recepção cancela: ator STAFF", async () => {
       const byClient = setup();
       await byClient.service.cancelForConsumer("appt-1", consumer);
-      expect(byClient.notify).toHaveBeenCalledWith("CANCELED", "appt-1", "tenant-1", "CLIENT", expect.any(Object));
+      expect(byClient.notify).toHaveBeenCalledWith(expect.any(Object), "CANCELED", "appt-1", "tenant-1", "CLIENT", expect.any(Object));
 
       const byStaff = setup();
       await byStaff.service.cancelByStaff(owner, "appt-1");
-      expect(byStaff.notify).toHaveBeenCalledWith("CANCELED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
+      expect(byStaff.notify).toHaveBeenCalledWith(expect.any(Object), "CANCELED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
     });
 
     it("cliente remarca: ator CLIENT; recepção remarca: ator STAFF", async () => {
       const byClient = setup();
       await byClient.service.rescheduleForConsumer("appt-1", { startAt: FUTURE_DATE }, consumer);
-      expect(byClient.notify).toHaveBeenCalledWith("RESCHEDULED", "appt-1", "tenant-1", "CLIENT", expect.any(Object));
+      expect(byClient.notify).toHaveBeenCalledWith(expect.any(Object), "RESCHEDULED", "appt-1", "tenant-1", "CLIENT", expect.any(Object));
 
       const byStaff = setup();
       await byStaff.service.rescheduleByStaff(owner, "appt-1", { startAt: FUTURE_DATE });
-      expect(byStaff.notify).toHaveBeenCalledWith("RESCHEDULED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
+      expect(byStaff.notify).toHaveBeenCalledWith(expect.any(Object), "RESCHEDULED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: true });
     });
 
     it("o profissional que agenda/cancela/remarca na PRÓPRIA agenda não é avisado do que ele mesmo fez", async () => {
@@ -832,15 +831,15 @@ describe("AppointmentsService", () => {
         clientName: "Novo Cliente",
         clientPhone: "11988887777",
       });
-      expect(created.notify).toHaveBeenCalledWith("CREATED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: false });
+      expect(created.notify).toHaveBeenCalledWith(expect.any(Object), "CREATED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: false });
 
       const canceled = setup({ professionalId: "prof-1" });
       await canceled.service.cancelByStaff(own, "appt-1");
-      expect(canceled.notify).toHaveBeenCalledWith("CANCELED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: false });
+      expect(canceled.notify).toHaveBeenCalledWith(expect.any(Object), "CANCELED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: false });
 
       const moved = setup({ professionalId: "prof-1" });
       await moved.service.rescheduleByStaff(own, "appt-1", { startAt: FUTURE_DATE });
-      expect(moved.notify).toHaveBeenCalledWith("RESCHEDULED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: false });
+      expect(moved.notify).toHaveBeenCalledWith(expect.any(Object), "RESCHEDULED", "appt-1", "tenant-1", "STAFF", { notifyProfessional: false });
     });
 
     it("cancelar atendimento já cancelado (erro de negócio) não dispara e-mail", async () => {

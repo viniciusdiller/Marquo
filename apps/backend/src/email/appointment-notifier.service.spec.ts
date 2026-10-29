@@ -140,20 +140,6 @@ describe("AppointmentNotifierService.deliver", () => {
   });
 });
 
-describe("AppointmentNotifierService.notify", () => {
-  it("com e-mail desligado não toca no banco", () => {
-    const { service, findFirst } = build(hydrated(), false);
-    service.notify("CREATED", "a", "t", "CLIENT");
-    expect(findFirst).not.toHaveBeenCalled();
-  });
-
-  it("erro de banco NÃO propaga (fire-and-forget)", async () => {
-    const { service, findFirst } = build(hydrated());
-    findFirst.mockRejectedValue(new Error("db fora"));
-    expect(() => service.notify("CREATED", "a", "t", "CLIENT")).not.toThrow();
-    await new Promise((resolve) => setImmediate(resolve));
-  });
-});
 
 describe("AppointmentNotifierService.deliverReminder", () => {
   it("envia o lembrete só ao CLIENTE (nunca à equipe), com a conta do cliente à frente da ficha", async () => {

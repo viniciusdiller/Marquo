@@ -39,6 +39,14 @@ describe("EmailService", () => {
     expect(body.html).toBe("<p>oi</p>");
   });
 
+  it("preserves the idempotency key and request body across retries", async () => {
+    const service = build(configured);
+    await service.send(message, "marquo-notification/job-1");
+    await service.send(message, "marquo-notification/job-1");
+    expect(fetchMock.mock.calls[0][1].headers["Idempotency-Key"]).toBe("marquo-notification/job-1");
+    expect(fetchMock.mock.calls[0][1].body).toBe(fetchMock.mock.calls[1][1].body);
+  });
+
   it("normaliza, deduplica e limita os destinatários", async () => {
     const service = build(configured);
     await service.send({

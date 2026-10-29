@@ -1,3 +1,4 @@
+import { sharedStateFake } from "../../test/shared-state.fake";
 import { ServiceUnavailableException, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
@@ -27,7 +28,7 @@ function build(over: Record<string, string | undefined> = {}, sendResult = true)
   } as unknown as ConfigService;
   const send = jest.fn().mockResolvedValue(sendResult);
   const email = { send, isConfigured: () => true } as unknown as EmailService;
-  const service = new PlatformAuthService(config, new JwtService({}), email);
+  const service = new PlatformAuthService(config, new JwtService({}), email, sharedStateFake());
   return Object.assign(service, { send });
 }
 

@@ -37,7 +37,7 @@ export class EmailService {
     return Boolean(this.config.get<string>("RESEND_API_KEY") && this.config.get<string>("EMAIL_FROM"));
   }
 
-  async send(message: EmailMessage): Promise<boolean> {
+  async send(message: EmailMessage, idempotencyKey?: string): Promise<boolean> {
     const apiKey = this.config.get<string>("RESEND_API_KEY");
     const from = this.config.get<string>("EMAIL_FROM");
     if (!apiKey || !from) {
@@ -56,7 +56,9 @@ export class EmailService {
       const response = await fetch(RESEND_URL, {
         method: "POST",
         signal: controller.signal,
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json",
+          ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+        },
         body: JSON.stringify({
           from,
           to,

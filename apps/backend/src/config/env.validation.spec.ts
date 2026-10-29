@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { validateEnv } from "./env.validation";
 
 const base = {
-  DATABASE_URL: "postgresql://x",
+  REDIS_URL: "redis://localhost:6379", DATABASE_URL: "postgresql://x",
 };
 
 describe("validateEnv", () => {
@@ -70,7 +70,7 @@ describe("validateEnv", () => {
 });
 
 describe("validateEnv: FRONTEND_URL", () => {
-  const dev = { DATABASE_URL: "postgresql://x", JWT_SECRET: "a".repeat(40) };
+  const dev = { REDIS_URL: "redis://localhost:6379", DATABASE_URL: "postgresql://x", JWT_SECRET: "a".repeat(40) };
   const prod = { ...dev, NODE_ENV: "production", CLIENT_IP_SECRET: "c".repeat(32), INTERNAL_API_SECRET: "i".repeat(32), FRONTEND_URL: "https://marquo.com.br" };
 
   it("em desenvolvimento nada de cobrança é obrigatório (o backend local não cai no boot)", () => {
@@ -175,4 +175,9 @@ describe("validateEnv: FRONTEND_URL", () => {
       ).toThrow();
     });
   });
+});
+
+it("requires a valid shared Redis URL", () => {
+  expect(() => validateEnv({ DATABASE_URL: "postgresql://x", JWT_SECRET: "x".repeat(40) })).toThrow();
+  expect(() => validateEnv({ DATABASE_URL: "postgresql://x", JWT_SECRET: "x".repeat(40), REDIS_URL: "https://example.com" })).toThrow();
 });

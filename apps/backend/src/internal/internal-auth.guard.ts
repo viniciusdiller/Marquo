@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { SharedStateService } from "../shared-state/shared-state.service";
 import type { Request } from "express";
 import {
   INTERNAL_MAX_AGE_MS,
@@ -15,13 +16,9 @@ const DENIED = "Acesso negado.";
 @Injectable()
 export class InternalAuthGuard implements CanActivate {
   private readonly logger = new Logger(InternalAuthGuard.name);
-  // Assinaturas já vistas dentro da janela: uma requisição capturada não pode ser reenviada (o POST de
-  // redefinição gerava um link novo a cada repetição). Em memória, um processo; a janela é de 5 min.
-  private readonly seen = new Map<string, number>();
+  constructor(private readonly config: ConfigService, private readonly state: SharedStateService) {}
 
-  constructor(private readonly config: ConfigService) {}
-
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const secret = this.config.get<string>("INTERNAL_API_SECRET");
     if (!secret) {
       // Sem segredo configurado a API interna simplesmente não existe (fail closed).
@@ -39,16 +36,9 @@ export class InternalAuthGuard implements CanActivate {
     );
     if (!valid || typeof signature !== "string") throw new ForbiddenException(DENIED);
 
-    const now = Date.now();
-    this.evictExpired(now);
-    if (this.seen.has(signature)) throw new ForbiddenException(DENIED);
-    this.seen.set(signature, now + INTERNAL_MAX_AGE_MS);
+    // Include the accepted future skew: a signature remains valid until timestamp + max age.
+    const ttl = Math.max(1, Number(req.headers[INTERNAL_TIMESTAMP_HEADER]) + INTERNAL_MAX_AGE_MS - Date.now() + 1);
+    if (!(await this.state.claim("internal-replay", signature, ttl))) throw new ForbiddenException(DENIED);
     return true;
-  }
-
-  private evictExpired(now: number) {
-    for (const [signature, expiresAt] of this.seen) {
-      if (expiresAt <= now) this.seen.delete(signature);
-    }
   }
 }

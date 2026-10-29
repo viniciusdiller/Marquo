@@ -47,6 +47,7 @@ export const PURGE_STEPS: { model: string; run: (tx: Tx, tenantId: string) => Pr
   { model: "CashRegister", run: (tx, tenantId) => tx.cashRegister.deleteMany({ where: { tenantId } }) },
   { model: "Review", run: (tx, tenantId) => tx.review.deleteMany({ where: { tenantId } }) },
   { model: "IntakeResponse", run: (tx, tenantId) => tx.intakeResponse.deleteMany({ where: { tenantId } }) },
+  { model: "NotificationOutbox", run: (tx, tenantId) => tx.notificationOutbox.deleteMany({ where: { tenantId } }) },
   { model: "Appointment", run: (tx, tenantId) => tx.appointment.deleteMany({ where: { tenantId } }) },
   { model: "IntakeForm", run: (tx, tenantId) => tx.intakeForm.deleteMany({ where: { tenantId } }) },
   { model: "WaitlistEntry", run: (tx, tenantId) => tx.waitlistEntry.deleteMany({ where: { tenantId } }) },

@@ -481,7 +481,7 @@ describe("ConsumerAuthService.register: código de confirmação do e-mail", () 
 
     expect(emailCodes.check).toHaveBeenCalledWith("ana@example.com", "123456");
     expect(prisma.consumer.create).toHaveBeenCalledTimes(1);
-    expect(emailCodes.consume).toHaveBeenCalledWith("ana@example.com");
+    expect(emailCodes.check).toHaveBeenCalledWith("ana@example.com", expect.any(String));
   });
 
   it("código errado, vencido ou ausente: 400 ANTES de qualquer custo (nem bcrypt nem banco) e nada é criado", async () => {

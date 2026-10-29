@@ -51,8 +51,14 @@ pm2 save && pm2 startup            # sobe sozinho quando o servidor reiniciar
 pm2 install pm2-logrotate          # impede o log de encher o disco
 ```
 
-Mantenha **uma instância** do backend: o bloqueio de login por tentativas e a proteção contra repetição da API
-interna vivem na memória do processo.
+Configure o mesmo `REDIS_URL` em todos os backends (Redis 7+, rede privada, autenticação e TLS quando disponível).
+Redis precisa de persistência, política `noeviction` e monitoramento: se ficar indisponível, os controles de segurança
+respondem 503 em vez de usar contadores locais. Reiniciar Redis sem persistência perde desafios e histórico anti-replay.
+Na migração, desligue as instâncias antigas antes de iniciar as novas: o estado em memória anterior não é transferido.
+
+Os exemplos continuam com uma instância por padrão. Para múltiplos servidores, compartilhe também os uploads; a
+exportação tem trava apenas por processo e deve ter concorrência limitada na borda. Configure o pool PostgreSQL por
+instância (`connection_limit` na DATABASE_URL) para o total de réplicas caber no limite do banco.
 
 ## Backup e restauração
 
@@ -74,3 +80,51 @@ dropdb marquo_restore_teste
 ```
 
 As imagens: `tar -xzf uploads-AAAAMMDD-HHMMSS.tar.gz -C /pasta/de/teste` e confira que os arquivos abrem.
+
+
+## Fila de notificações
+
+Antes de publicar: suba Redis, configure `REDIS_URL`, aplique `db:deploy`, gere o Prisma client e reinicie o backend.
+A migration é aditiva: cria `NotificationOutbox`; não envia e-mails nem altera agendamentos existentes.
+
+Agendamento, cancelamento e remarcação gravam o snapshot da notificação na mesma transação do evento. Workers em
+cada backend usam `FOR UPDATE SKIP LOCKED`, leases de 120 segundos e tokens de posse. Um worker interrompido deixa
+o job para outra instância recuperar. O envio usa a mesma `Idempotency-Key` no Resend em cada tentativa.
+
+A cada cinco segundos o worker drena lotes de cinco, por até 40 segundos; o scanner de lembretes roda a cada minuto
+com lotes de 500, incluindo agendamentos anteriores à migration. `reminderSentAt` só é preenchido após sucesso.
+Atendimentos criados com menos de 24 horas continuam dispensando lembrete, pois recebem confirmação imediata.
+Lembretes de versões antigas da agenda ou cancelados são descartados antes do envio.
+
+Falhas têm espera progressiva de 30 segundos até uma hora, no máximo oito tentativas e 23 horas após a primeira
+tentativa (a [chave do Resend vale por 24 horas](https://resend.com/changelog/idempotency-keys)). Não há garantia de exactly-once além da janela do provedor.
+Jobs `FAILED` exigem investigação; não os reenvie automaticamente com uma nova chave, pois o provedor pode ter
+aceitado o primeiro envio. Requisições já em trânsito podem terminar durante um cancelamento/remarcação.
+
+Monitore a fila e alerte sobre `FAILED`, jobs antigos e `PROCESSING` com lease expirado:
+
+```sql
+SELECT status, count(*), min("availableAt") AS oldest
+FROM "NotificationOutbox" GROUP BY status;
+```
+
+O payload contém dados pessoais necessários ao template. É removido em `SENT`/`SKIPPED`, e registros são apagados
+em cascata com o agendamento. Exclua payloads de jobs `FAILED` investigados e de jobs sem provedor configurado após
+seu prazo operacional. Nunca exponha a tabela ou seu payload em endpoints públicos/logs.
+
+## Testes de integração
+
+Use apenas PostgreSQL/Redis descartáveis, sem tokens reais de e-mail/pagamento. O teste remove somente os tenants
+que criou e não executa reset/truncate. Aplique todas as migrations antes:
+
+```bash
+export DATABASE_URL=postgresql://totalagenda_app:totalagenda_dev@localhost:5432/marquo_integration
+export REDIS_URL=redis://localhost:6379/1
+pnpm --filter @marquo/database db:generate
+pnpm --filter @marquo/database db:deploy
+INTEGRATION_TESTS=1 pnpm --filter backend test:integration
+```
+
+O job `PostgreSQL and Redis integration` do CI cobre concorrência de reserva/fechamento, replays de pagamento,
+isolamento entre tenants, rollback da outbox, recuperação/retry de jobs e estado compartilhado entre dois clientes.
+Configure este job e o job `verify` como checks obrigatórios na proteção da `main` (configuração do GitHub).

@@ -21,6 +21,8 @@ async function bootstrap() {
   // CRU; o parser guarda o Buffer em req.rawBody só para JSON/urlencoded (upload multipart não é afetado).
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
+  app.enableShutdownHooks();
+
   // Cabeçalhos de segurança (nosniff, HSTS, frame-ancestors...). crossOriginResourcePolicy
   // cross-origin de propósito: logos/galeria em /uploads são <img> carregadas pelo frontend, que
   // roda em outra origem — o padrão "same-origin" do helmet quebraria todas as imagens.

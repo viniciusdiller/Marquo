@@ -60,10 +60,10 @@ docs/
 
 ## Rodando localmente
 
-**Requisitos:** Node.js 20 ou superior, pnpm 9 (`corepack enable`) e Docker (para o PostgreSQL).
+**Requisitos:** Node.js 20 ou superior, pnpm 9 (`corepack enable`) e Docker (para PostgreSQL e Redis).
 
 ```bash
-# 1. Banco de dados (PostgreSQL em localhost:5432)
+# 1. Banco de dados e estado compartilhado (PostgreSQL :5432, Redis :6379)
 docker compose up -d
 
 # 2. Dependências
@@ -134,7 +134,9 @@ Pontos importantes:
 
 - O `pnpm build` gera o client do Prisma automaticamente antes de compilar o backend.
 - Em produção (`NODE_ENV=production`) o backend exige variáveis adicionais; consulte o `.env.example`.
-- Rode **uma única instância** do backend.
+- Configure `REDIS_URL` em todas as instâncias do backend; códigos, bloqueios, rate limit e anti-replay usam o mesmo Redis.
+- Notificações são persistidas no PostgreSQL e processadas após o commit, com retries e idempotência. Veja [operação da fila](deploy/README.md#fila-de-notificações).
+- Para réplicas em servidores diferentes, disponibilize os uploads em armazenamento compartilhado antes de escalar.
 - Use um proxy reverso com HTTPS na frente dos dois processos e mantenha as portas 3000 e 3001 acessíveis apenas por ele.
 - O diretório `apps/backend/uploads/` guarda as imagens enviadas pelos estabelecimentos e precisa de disco persistente
   e backup.

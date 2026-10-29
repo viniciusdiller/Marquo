@@ -122,10 +122,9 @@ export class AppointmentsService {
         },
         include: APPOINTMENT_INCLUDE,
       });
+      await this.notifier.enqueue(tx, "CREATED", created.id, tenant.id, "CLIENT", { alsoConfirmToClient: true });
       return this.serialize(created);
     });
-    // Só depois do commit: a equipe recebe o aviso e o cliente a confirmação.
-    this.notifier.notify("CREATED", result.id, tenant.id, "CLIENT", { alsoConfirmToClient: true });
     return result;
   }
 
@@ -188,11 +187,10 @@ export class AppointmentsService {
         },
         include: APPOINTMENT_INCLUDE,
       });
+      await this.notifier.enqueue(tx, "CREATED", created.id, user.tenantId, "STAFF", {
+        notifyProfessional: user.professionalId !== dto.professionalId,
+      });
       return this.serialize(created);
-    });
-    // Marcado pela recepção: quem recebe o aviso é o cliente (se houver e-mail), não a equipe.
-    this.notifier.notify("CREATED", result.id, user.tenantId, "STAFF", {
-      notifyProfessional: user.professionalId !== dto.professionalId,
     });
     return result;
   }
@@ -590,19 +588,17 @@ export class AppointmentsService {
       );
     }
 
-    const updated = await this.prisma.appointment.update({
-      where: { id: appointment.id },
-      data: { status: AppointmentStatus.CANCELED, canceledAt: new Date() },
-      include: APPOINTMENT_INCLUDE,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const canceled = await tx.appointment.update({
+        where: { id: appointment.id },
+        data: { status: AppointmentStatus.CANCELED, canceledAt: new Date() },
+        include: APPOINTMENT_INCLUDE,
+      });
+      await this.notifier.enqueue(tx, "CANCELED", canceled.id, canceled.tenantId,
+        options.clientInitiated ? "CLIENT" : "STAFF",
+        { notifyProfessional: canceled.professionalId !== options.actorProfessionalId });
+      return canceled;
     });
-    this.notifier.notify(
-      "CANCELED",
-      updated.id,
-      updated.tenantId,
-      options.clientInitiated ? "CLIENT" : "STAFF",
-      // Cancelado pela equipe: o profissional dono do horário só é avisado se não foi ele mesmo quem cancelou.
-      { notifyProfessional: updated.professionalId !== options.actorProfessionalId },
-    );
     return this.serialize(updated);
   }
 
@@ -681,15 +677,11 @@ export class AppointmentsService {
         },
         include: APPOINTMENT_INCLUDE,
       });
+      await this.notifier.enqueue(tx, "RESCHEDULED", updated.id, appointment.tenantId,
+        options.staffInitiated ? "STAFF" : "CLIENT",
+        { notifyProfessional: updated.professionalId !== options.actorProfessionalId });
       return this.serialize(updated);
     });
-    this.notifier.notify(
-      "RESCHEDULED",
-      result.id,
-      appointment.tenantId,
-      options.staffInitiated ? "STAFF" : "CLIENT",
-      { notifyProfessional: result.professionalId !== options.actorProfessionalId },
-    );
     return result;
   }
 

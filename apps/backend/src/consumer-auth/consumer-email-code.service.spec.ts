@@ -1,3 +1,4 @@
+import { sharedStateFake } from "../../test/shared-state.fake";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../email/email.service";
@@ -12,7 +13,7 @@ function build(options: { configured?: boolean; env?: string; existing?: unknown
     get: (k: string) => (k === "NODE_ENV" ? options.env : k === "FRONTEND_URL" ? (options.frontend ?? "https://marquo.com.br") : undefined),
     getOrThrow: () => "s".repeat(40),
   } as unknown as ConfigService;
-  return { service: new ConsumerEmailCodeService(prisma, email, config), findUnique, send };
+  return { service: new ConsumerEmailCodeService(prisma, email, config, sharedStateFake()), findUnique, send };
 }
 
 const codeSent = (send: jest.Mock) => /Seu código: (\d{6})/.exec(send.mock.calls.at(-1)![0].text)![1];
@@ -33,17 +34,16 @@ describe("ConsumerEmailCodeService.process / check", () => {
 
     expect(send.mock.calls[0][0].to).toEqual(["ana@example.com"]);
     const code = codeSent(send);
-    expect(service.check("ana@example.com", code)).toBe("ok");
-    expect(service.check("ANA@example.com ", code)).toBe("ok");
-    service.consume("ana@example.com");
-    expect(service.check("ana@example.com", code)).toBe("expired");
+    expect(await service.check("ana@example.com", code)).toBe("ok");
+    expect(await service.check("ANA@example.com ", code)).toBe("expired");
+    expect(await service.check("ana@example.com", code)).toBe("expired");
   });
 
   it("o código de um e-mail não vale para outro", async () => {
     const { service, send } = build();
     await service.process("a@x.com");
     const code = codeSent(send);
-    expect(service.check("b@x.com", code)).not.toBe("ok");
+    expect(await service.check("b@x.com", code)).not.toBe("ok");
   });
 
   it("código errado repetido trava (5 tentativas) e o certo deixa de valer: é preciso pedir outro", async () => {
@@ -51,9 +51,9 @@ describe("ConsumerEmailCodeService.process / check", () => {
     await service.process("a@x.com");
     const code = codeSent(send);
     const wrong = code === "000000" ? "111111" : "000000";
-    for (let i = 0; i < 4; i += 1) expect(service.check("a@x.com", wrong)).toBe("invalid");
-    expect(service.check("a@x.com", wrong)).toBe("locked");
-    expect(service.check("a@x.com", code)).not.toBe("ok");
+    for (let i = 0; i < 4; i += 1) expect(await service.check("a@x.com", wrong)).toBe("invalid");
+    expect(await service.check("a@x.com", wrong)).toBe("locked");
+    expect(await service.check("a@x.com", code)).not.toBe("ok");
   });
 
   it("pedidos seguidos para o mesmo e-mail dentro do intervalo não geram novo e-mail", async () => {

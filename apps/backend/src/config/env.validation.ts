@@ -19,6 +19,9 @@ class EnvironmentVariables {
   @IsNotEmpty()
   DATABASE_URL!: string;
 
+  @IsUrl({ require_tld: false, require_protocol: true, protocols: ["redis", "rediss"] })
+  REDIS_URL!: string;
+
   // Assina TODOS os tokens (staff, refresh, cliente): segredo curto é força-bruta offline
   // trivial. 32+ caracteres (ex.: `openssl rand -hex 32`); fail closed no boot.
   @IsString()

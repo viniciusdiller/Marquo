@@ -3,8 +3,8 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { randomBytes } from "crypto";
-import { lockoutDurationMs, LOCKOUT_THRESHOLD } from "../common/utils/lockout.util";
-import { OneTimeCodeStore, oneTimeCodeSecret } from "../common/utils/one-time-code";
+import { SharedStateService } from "../shared-state/shared-state.service";
+
 import { EmailService } from "../email/email.service";
 import { buildVerificationCodeEmail } from "../email/verification-code.email";
 import {
@@ -27,9 +27,6 @@ export const TWO_FACTOR_INVALID_MESSAGE = "Código inválido ou expirado.";
 
 // Segundo fator por e-mail: código de 6 dígitos válido por 10 minutos, 5 tentativas por código.
 const CODE_TTL_MS = 10 * 60_000;
-const CODE_MAX_ATTEMPTS = 5;
-// Só existe UMA conta, então poucos desafios vivos já bastam; o teto limita a memória sob abuso.
-const CODE_MAX_ENTRIES = 10;
 
 export interface PlatformSession {
   accessToken: string;
@@ -50,28 +47,16 @@ export type PlatformLoginResult = PlatformSession | PlatformChallenge;
 export class PlatformAuthService {
   private readonly logger = new Logger(PlatformAuthService.name);
 
-  // Lockout em memória (um processo, como o cache de replay da API interna): a conta é única e vive no
-  // .env, então não há linha no banco para guardar contador. Só rastreia o e-mail DA conta — um
-  // atacante não consegue encher o mapa com e-mails arbitrários.
-  private failedAttempts = 0;
-  private lockedUntil = 0;
-
-  // Códigos do segundo fator, em memória (um processo): perder um num reinício só obriga a entrar de novo.
-  private codeStore: OneTimeCodeStore | null = null;
-
   constructor(
     private readonly config: ConfigService,
     private readonly jwt: JwtService,
     private readonly email: EmailService,
+    private readonly state: SharedStateService,
   ) {}
 
-  private get codes(): OneTimeCodeStore {
-    this.codeStore ??= new OneTimeCodeStore(oneTimeCodeSecret(this.config.getOrThrow<string>("JWT_SECRET")), {
-      ttlMs: CODE_TTL_MS,
-      maxAttempts: CODE_MAX_ATTEMPTS,
-      maxEntries: CODE_MAX_ENTRIES,
-    });
-    return this.codeStore;
+  private codeScope(admin: PlatformAdminCredentials): string {
+    // Changing administrator credentials invalidates outstanding challenges on every replica.
+    return `platform-code:${admin.email}:${platformPasswordVersion(admin.passwordHash)}`;
   }
 
   private twoFactorEnabled(): boolean {
@@ -83,7 +68,7 @@ export class PlatformAuthService {
     const email = emailInput.trim().toLowerCase();
     const isAdminEmail = admin !== null && email === admin.email;
 
-    if (isAdminEmail && this.lockedUntil > Date.now()) {
+    if (isAdminEmail && await this.state.isLocked(admin!.email)) {
       // Ainda gasta o bcrypt: a resposta de "bloqueado" não pode ser mais rápida que a de senha errada.
       await bcrypt.compare(password, DUMMY_HASH);
       throw new UnauthorizedException(INVALID_MESSAGE);
@@ -93,7 +78,7 @@ export class PlatformAuthService {
     const passwordOk = await bcrypt.compare(password, hash).catch(() => false);
 
     if (!isAdminEmail || !passwordOk) {
-      if (isAdminEmail) this.registerFailure();
+      if (isAdminEmail) await this.state.registerFailure(admin!.email);
       // Mesma mensagem para: painel desligado, e-mail que não é o da conta, senha errada e bloqueio.
       throw new UnauthorizedException(INVALID_MESSAGE);
     }
@@ -102,8 +87,7 @@ export class PlatformAuthService {
     // bloqueio a cada tentativa de adivinhar o código). Zera quando o código também confere.
     if (this.twoFactorEnabled()) return this.startChallenge(admin!);
 
-    this.failedAttempts = 0;
-    this.lockedUntil = 0;
+    await this.state.clear("platform-lockout", admin!.email);
     return this.issueSession(admin!);
   }
 
@@ -111,29 +95,27 @@ export class PlatformAuthService {
   // códigos esbarra no lockout progressivo; o código é de uso único e some depois de 5 erros ou 10 minutos.
   async verifyCode(challengeId: string, code: string): Promise<PlatformSession> {
     const admin = readPlatformAdmin(this.config);
-    if (!admin || !this.twoFactorEnabled() || this.lockedUntil > Date.now()) {
+    if (!admin || !this.twoFactorEnabled() || await this.state.isLocked(admin!.email)) {
       throw new UnauthorizedException(TWO_FACTOR_INVALID_MESSAGE);
     }
 
-    const result = this.codes.check(challengeId, code);
-    if (result === "invalid" || result === "locked") this.registerFailure();
+    const result = await this.state.checkCode(this.codeScope(admin!), challengeId, code);
+    if (result === "invalid" || result === "locked") await this.state.registerFailure(admin!.email);
     if (result !== "ok") throw new UnauthorizedException(TWO_FACTOR_INVALID_MESSAGE);
 
-    this.codes.consume(challengeId);
-    this.failedAttempts = 0;
-    this.lockedUntil = 0;
+    await this.state.clear("platform-lockout", admin!.email);
     return this.issueSession(admin);
   }
 
   private async startChallenge(admin: PlatformAdminCredentials): Promise<PlatformChallenge> {
     const challengeId = randomBytes(24).toString("hex");
-    const code = this.codes.issue(challengeId);
+    const code = await this.state.issueCode(this.codeScope(admin!), challengeId, CODE_TTL_MS);
 
     const frontend = (this.config.get<string>("FRONTEND_URL") ?? "").replace(/\/+$/, "");
     const message = buildVerificationCodeEmail({
       title: "Código de acesso à plataforma",
       intro: "Alguém informou a senha da conta da plataforma do Marquo. Use o código abaixo para concluir o acesso.",
-      code,
+      code: code!,
       expiresInMinutes: CODE_TTL_MS / 60_000,
       logoUrl: frontend ? `${frontend}/brand/email/marquo-logo.png` : undefined,
       siteUrl: frontend || undefined,
@@ -141,7 +123,7 @@ export class PlatformAuthService {
     const sent = await this.email.send({ to: [admin.email], ...message });
     if (!sent) {
       // Sem o código na caixa o admin não consegue concluir: descarta o desafio e avisa (a senha estava certa).
-      this.codes.consume(challengeId);
+      await this.state.clear(this.codeScope(admin!), challengeId);
       throw new ServiceUnavailableException("Não foi possível enviar o código de acesso agora. Tente de novo em instantes.");
     }
 
@@ -167,11 +149,4 @@ export class PlatformAuthService {
     return { accessToken, expiresInSeconds: PLATFORM_SESSION_SECONDS, email: admin.email };
   }
 
-  private registerFailure() {
-    this.failedAttempts += 1;
-    if (this.failedAttempts >= LOCKOUT_THRESHOLD) {
-      this.lockedUntil = Date.now() + lockoutDurationMs(this.failedAttempts);
-      this.logger.warn(`Conta da plataforma bloqueada após ${this.failedAttempts} falhas.`);
-    }
-  }
 }

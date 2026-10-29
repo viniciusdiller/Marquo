@@ -4,8 +4,8 @@
 // Pontos que não podem mudar:
 //  - `cwd` de cada app: o Next e o Nest leem o .env da pasta onde sobem. Em outra pasta, o app sobe SEM as variáveis
 //    (e o login quebra com UntrustedHost, por exemplo).
-//  - Backend com UMA instância (`instances: 1`, modo fork): lockout de login, anti-replay da API interna e o throttle de
-//    cadastro ficam na memória do processo. Em cluster, cada instância teria o seu contador.
+//  - Redis compartilhado (REDIS_URL) entre os backends; antes de escalar para outros hosts, compartilhe os uploads.
+//    O exemplo mantém uma instância por padrão; veja deploy/README.md.
 //  - Nada de segredo aqui: eles ficam nos .env de cada app (que não vão para o git).
 const APP_DIR = "/var/www/marquo"; // TROQUE pela pasta do projeto no servidor
 

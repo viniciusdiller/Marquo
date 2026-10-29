@@ -76,7 +76,7 @@ export class ConsumerAuthService {
     if (codeMode === "unavailable") {
       throw new ServiceUnavailableException("Não foi possível concluir o cadastro agora. Tente novamente mais tarde.");
     }
-    if (codeMode === "required" && this.emailCodes.check(email, dto.emailCode ?? "") !== "ok") {
+    if (codeMode === "required" && (await this.emailCodes.check(email, dto.emailCode ?? "")) !== "ok") {
       throw new BadRequestException("Código inválido ou expirado. Peça um novo código.");
     }
 
@@ -104,7 +104,6 @@ export class ConsumerAuthService {
     });
 
     // Cadastro concluído: o código é de uso único.
-    if (codeMode === "required") this.emailCodes.consume(email);
     return this.issueSession(consumer, userAgent);
   }
 
