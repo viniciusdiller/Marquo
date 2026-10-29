@@ -16,7 +16,7 @@ const FIVE_MIN_AGO = () => new Date(Date.now() - 5 * 60_000);
 const stamp = Date.now();
 const email = `rot${stamp}@e2e.com`;
 const password = "senha-forte-123";
-let r = await call("POST", "/public/signup", { businessName: "Rotação " + stamp, ownerName: "Dona", email, password, acceptedTermsVersion: LEGAL_VERSION });
+let r = await call("POST", "/public/signup", { businessName: "Rotação " + stamp, ownerName: "Dona", email, password, phone: "11987654321", acceptedTermsVersion: LEGAL_VERSION });
 check("signup", r.status === 201, r);
 
 console.log("== login e rotação básica");

@@ -69,6 +69,7 @@ jobs:
       - run: pnpm build
       - run: pnpm --filter frontend exec playwright install --with-deps chromium
       - name: Start backend against disposable services
+        id: backend
         run: |
           (cd apps/backend && node dist/main.js) > /tmp/marquo-backend.log 2>&1 &
           for attempt in $(seq 1 60); do
@@ -80,10 +81,13 @@ jobs:
       - name: API functional smoke
         run: node apps/backend/scripts/smoke/functional.mjs
       - name: Multipart uploads and upload limits
+        if: ${{ !cancelled() && steps.backend.outcome == 'success' }}
         run: node apps/backend/scripts/smoke/uploads.mjs
       - name: Refresh-token rotation smoke
+        if: ${{ !cancelled() && steps.backend.outcome == 'success' }}
         run: node apps/backend/scripts/smoke/rotation.mjs
       - name: Browser flows against production Next build
+        if: ${{ !cancelled() && steps.backend.outcome == 'success' }}
         run: pnpm --filter frontend test:e2e
       - name: Backend diagnostics on failure
         if: failure()
