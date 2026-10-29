@@ -80,7 +80,7 @@ for (const [label, body] of [
 r = await call("PATCH", `/clients/${clientId}`, { cpf: null, email: null, birthDate: null, notes: null }, T);
 check("PATCH limpa campos com null", r.status === 200 && r.json?.cpf === null && r.json?.email === null, r);
 r = await call("GET", `/clients?search=${encodeURIComponent("(11) 9123")}`, undefined, T);
-check("busca por telefone formatado", r.status === 200 && r.json.length === 1, r);
+check("busca por telefone formatado", r.status === 200 && r.json.items?.length === 1 && r.json.total === 1, r);
 
 console.log("== caixa e financeiro");
 r = await call("POST", "/cash-register/open", { openingFloatCents: 0 }, T);
@@ -100,7 +100,7 @@ check("fecha com diferença (contado > esperado)", r.status === 201 && r.json?.d
 r = await call("POST", "/finance/entries", { direction: "EXPENSE", description: "  Luz  ", amountCents: 25000, dueDate: "2030-01-10" }, T);
 check("lança despesa", r.status === 201 && r.json?.description === "Luz", r);
 r = await call("GET", "/finance/entries?direction=EXPENSE&status=PENDING", undefined, T);
-check("lista despesas pendentes (query como DTO)", r.status === 200 && r.json.length === 1, r);
+check("lista despesas pendentes (query como DTO)", r.status === 200 && r.json.items?.length === 1 && r.json.total === 1, r);
 r = await call("GET", "/finance/entries?direction=XX", undefined, T);
 check("filtro inválido → 400", r.status === 400 && /inválido/.test(JSON.stringify(r.json)), r);
 check("fluxo de caixa", (await call("GET", "/finance/cash-flow?from=2030-01-01&to=2030-12-31&basis=due", undefined, T)).status === 200);
