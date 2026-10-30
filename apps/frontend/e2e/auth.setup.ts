@@ -1,4 +1,4 @@
-import { test as setup, expect } from "@playwright/test";
+import { test as setup } from "@playwright/test";
 
 const authFile = "e2e/.auth/owner.json";
 
@@ -7,7 +7,7 @@ const authFile = "e2e/.auth/owner.json";
 setup("autentica como dono", async ({ page }) => {
   await page.goto("/entrar");
   await page.getByLabel("E-mail ou telefone").fill("dono@salaodemo.com");
-  await page.getByLabel("Senha").fill("senha123");
+  await page.getByLabel("Senha", { exact: true }).fill("senha123");
   await page.locator('button[type="submit"]', { hasText: "Entrar" }).click();
   await page.waitForURL(/\/dashboard/);
   await page.context().storageState({ path: authFile });

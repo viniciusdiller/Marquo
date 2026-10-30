@@ -10,6 +10,7 @@
 //      vincular (`updateMarketplace` exige cidade + ao menos 1 categoria pra listar).
 //   2. API_URL=http://localhost:3101 node scripts/smoke/functional.mjs
 //      API_URL=http://localhost:3101 node scripts/smoke/rotation.mjs   (lê DATABASE_URL e JWT_SECRET do .env)
+import { LEGAL_DOCS_VERSION } from "@marquo/shared-types";
 import { readFileSync } from "node:fs";
 
 export const API = process.env.API_URL ?? "http://localhost:3101";
@@ -73,4 +74,4 @@ export function createChecker() {
 }
 
 export const claims = (jwt) => JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString());
-export const LEGAL_VERSION = process.env.LEGAL_DOCS_VERSION ?? "2026-09-24";
+export const LEGAL_VERSION = process.env.LEGAL_DOCS_VERSION ?? LEGAL_DOCS_VERSION;

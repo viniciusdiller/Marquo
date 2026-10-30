@@ -18,7 +18,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "pnpm dev",
+    command: process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ?? "pnpm dev",
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

@@ -1,0 +1,100 @@
+name: Dependency compatibility
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - package.json
+      - pnpm-lock.yaml
+      - apps/frontend/package.json
+      - apps/backend/package.json
+      - apps/frontend/playwright.config.ts
+      - .github/workflows/dependency-compatibility.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-compatibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    name: API smoke and production browser flows
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: marquo_test
+          POSTGRES_PASSWORD: integration_only
+          POSTGRES_DB: marquo_compatibility
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U marquo_test -d marquo_compatibility"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Disposable CI-only services and credentials; no production secrets or provider keys.
+      DATABASE_URL: postgresql://marquo_test:integration_only@localhost:5432/marquo_compatibility
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: compatibility-jwt-secret-not-for-production-123456
+      AUTH_SECRET: compatibility-auth-secret-not-for-production-123456
+      CLIENT_IP_SECRET: compatibility-client-ip-secret-not-for-production-123456
+      INTERNAL_API_SECRET: compatibility-internal-secret-not-for-production-123456
+      FRONTEND_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      API_URL: http://localhost:3001
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      TRUST_PROXY_HOPS: "1"
+      PLAYWRIGHT_WEB_SERVER_COMMAND: pnpm start
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @marquo/database db:generate
+      - run: pnpm --filter @marquo/database db:deploy
+      - run: pnpm --filter @marquo/database exec ts-node --project ../../tsconfig.base.json prisma/seed.ts
+      - run: pnpm build
+      - run: pnpm --filter frontend exec playwright install --with-deps chromium
+      - name: Start backend against disposable services
+        id: backend
+        run: |
+          (cd apps/backend && node dist/main.js) > /tmp/marquo-backend.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3001/plans > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/marquo-backend.log
+          exit 1
+      - name: API functional smoke
+        run: node apps/backend/scripts/smoke/functional.mjs
+      - name: Multipart uploads and upload limits
+        if: ${{ !cancelled() && steps.backend.outcome == 'success' }}
+        run: node apps/backend/scripts/smoke/uploads.mjs
+      - name: Refresh-token rotation smoke
+        if: ${{ !cancelled() && steps.backend.outcome == 'success' }}
+        run: node apps/backend/scripts/smoke/rotation.mjs
+      - name: Browser flows against production Next build
+        if: ${{ !cancelled() && steps.backend.outcome == 'success' }}
+        run: pnpm --filter frontend exec playwright test --retries=0
+      - name: Backend diagnostics on failure
+        if: failure()
+        run: cat /tmp/marquo-backend.log || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: compatibility-traces
+          path: apps/frontend/test-results/
+          retention-days: 5

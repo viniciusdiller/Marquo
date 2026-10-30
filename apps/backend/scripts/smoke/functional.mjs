@@ -9,7 +9,7 @@ const email = `dono${stamp}@e2e.com`;
 const password = "senha-forte-123";
 
 console.log("== cadastro e login");
-let r = await call("POST", "/public/signup", { businessName: "  Salão E2E  ", ownerName: "Dona E2E", email: email.toUpperCase(), password, acceptedTermsVersion: LEGAL_VERSION });
+let r = await call("POST", "/public/signup", { businessName: "  Salão E2E  ", ownerName: "Dona E2E", email: email.toUpperCase(), password, phone: "11987654321", acceptedTermsVersion: LEGAL_VERSION });
 check("signup 201", r.status === 201, r);
 const slug = r.json?.slug;
 r = await call("POST", "/auth/login", { email, password });
@@ -80,7 +80,7 @@ for (const [label, body] of [
 r = await call("PATCH", `/clients/${clientId}`, { cpf: null, email: null, birthDate: null, notes: null }, T);
 check("PATCH limpa campos com null", r.status === 200 && r.json?.cpf === null && r.json?.email === null, r);
 r = await call("GET", `/clients?search=${encodeURIComponent("(11) 9123")}`, undefined, T);
-check("busca por telefone formatado", r.status === 200 && r.json.length === 1, r);
+check("busca por telefone formatado", r.status === 200 && r.json.items?.length === 1 && r.json.total === 1, r);
 
 console.log("== caixa e financeiro");
 r = await call("POST", "/cash-register/open", { openingFloatCents: 0 }, T);
@@ -213,7 +213,7 @@ check("profissional excluindo regra → 403", r.status === 403, r);
 
 // Outro negócio (tenant B) tenta mexer na regra do tenant A: tem que parecer que ela não existe.
 const emailB = `donob${stamp}@e2e.com`;
-r = await call("POST", "/public/signup", { businessName: "Salão B", ownerName: "Dono B", email: emailB, password, acceptedTermsVersion: LEGAL_VERSION });
+r = await call("POST", "/public/signup", { businessName: "Salão B", ownerName: "Dono B", email: emailB, password, phone: "11987654321", acceptedTermsVersion: LEGAL_VERSION });
 check("cria o tenant B", r.status === 201, r);
 r = await call("POST", "/auth/login", { email: emailB, password });
 const TB = r.json?.accessToken;

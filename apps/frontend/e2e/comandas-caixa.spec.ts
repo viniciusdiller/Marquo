@@ -3,7 +3,8 @@ import { test, expect } from "@playwright/test";
 test.describe("Comandas e caixa", () => {
   test("abre comanda avulsa, adiciona item e cancela com confirmação", async ({ page }) => {
     await page.goto("/dashboard/comandas");
-    await page.getByRole("button", { name: "Comanda avulsa" }).click();
+    await page.getByRole("button", { name: "Nova comanda", exact: true }).click();
+    await page.getByRole("dialog", { name: "Nova comanda" }).getByRole("button", { name: "Abrir sem cliente" }).click();
     await page.waitForURL(/\/dashboard\/comandas\/.+/);
 
     await page.getByLabel("Tipo de item").selectOption("CUSTOM");
