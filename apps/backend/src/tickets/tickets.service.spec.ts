@@ -249,5 +249,46 @@ describe("TicketsService", () => {
       );
     });
   });
-});
 
+  describe("open a partir de um atendimento", () => {
+    const appointment = (over: Record<string, unknown> = {}) => ({
+      id: "ap-1",
+      clientId: "cl-1",
+      professionalId: "prof-1",
+      ticket: null,
+      items: [{ serviceId: "svc-1", priceCentsSnapshot: 4000, service: { name: "Corte" } }],
+      ...over,
+    });
+
+    it("atendimento que JÁ tem comanda: devolve a existente (sem criar outra e sem 409)", async () => {
+      const { service, prisma } = build({ appointment: { findFirst: jest.fn().mockResolvedValue(appointment({ ticket: { id: "tk-9" } })) } });
+      (prisma.ticket.findFirst as jest.Mock).mockResolvedValue(ticket({ id: "tk-9", appointmentId: "ap-1" }));
+
+      const result = await service.open("t-1", "u-1", { appointmentId: "ap-1" });
+
+      expect(result.id).toBe("tk-9");
+      expect(prisma.ticket.create).not.toHaveBeenCalled();
+      // A comanda existente é relida filtrando pelo tenant (nunca por id solto).
+      expect((prisma.ticket.findFirst as jest.Mock).mock.calls[0][0].where).toMatchObject({ id: "tk-9", tenantId: "t-1" });
+    });
+
+    it("atendimento sem comanda: cria uma copiando os serviços do atendimento", async () => {
+      const { service, prisma } = build({ appointment: { findFirst: jest.fn().mockResolvedValue(appointment()) } });
+
+      await service.open("t-1", "u-1", { appointmentId: "ap-1" });
+
+      const data = (prisma.ticket.create as jest.Mock).mock.calls[0][0].data;
+      expect(data).toMatchObject({ tenantId: "t-1", appointmentId: "ap-1", clientId: "cl-1", openedByUserId: "u-1" });
+      expect(data.items.create[0]).toMatchObject({ serviceId: "svc-1", unitPriceCents: 4000 });
+    });
+
+    it("atendimento de outro tenant ou inexistente: 404 e nada é criado", async () => {
+      const findFirst = jest.fn().mockResolvedValue(null);
+      const { service, prisma } = build({ appointment: { findFirst } });
+
+      await expect(service.open("t-1", "u-1", { appointmentId: "ap-x" })).rejects.toThrow("Atendimento não encontrado.");
+      expect(findFirst.mock.calls[0][0].where).toEqual({ id: "ap-x", tenantId: "t-1" });
+      expect(prisma.ticket.create).not.toHaveBeenCalled();
+    });
+  });
+});
