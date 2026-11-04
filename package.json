@@ -33,7 +33,9 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "node scripts/dev-services.mjs && turbo run dev",
+    "dev:apps": "turbo run dev",
+    "test:scripts": "node --test scripts/dev-services.test.mjs",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "db:generate": "turbo run db:generate",
