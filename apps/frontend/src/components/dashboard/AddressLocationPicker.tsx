@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import {
   MapPin,
   NavigationArrow,
@@ -9,9 +9,15 @@ import {
   ArrowSquareOut,
   CheckCircle,
   Question,
+  Crosshair,
 } from "@phosphor-icons/react/dist/ssr";
 import { Input } from "@/components/ui/Input";
-import { lookupCepAction, reverseGeocodeAction } from "@/app/dashboard/marketplace/actions";
+import {
+  lookupCepAction,
+  reverseGeocodeAction,
+  geocodeAddressAction,
+} from "@/app/dashboard/marketplace/actions";
+import { InteractiveLocationMap } from "./InteractiveLocationMap";
 
 interface AddressLocationPickerProps {
   initialAddress?: string | null;
@@ -28,18 +34,37 @@ export function AddressLocationPicker({
   initialLatitude = null,
   initialLongitude = null,
 }: AddressLocationPickerProps) {
+  // Separa rua e número caso já venha formatado como "Rua X, 123"
+  const parsedInitial = useMemo(() => {
+    if (!initialAddress) return { street: "", number: "" };
+    const parts = initialAddress.split(",");
+    if (parts.length >= 2) {
+      return {
+        street: parts[0].trim(),
+        number: parts.slice(1).join(",").trim(),
+      };
+    }
+    return { street: initialAddress, number: "" };
+  }, [initialAddress]);
+
   const [cep, setCep] = useState("");
-  const [street, setStreet] = useState(initialAddress ?? "");
+  const [street, setStreet] = useState(parsedInitial.street);
+  const [number, setNumber] = useState(parsedInitial.number);
   const [city, setCity] = useState(initialCity ?? "");
   const [neighborhood, setNeighborhood] = useState(initialNeighborhood ?? "");
+  const [stateUf, setStateUf] = useState("");
   const [latitude, setLatitude] = useState(initialLatitude ? String(initialLatitude) : "");
   const [longitude, setLongitude] = useState(initialLongitude ? String(initialLongitude) : "");
 
   const [isPending, startTransition] = useTransition();
   const [loadingGps, setLoadingGps] = useState(false);
+  const [loadingGeocode, setLoadingGeocode] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+
+  // String unificada para salvar no banco
+  const fullAddress = [street, number].filter(Boolean).join(", ");
 
   function formatCep(value: string) {
     const raw = value.replace(/\D/g, "").slice(0, 8);
@@ -67,18 +92,19 @@ export function AddressLocationPicker({
         if (result.street) setStreet(result.street);
         if (result.neighborhood) setNeighborhood(result.neighborhood);
         if (result.city) setCity(result.city);
+        if (result.state) setStateUf(result.state);
 
         if (result.latitude !== null && result.latitude !== undefined && result.longitude !== null && result.longitude !== undefined) {
           setLatitude(String(result.latitude));
           setLongitude(String(result.longitude));
           setFeedback({
             type: "success",
-            message: "Endereço e coordenadas no mapa encontrados pelo CEP!",
+            message: "Endereço localizado! Como no iFood, digite o número da fachada e ajuste o pin no mapa abaixo.",
           });
         } else {
           setFeedback({
-            type: "success",
-            message: "Endereço localizado pelo CEP. Preencha o número da rua e ajuste as coordenadas se desejar.",
+            type: "info",
+            message: "Rua e bairro localizados. Digite o número e clique no mapa para marcar sua barbearia.",
           });
         }
       } catch {
@@ -87,14 +113,54 @@ export function AddressLocationPicker({
     });
   }
 
+  function handleGeocodeWithNumber() {
+    if (!street || !city) {
+      setFeedback({ type: "error", message: "Preencha a rua e a cidade para localizar o número no mapa." });
+      return;
+    }
+
+    setLoadingGeocode(true);
+    setFeedback(null);
+
+    startTransition(async () => {
+      try {
+        const res = await geocodeAddressAction({
+          street,
+          number,
+          neighborhood,
+          city,
+          state: stateUf,
+        });
+
+        if (res.ok && res.latitude && res.longitude) {
+          setLatitude(String(res.latitude));
+          setLongitude(String(res.longitude));
+          setFeedback({
+            type: "success",
+            message: "Ponto exato localizado pelo número! Confira o pin no mapa abaixo.",
+          });
+        } else {
+          setFeedback({
+            type: "info",
+            message: res.error || "Não encontramos o número exato. Arraste o pin no mapa para posicionar sua entrada.",
+          });
+        }
+      } catch {
+        setFeedback({ type: "error", message: "Erro ao buscar coordenadas pelo endereço. Ajuste no mapa." });
+      } finally {
+        setLoadingGeocode(false);
+      }
+    });
+  }
+
   function handleUseGps() {
     if (typeof window === "undefined" || !navigator.geolocation) {
-      setFeedback({ type: "error", message: "Seu navegador não suporta geolocalização por GPS." });
+      setFeedback({ type: "error", message: "Seu dispositivo não suporta geolocalização por GPS." });
       return;
     }
 
     setLoadingGps(true);
-    setFeedback({ type: "info", message: "Obtendo sua posição via GPS do navegador..." });
+    setFeedback({ type: "info", message: "Obtendo sua posição exata pelo GPS..." });
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -104,24 +170,26 @@ export function AddressLocationPicker({
         setLatitude(String(Number(lat.toFixed(6))));
         setLongitude(String(Number(lng.toFixed(6))));
 
-        setFeedback({ type: "info", message: "GPS obtido! Identificando rua, bairro e cidade..." });
+        setFeedback({ type: "info", message: "GPS obtido! Identificando rua, número e bairro..." });
 
         try {
           const revResult = await reverseGeocodeAction(lat, lng);
           if (revResult.ok) {
             if (revResult.street) setStreet(revResult.street);
+            if (revResult.number) setNumber(revResult.number);
             if (revResult.neighborhood) setNeighborhood(revResult.neighborhood);
             if (revResult.city) setCity(revResult.city);
+            if (revResult.state) setStateUf(revResult.state);
             if (revResult.cep) setCep(formatCep(revResult.cep));
 
             setFeedback({
               type: "success",
-              message: "Localização e endereço completos identificados pelo seu GPS!",
+              message: "Localização precisa e endereço identificados pelo seu GPS!",
             });
           } else {
             setFeedback({
               type: "success",
-              message: "Coordenadas do GPS capturadas! Preencha o nome da rua e bairro caso estejam em branco.",
+              message: "Coordenadas do GPS capturadas com precisão máxima!",
             });
           }
         } catch {
@@ -138,12 +206,12 @@ export function AddressLocationPicker({
         if (err.code === err.PERMISSION_DENIED) {
           setFeedback({
             type: "error",
-            message: "Permissão de localização negada no navegador. Autorize ou use o tutorial do Google Maps.",
+            message: "Permissão de GPS negada no navegador. Autorize ou posicione o pin no mapa.",
           });
         } else {
           setFeedback({
             type: "error",
-            message: "Não foi possível obter o sinal de GPS. Insira o CEP ou o endereço manualmente.",
+            message: "Não foi possível obter o sinal de GPS. Preencha o CEP ou ajuste no mapa.",
           });
         }
       },
@@ -151,7 +219,18 @@ export function AddressLocationPicker({
     );
   }
 
-  const hasCoords = Boolean(latitude && longitude && !isNaN(Number(latitude)) && !isNaN(Number(longitude)));
+  function handleMapPositionChange(newLat: number, newLng: number) {
+    setLatitude(String(newLat));
+    setLongitude(String(newLng));
+    setFeedback({
+      type: "success",
+      message: "Marcador reposicionado no mapa!",
+    });
+  }
+
+  const numLat = latitude ? Number(latitude) : null;
+  const numLng = longitude ? Number(longitude) : null;
+  const hasCoords = Boolean(numLat !== null && numLng !== null && !isNaN(numLat) && !isNaN(numLng));
 
   return (
     <div className="space-y-4 rounded-2xl border border-zinc-200 bg-zinc-50/50 p-5 dark:border-white/10 dark:bg-white/5">
@@ -176,8 +255,8 @@ export function AddressLocationPicker({
                 role="tooltip"
                 className="absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 rounded-xl border border-zinc-200 bg-white p-3 text-xs leading-relaxed text-zinc-700 shadow-xl dark:border-white/10 dark:bg-zinc-900 dark:text-stone-200 sm:w-72"
               >
-                A latitude e longitude alimentam a ordenação por distância no marketplace (/descobrir)
-                e permitem que clientes tracem rotas até o seu salão.
+                O ponto no mapa alimenta a busca por proximidade no marketplace (/descobrir)
+                e permite que clientes tracem rotas diretas até o seu salão.
               </div>
             )}
           </div>
@@ -209,19 +288,19 @@ export function AddressLocationPicker({
               </a>{" "}
               no computador ou no celular.
             </li>
-            <li>Encontre o endereço exato ou a fachada da sua barbearia.</li>
+            <li>Encontre a fachada ou o teto da sua barbearia.</li>
             <li>
-              Clique com o <strong>botão direito</strong> em cima do local (no celular, pressione e segure o dedo sobre o mapa).
+              Clique com o <strong>botão direito</strong> em cima do ponto exato (no celular, pressione e segure o dedo sobre o mapa).
             </li>
             <li>
-              O primeiro item do menu que surgir são os números de latitude e longitude (ex: <code>-23.55052, -46.633308</code>).
+              O primeiro item do menu que surgir são as coordenadas (ex: <code>-23.55052, -46.633308</code>).
             </li>
-            <li>Clique nesses números para copiar e cole nos campos abaixo!</li>
+            <li>Clique para copiar e cole nos campos de latitude/longitude abaixo!</li>
           </ol>
         </div>
       )}
 
-      {/* Busca rápida por CEP e GPS */}
+      {/* Barra de ação rápida: CEP e GPS */}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="sm:col-span-1">
           <Input
@@ -237,7 +316,7 @@ export function AddressLocationPicker({
                 handleCepSearch(formatted);
               }
             }}
-            hint="Preenche endereço e coordenadas automaticamente."
+            hint="Preenche rua, bairro e cidade."
           />
         </div>
 
@@ -256,26 +335,58 @@ export function AddressLocationPicker({
             type="button"
             disabled={loadingGps}
             onClick={handleUseGps}
-            className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-accent-50 px-3.5 text-xs font-semibold text-accent-700 transition hover:bg-accent-100 disabled:opacity-50 dark:bg-accent-500/10 dark:text-accent-300 dark:hover:bg-accent-500/20"
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-accent-600 px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-700 disabled:opacity-50 dark:bg-accent-500 dark:hover:bg-accent-600"
           >
             <NavigationArrow size={14} weight="bold" />
-            {loadingGps ? "Identificando endereço..." : "Usar meu GPS atual"}
+            {loadingGps ? "Capturando sinal..." : "Usar meu GPS atual (Ponto exato)"}
           </button>
         </div>
       </div>
 
-      {/* Endereço completo (Rua, Número, Complemento) */}
-      <div>
-        <Input
-          label="Endereço da Barbearia (Rua e número)"
-          name="address"
-          maxLength={300}
-          value={street}
-          onChange={(e) => setStreet(e.target.value)}
-          placeholder="Ex: Rua Augusta, 1500"
-          hint="Exibido na página pública e no comprovante do agendamento."
-        />
+      {/* Campos de Logradouro e Número (Separados como no iFood) */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="sm:col-span-2">
+          <Input
+            label="Rua / Logradouro"
+            name="street_helper"
+            maxLength={200}
+            value={street}
+            onChange={(e) => setStreet(e.target.value)}
+            placeholder="Ex: Rua Augusta"
+            hint="Nome da avenida, rua, alameda ou travessa."
+          />
+        </div>
+        <div className="sm:col-span-1">
+          <div className="flex flex-col gap-1.5">
+            <Input
+              label="Número da Fachada"
+              name="number_helper"
+              maxLength={20}
+              value={number}
+              onChange={(e) => setNumber(e.target.value)}
+              placeholder="Ex: 1500"
+              hint="Obrigatório para rotas e entregas."
+            />
+          </div>
+        </div>
       </div>
+
+      {number && street && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            disabled={loadingGeocode}
+            onClick={handleGeocodeWithNumber}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-accent-600 hover:text-accent-700 dark:text-accent-400"
+          >
+            <Crosshair size={14} />
+            {loadingGeocode ? "Calculando..." : "Calcular ponto exato pelo número da rua"}
+          </button>
+        </div>
+      )}
+
+      {/* Input de endereço completo enviado ao backend */}
+      <input type="hidden" name="address" value={fullAddress} />
 
       {/* Cidade e Bairro */}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -286,7 +397,7 @@ export function AddressLocationPicker({
           autoComplete="address-level2"
           value={city}
           onChange={(e) => setCity(e.target.value)}
-          hint="É o que o cliente filtra na busca do marketplace."
+          hint="Filtro principal na busca do marketplace."
         />
         <Input
           label="Bairro"
@@ -294,11 +405,29 @@ export function AddressLocationPicker({
           maxLength={120}
           value={neighborhood}
           onChange={(e) => setNeighborhood(e.target.value)}
-          hint="Ajuda quem está por perto a encontrar sua barbearia."
+          hint="Ajuda quem está perto a encontrar sua barbearia."
         />
       </div>
 
-      {/* Coordenadas Geográficas */}
+      {/* Mapa Interativo estilo iFood / Uber */}
+      <div className="space-y-2 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-medium text-zinc-700 dark:text-stone-300">
+            Confirmação no mapa (como no iFood):
+          </p>
+          <span className="text-xs text-zinc-400 dark:text-stone-500">
+            Clique no mapa ou arraste o pin para ajustar a entrada exata da loja
+          </span>
+        </div>
+
+        <InteractiveLocationMap
+          latitude={numLat}
+          longitude={numLng}
+          onPositionChange={handleMapPositionChange}
+        />
+      </div>
+
+      {/* Coordenadas Geográficas (atualizadas pelo mapa, GPS ou manuais) */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <Input
@@ -308,7 +437,7 @@ export function AddressLocationPicker({
             value={latitude}
             onChange={(e) => setLatitude(e.target.value)}
             placeholder="-23.550520"
-            hint="Ex: -23.550520 (preenchido via CEP, GPS ou Google Maps)"
+            hint="Sincronizada automaticamente ao mover o pin no mapa."
           />
         </div>
         <div>
@@ -319,7 +448,7 @@ export function AddressLocationPicker({
             value={longitude}
             onChange={(e) => setLongitude(e.target.value)}
             placeholder="-46.633308"
-            hint="Ex: -46.633308 (preenchido via CEP, GPS ou Google Maps)"
+            hint="Sincronizada automaticamente ao mover o pin no mapa."
           />
         </div>
       </div>
@@ -333,7 +462,7 @@ export function AddressLocationPicker({
             className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
           >
             <CheckCircle size={14} weight="fill" />
-            Conferir localização no Google Maps
+            Conferir localização exata no Google Maps
             <ArrowSquareOut size={12} />
           </a>
         )}
