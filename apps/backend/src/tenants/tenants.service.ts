@@ -111,6 +111,7 @@ export class TenantsService {
         where: { id: tenantId },
         select: {
           listedInMarketplace: true,
+          address: true,
           city: true,
           neighborhood: true,
           latitude: true,

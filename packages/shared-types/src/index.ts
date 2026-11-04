@@ -180,6 +180,7 @@ export interface MarketplaceEstablishment {
 
 export interface MarketplaceSettings {
   listedInMarketplace: boolean;
+  address?: string | null;
   city: string | null;
   neighborhood: string | null;
   latitude: number | null;
