@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import type { MarketplaceSettings as Settings } from "@marquo/shared-types";
 import { FieldHelp } from "@/components/ui/FieldHelp";
-import { AddressLocationPicker } from "@/components/dashboard/AddressLocationPicker";
+import { Input } from "@/components/ui/Input";
 import { saveMarketplaceAction, type MarketplaceActionState } from "./actions";
 
 const initial: MarketplaceActionState = {};
@@ -28,12 +28,37 @@ export function MarketplaceSettings({ settings }: { settings: Settings }) {
         </p>
       </div>
 
-      <AddressLocationPicker
-        initialCity={settings.city}
-        initialNeighborhood={settings.neighborhood}
-        initialLatitude={settings.latitude}
-        initialLongitude={settings.longitude}
-      />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Input label="Cidade" name="city" maxLength={120} autoComplete="address-level2" defaultValue={settings.city ?? ""} hint="É o que o cliente filtra na busca." />
+        <Input label="Bairro" name="neighborhood" maxLength={120} defaultValue={settings.neighborhood ?? ""} hint="Opcional, ajuda a achar quem está perto." />
+        <Input
+          label={
+            <span className="flex items-center gap-1.5">
+              Latitude
+              <FieldHelp title="Latitude">
+                Coordenada geográfica Norte/Sul. Usada com a longitude para ordenar salões pela proximidade no marketplace.
+              </FieldHelp>
+            </span>
+          }
+          name="latitude"
+          inputMode="decimal"
+          defaultValue={settings.latitude ?? ""}
+          hint="Opcional — usada para ordenar por distância."
+        />
+        <Input
+          label={
+            <span className="flex items-center gap-1.5">
+              Longitude
+              <FieldHelp title="Longitude">
+                Coordenada geográfica Leste/Oeste.
+              </FieldHelp>
+            </span>
+          }
+          name="longitude"
+          inputMode="decimal"
+          defaultValue={settings.longitude ?? ""}
+        />
+      </div>
 
 
       <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-700 dark:text-stone-200">
