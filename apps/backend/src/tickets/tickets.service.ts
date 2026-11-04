@@ -48,8 +48,10 @@ export class TicketsService {
       if (!appointment) {
         throw new NotFoundException("Atendimento não encontrado.");
       }
+      // Já tem comanda: devolve a existente (relida com o tenantId no WHERE) em vez de 409. "Abrir comanda" na agenda vira
+      // "ir para a comanda" quando ela já foi aberta, e um duplo clique não cria nem quebra nada.
       if (appointment.ticket) {
-        throw new ConflictException("Este atendimento já tem uma comanda.");
+        return this.get(tenantId, appointment.ticket.id);
       }
 
       return this.serialize(
