@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AddressLocationPicker } from "./AddressLocationPicker";
 import * as actions from "@/app/dashboard/marketplace/actions";
@@ -7,6 +7,22 @@ import * as actions from "@/app/dashboard/marketplace/actions";
 vi.mock("@/app/dashboard/marketplace/actions", () => ({
   lookupCepAction: vi.fn(),
   reverseGeocodeAction: vi.fn(),
+  geocodeAddressAction: vi.fn(),
+}));
+
+vi.mock("./InteractiveLocationMap", () => ({
+  InteractiveLocationMap: ({ latitude, longitude, onPositionChange }: any) => (
+    <div data-testid="interactive-map">
+      <span>Lat: {latitude}</span>
+      <span>Lng: {longitude}</span>
+      <button
+        type="button"
+        onClick={() => onPositionChange(-23.55052, -46.633308)}
+      >
+        Mover Pin no Mapa
+      </button>
+    </div>
+  ),
 }));
 
 describe("AddressLocationPicker", () => {
@@ -25,11 +41,12 @@ describe("AddressLocationPicker", () => {
       />,
     );
 
-    expect(screen.getByDisplayValue("Rua das Palmeiras, 100")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("São Paulo")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Pinheiros")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("-23.56")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("-46.68")).toBeInTheDocument();
+    expect(screen.getByLabelText(/rua \/ logradouro/i)).toHaveValue("Rua das Palmeiras");
+    expect(screen.getByLabelText(/número da fachada/i)).toHaveValue("100");
+    expect(screen.getByLabelText(/cidade/i)).toHaveValue("São Paulo");
+    expect(screen.getByLabelText(/bairro/i)).toHaveValue("Pinheiros");
+    expect(screen.getByLabelText(/^latitude$/i)).toHaveValue("-23.56");
+    expect(screen.getByLabelText(/^longitude$/i)).toHaveValue("-46.68");
   });
 
   it("abre e fecha o tutorial do Google Maps", async () => {
@@ -68,18 +85,19 @@ describe("AddressLocationPicker", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue("Avenida Paulista")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("Bela Vista")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("São Paulo")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("-23.561")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("-46.656")).toBeInTheDocument();
+      expect(screen.getByLabelText(/rua \/ logradouro/i)).toHaveValue("Avenida Paulista");
+      expect(screen.getByLabelText(/bairro/i)).toHaveValue("Bela Vista");
+      expect(screen.getByLabelText(/cidade/i)).toHaveValue("São Paulo");
+      expect(screen.getByLabelText(/^latitude$/i)).toHaveValue("-23.561");
+      expect(screen.getByLabelText(/^longitude$/i)).toHaveValue("-46.656");
     });
   });
 
   it("usa GPS atual e preenche endereço completo via geocodificação reversa", async () => {
     vi.mocked(actions.reverseGeocodeAction).mockResolvedValue({
       ok: true,
-      street: "Rua Augusta, 500",
+      street: "Rua Augusta",
+      number: "500",
       neighborhood: "Consolação",
       city: "São Paulo",
       cep: "01304-000",
@@ -116,13 +134,25 @@ describe("AddressLocationPicker", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue("Rua Augusta, 500")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("Consolação")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("São Paulo")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("-23.551")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("-46.652")).toBeInTheDocument();
-      expect(screen.getByText(/identificados pelo seu gps/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/rua \/ logradouro/i)).toHaveValue("Rua Augusta");
+      expect(screen.getByLabelText(/número da fachada/i)).toHaveValue("500");
+      expect(screen.getByLabelText(/bairro/i)).toHaveValue("Consolação");
+      expect(screen.getByLabelText(/cidade/i)).toHaveValue("São Paulo");
+      expect(screen.getByLabelText(/^latitude$/i)).toHaveValue("-23.551");
+      expect(screen.getByLabelText(/^longitude$/i)).toHaveValue("-46.652");
     });
+  });
+
+  it("permite ajustar o marcador diretamente no mapa interativo", async () => {
+    const user = userEvent.setup();
+    render(<AddressLocationPicker />);
+
+    const movePinBtn = screen.getByRole("button", { name: /mover pin no mapa/i });
+    await user.click(movePinBtn);
+
+    expect(screen.getByLabelText(/^latitude$/i)).toHaveValue("-23.55052");
+    expect(screen.getByLabelText(/^longitude$/i)).toHaveValue("-46.633308");
+    expect(screen.getByText(/marcador reposicionado no mapa/i)).toBeInTheDocument();
   });
 
   it("trata recusa de permissão de GPS com aviso amigável", async () => {
@@ -144,7 +174,7 @@ describe("AddressLocationPicker", () => {
     await user.click(gpsBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/permissão de localização negada/i)).toBeInTheDocument();
+      expect(screen.getByText(/permissão de gps negada/i)).toBeInTheDocument();
     });
   });
 });
