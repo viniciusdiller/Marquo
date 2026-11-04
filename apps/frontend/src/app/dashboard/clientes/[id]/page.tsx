@@ -8,6 +8,7 @@ import { ApiError } from "@/lib/api";
 import { ClientForm } from "../ClientForm";
 import { HowItWorks, FieldHint } from "@/components/ui/HowItWorks";
 import { IntakeSection } from "./IntakeSection";
+import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { brl } from "@/lib/money";
 import { formatDateTime } from "@/lib/datetime";
 import { updateClientAction, listIntakeFormsAction } from "../actions";
@@ -48,9 +49,10 @@ export default async function ClientDetailPage({
         <CaretLeft size={14} />
         Clientes
       </Link>
-      <h1 className="mt-2 font-display text-2xl font-bold text-zinc-900 dark:text-white">
-        {client.name}
-      </h1>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <h1 className="font-display text-2xl font-bold text-zinc-900 dark:text-white">{client.name}</h1>
+        <WhatsAppButton phone={client.phone} name={client.name} label="WhatsApp" />
+      </div>
 
       <div className="mt-6 grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
         <div className="flex flex-col gap-8 lg:col-span-5 xl:col-span-4">
