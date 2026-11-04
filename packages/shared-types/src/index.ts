@@ -50,6 +50,32 @@ export interface UpdateTenantProfileInput {
   showContact?: boolean;
 }
 
+export type TenantSetupStepId =
+  | "services"
+  | "professionals"
+  | "working_hours"
+  | "service_links"
+  | "location"
+  | "contact";
+
+export interface TenantSetupStep {
+  id: TenantSetupStepId;
+  title: string;
+  description: string;
+  isComplete: boolean;
+  href: string;
+  importance: "critical" | "recommended";
+}
+
+export interface TenantSetupStatus {
+  isFullySetup: boolean;
+  isReadyForBooking: boolean;
+  completedStepsCount: number;
+  totalStepsCount: number;
+  slug: string;
+  steps: TenantSetupStep[];
+}
+
 export interface PublicService {
   id: string;
   name: string;
