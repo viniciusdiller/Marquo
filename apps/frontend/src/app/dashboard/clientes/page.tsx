@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { HowItWorks } from "@/components/ui/HowItWorks";
 import { Pagination } from "@/components/ui/Pagination";
+import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { riseIn } from "@/lib/stagger";
 
 export default async function ClientsPage({
@@ -106,10 +107,10 @@ export default async function ClientsPage({
           ) : (
             <ul className="flex flex-col divide-y divide-zinc-200 dark:divide-white/10">
               {clients.map((client, i) => (
-                <li key={client.id} style={riseIn(i)} className="animate-rise-in">
+                <li key={client.id} style={riseIn(i)} className="animate-rise-in flex items-center gap-2">
                   <Link
                     href={`/dashboard/clientes/${client.id}`}
-                    className="hover-nudge -mx-3 flex items-center justify-between gap-4 rounded-lg px-3 py-3.5 hover:bg-zinc-900/5 dark:hover:bg-white/5"
+                    className="hover-nudge -mx-3 flex min-w-0 flex-1 items-center justify-between gap-4 rounded-lg px-3 py-3.5 hover:bg-zinc-900/5 dark:hover:bg-white/5"
                   >
                     <div>
                       <p className="font-medium text-zinc-900 dark:text-white">{client.name}</p>
@@ -138,6 +139,8 @@ export default async function ClientsPage({
                       <p>desde {DateTime.fromISO(client.createdAt).setLocale("pt-BR").toFormat("LLL yyyy")}</p>
                     </div>
                   </Link>
+                  {/* Irmão do link (nunca dentro dele: <a> dentro de <a> é inválido e o clique abriria a ficha). */}
+                  <WhatsAppButton phone={client.phone} name={client.name} />
                 </li>
               ))}
             </ul>
