@@ -27,8 +27,8 @@ const booking = (status: PublicBooking["status"]): PublicBooking => ({
   rescheduledCount: 0,
 });
 
-function renderPanel(status: PublicBooking["status"], canManage = true, onChanged = vi.fn()) {
-  render(<AppointmentPanel appointment={booking(status)} professionals={[]} canManage={canManage} onClose={vi.fn()} onChanged={onChanged} />);
+function renderPanel(status: PublicBooking["status"], canManage = true, onChanged = vi.fn(), onClose = vi.fn()) {
+  render(<AppointmentPanel appointment={booking(status)} professionals={[]} canManage={canManage} onClose={onClose} onChanged={onChanged} />);
   return onChanged;
 }
 
@@ -104,5 +104,69 @@ describe("AppointmentPanel: Abrir comanda", () => {
 
     expect(await screen.findByText("Atendimento não encontrado.")).toBeInTheDocument();
     expect(onChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe("AppointmentPanel: pop-up no meio da tela", () => {
+  it("é um diálogo modal com o nome do cliente como título, fora da árvore do componente (portal no body)", () => {
+    const { baseElement } = render(
+      <AppointmentPanel appointment={booking("CONFIRMED")} professionals={[]} canManage onClose={vi.fn()} onChanged={vi.fn()} />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Fe" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(baseElement.querySelector("body > div[role='presentation']")).not.toBeNull();
+  });
+
+  it("mostra horário com a duração, profissional, total e o WhatsApp do cliente", () => {
+    renderPanel("CONFIRMED");
+    expect(screen.getByText(/40 min/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /chamar fe no whatsapp/i })).toHaveAttribute("href", "https://wa.me/5522999447646");
+  });
+
+  it("fecha pelo X, pelo Esc e clicando fora; clicar dentro NÃO fecha", async () => {
+    const onClose = vi.fn();
+    renderPanel("CONFIRMED", true, vi.fn(), onClose);
+
+    await userEvent.click(screen.getByRole("dialog"));
+    expect(onClose).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Fechar" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(2);
+
+    await userEvent.click(screen.getByRole("presentation"));
+    expect(onClose).toHaveBeenCalledTimes(3);
+  });
+
+  it("Remarcar abre e fecha a área de remarcação (começa fechada)", async () => {
+    renderPanel("CONFIRMED");
+    expect(screen.queryByLabelText(/remarcar para/i)).not.toBeInTheDocument();
+
+    const toggle = screen.getByRole("button", { name: "Remarcar" });
+    await userEvent.click(toggle);
+    expect(screen.getByLabelText(/remarcar para/i)).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    await userEvent.click(toggle);
+    expect(screen.queryByLabelText(/remarcar para/i)).not.toBeInTheDocument();
+  });
+
+  it("finalizado/cancelado: sem Remarcar e sem Cancelar atendimento", () => {
+    renderPanel("COMPLETED");
+    expect(screen.queryByRole("button", { name: "Remarcar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /cancelar atendimento/i })).not.toBeInTheDocument();
+  });
+
+  it("cancelar pede confirmação antes; o Esc do 'tem certeza?' não fecha o pop-up por baixo", async () => {
+    const onClose = vi.fn();
+    renderPanel("CONFIRMED", true, vi.fn(), onClose);
+
+    await userEvent.click(screen.getByRole("button", { name: /cancelar atendimento/i }));
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
