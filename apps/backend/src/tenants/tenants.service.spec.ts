@@ -110,6 +110,21 @@ describe("TenantsService", () => {
   });
 
   describe("getMarketplaceSettings", () => {
+    it("achata as categorias vinculadas em uma lista de slugs e retorna endereco", async () => {
+      (prisma.tenant.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        listedInMarketplace: true,
+        address: "Rua das Flores, 123",
+        city: "São Paulo",
+        categories: [{ category: { slug: "barbearia" } }, { category: { slug: "salao" } }],
+      });
+      (prisma.serviceCategory.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.getMarketplaceSettings("tenant-1");
+
+      expect(result.address).toBe("Rua das Flores, 123");
+      expect(result.categorySlugs).toEqual(["barbearia", "salao"]);
+    });
+
     it("achata as categorias vinculadas em uma lista de slugs", async () => {
       (prisma.tenant.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         listedInMarketplace: true,
