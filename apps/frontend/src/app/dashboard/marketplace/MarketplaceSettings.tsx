@@ -2,7 +2,8 @@
 
 import { useActionState } from "react";
 import type { MarketplaceSettings as Settings } from "@marquo/shared-types";
-import { Input } from "@/components/ui/Input";
+import { FieldHelp } from "@/components/ui/FieldHelp";
+import { AddressLocationPicker } from "@/components/dashboard/AddressLocationPicker";
 import { saveMarketplaceAction, type MarketplaceActionState } from "./actions";
 
 const initial: MarketplaceActionState = {};
@@ -16,6 +17,10 @@ export function MarketplaceSettings({ settings }: { settings: Settings }) {
         <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-stone-200">
           <input type="checkbox" name="listed" defaultChecked={settings.listedInMarketplace} />
           Aparecer no marketplace de descoberta (/descobrir)
+          <FieldHelp title="Marketplace de Descoberta">
+            Quando ativo, clientes que usam a busca geral do Marquo conseguem encontrar seu salão
+            por proximidade e categorias de serviços oferecidos.
+          </FieldHelp>
         </label>
         <p className="mt-1 text-xs text-zinc-400 dark:text-stone-500">
           É opcional e vem desligado por padrão. Só muda quem consegue te encontrar
@@ -23,26 +28,21 @@ export function MarketplaceSettings({ settings }: { settings: Settings }) {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Input label="Cidade" name="city" maxLength={120} autoComplete="address-level2" defaultValue={settings.city ?? ""} hint="É o que o cliente filtra na busca." />
-        <Input label="Bairro" name="neighborhood" maxLength={120} defaultValue={settings.neighborhood ?? ""} hint="Opcional, ajuda a achar quem está perto." />
-        <Input
-          label="Latitude"
-          name="latitude"
-          inputMode="decimal"
-          defaultValue={settings.latitude ?? ""}
-          hint="Opcional — usada para ordenar por distância."
-        />
-        <Input
-          label="Longitude"
-          name="longitude"
-          inputMode="decimal"
-          defaultValue={settings.longitude ?? ""}
-        />
-      </div>
+      <AddressLocationPicker
+        initialCity={settings.city}
+        initialNeighborhood={settings.neighborhood}
+        initialLatitude={settings.latitude}
+        initialLongitude={settings.longitude}
+      />
+
 
       <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-700 dark:text-stone-200">
-        Faixa de preço
+        <span className="flex items-center gap-1.5">
+          Faixa de preço
+          <FieldHelp title="Faixa de Preço">
+            $ é mais econômico e $$$$ é alta classe/luxo. Aparece no cartão do seu salão no marketplace.
+          </FieldHelp>
+        </span>
         <select
           name="priceRange"
           defaultValue={settings.priceRange ?? ""}
@@ -59,7 +59,12 @@ export function MarketplaceSettings({ settings }: { settings: Settings }) {
 
       <fieldset>
         <legend className="text-sm font-medium text-zinc-700 dark:text-stone-200">
-          Categorias (até 6)
+          <span className="flex items-center gap-1.5">
+            Categorias (até 6)
+            <FieldHelp title="Categorias no Marketplace">
+              Selecione os tipos de serviços que seu salão realiza para ser encontrado por clientes que filtram por especialidade.
+            </FieldHelp>
+          </span>
         </legend>
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
           {settings.availableCategories.map((c) => (

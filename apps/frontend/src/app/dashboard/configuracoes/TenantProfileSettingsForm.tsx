@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { MaskedInput } from "@/components/ui/MaskedInput";
 import { Button } from "@/components/ui/Button";
 import { FilePicker } from "@/components/ui/FilePicker";
+import { FieldHelp } from "@/components/ui/FieldHelp";
 import { compressImageFile } from "@/lib/image-compression";
 import {
   updateTenantProfileAction,
@@ -258,7 +259,14 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
             <Input
               type="number"
               min="0"
-              label="Antecedência mínima (minutos)"
+              label={
+                <span className="flex items-center gap-1.5">
+                  Antecedência mínima (minutos)
+                  <FieldHelp title="Antecedência Mínima">
+                    Tempo mínimo de aviso prévio que um cliente precisa para marcar. Ex: 120 minutos impede que alguém agende para daqui a 15 minutos sem você saber.
+                  </FieldHelp>
+                </span>
+              }
               name="minSchedulingLeadTimeMinutes"
               defaultValue={tenant.minSchedulingLeadTimeMinutes ?? 120}
               hint="Ex: 120 para não permitirem agendar com menos de 2h."
@@ -268,7 +276,14 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
             <Input
               type="number"
               min="1"
-              label="Agenda aberta por (dias)"
+              label={
+                <span className="flex items-center gap-1.5">
+                  Agenda aberta por (dias)
+                  <FieldHelp title="Horizonte Máximo da Agenda">
+                    Até quantos dias no futuro os horários ficam liberados para agendamento. Ex: 60 dias impede que clientes reservem para daqui a seis meses.
+                  </FieldHelp>
+                </span>
+              }
               name="maxSchedulingLeadTimeDays"
               defaultValue={tenant.maxSchedulingLeadTimeDays ?? 60}
               hint="Ex: 60 para não marcarem muito para o futuro."

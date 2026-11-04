@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type {
   CalendarResponse,
+  TenantSetupStatus,
   PublicBooking,
   StaffRole,
 } from "@marquo/shared-types";
 import { fetchCalendarAction } from "./actions";
 import { AppointmentPanel } from "./AppointmentPanel";
 import { CreateAppointmentDialog } from "./CreateAppointmentDialog";
+import { SetupGuide } from "@/components/dashboard/SetupGuide";
 import {
   APPOINTMENT_STATUS_ORDER,
   getStatusBlockClasses,
@@ -56,12 +58,14 @@ export function AgendaView({
   initialLoadError = false,
   services,
   role,
+  setupStatus,
 }: {
   initialDate: string;
   initialCalendar: CalendarResponse;
   initialLoadError?: boolean;
   services: AgendaService[];
   role: StaffRole;
+  setupStatus?: TenantSetupStatus | null;
 }) {
   const [date, setDate] = useState(initialDate);
   const [calendar, setCalendar] = useState(initialCalendar);
@@ -147,6 +151,7 @@ export function AgendaView({
 
   return (
     <div className="mx-auto w-full max-w-7xl">
+      {setupStatus ? <SetupGuide setup={setupStatus} /> : null}
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
         <div className="flex flex-col gap-6 lg:col-span-4 xl:col-span-3">
           <div>
