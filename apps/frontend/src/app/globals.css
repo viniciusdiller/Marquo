@@ -28,6 +28,21 @@
   --brand-wordmark: #b9a0ff;
 }
 
+/* Sem balanço lateral no celular. Nada na página deve rolar nem "puxar" para os lados: o conteúdo que passar da largura
+   da tela (uma tabela, um elemento decorativo) é cortado em vez de criar rolagem horizontal, e o efeito elástico do
+   toque no eixo X é desligado. `html` com overflow-x:hidden vai para a janela (não cria contêiner de rolagem, então
+   `position: sticky` segue funcionando); `body` usa `clip` pelo mesmo motivo. Tabelas largas têm o próprio
+   `overflow-x-auto` e continuam rolando por dentro. */
+html {
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+body {
+  max-width: 100%;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
+
 /* Troca de tema: a revelação circular é feita em JS (ThemeProvider); aqui só desliga o
    cross-fade padrão do navegador, que brigaria com o clip-path. */
 ::view-transition-old(root),
