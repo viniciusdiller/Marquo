@@ -79,6 +79,11 @@ pnpm --filter @marquo/database db:seed
 pnpm dev
 ```
 
+O backend **exige Redis** para iniciar (sem ele o boot falha de propósito e o site mostra `ECONNREFUSED` na porta 3001).
+O `pnpm dev` já confere isso: se a porta 6379 estiver vazia, ele sobe só o Redis com `docker compose up -d --wait redis`
+(o Docker Desktop precisa estar aberto). Sem Docker, instale o Redis: `brew install redis && brew services start redis`.
+Para subir só os apps, sem essa checagem, use `pnpm dev:apps`. Testes do script: `pnpm test:scripts`.
+
 ### Variáveis de ambiente
 
 Cada app lê o `.env` da própria pasta. Nenhum arquivo `.env` é versionado.
