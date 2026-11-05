@@ -6,7 +6,7 @@ import { ValidationPipe } from "@nestjs/common";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { validationExceptionFactory } from "./common/validation/pt-br-validation";
-import { corsOrigins } from "./common/utils/cors-origins.util";
+import { corsOrigins, devLanOrigins } from "./common/utils/cors-origins.util";
 import { RejectUnsafeInputInterceptor } from "./common/interceptors/reject-unsafe-input.interceptor";
 import { PtBrHttpExceptionFilter } from "./common/filters/pt-br-http-exception.filter";
 import { PrismaExceptionFilter } from "./common/filters/prisma-exception.filter";
@@ -38,7 +38,7 @@ async function bootstrap() {
   // O wizard público de agendamento (apps/frontend) chama os endpoints /public/* direto do
   // browser, já que não carregam dados sensíveis por trás de autenticação.
   // O site institucional (SITE_URL, opcional) só lê GET /plans para mostrar os mesmos preços do app.
-  app.enableCors({ origin: corsOrigins(process.env), credentials: true });
+  app.enableCors({ origin: [...corsOrigins(process.env), ...devLanOrigins(process.env)], credentials: true });
 
   app.useGlobalPipes(
     new ValidationPipe({

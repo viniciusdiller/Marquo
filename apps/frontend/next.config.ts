@@ -13,7 +13,16 @@ const securityHeaders = [
     : []),
 ];
 
+// Em desenvolvimento o Next bloqueia o servidor de dev (HMR e assets) para origens que não sejam localhost. Para abrir pelo
+// celular (`pnpm dev:lan`, IP da rede local) liberamos só as faixas privadas (RFC 1918). Cada `*` vale um trecho do IP.
+// Só vale em dev: em produção essa opção é ignorada.
+const devLanOrigins =
+  process.env.NODE_ENV === "production"
+    ? []
+    : ["192.168.*.*", "10.*.*.*", ...Array.from({ length: 16 }, (_, i) => `172.${16 + i}.*.*`)];
+
 const nextConfig: NextConfig = {
+  allowedDevOrigins: devLanOrigins,
   // Não anuncia "X-Powered-By: Next.js" (fingerprinting de versão sem benefício).
   poweredByHeader: false,
   async headers() {

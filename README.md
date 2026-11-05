@@ -82,7 +82,12 @@ pnpm dev
 O backend **exige Redis** para iniciar (sem ele o boot falha de propósito e o site mostra `ECONNREFUSED` na porta 3001).
 O `pnpm dev` já confere isso: se a porta 6379 estiver vazia, ele sobe só o Redis com `docker compose up -d --wait redis`
 (o Docker Desktop precisa estar aberto). Sem Docker, instale o Redis: `brew install redis && brew services start redis`.
-Para subir só os apps, sem essa checagem, use `pnpm dev:apps`. Testes do script: `pnpm test:scripts`.
+Para subir só os apps, sem essa checagem, use `pnpm dev:apps`.
+
+**Testar pelo celular (mesmo Wi-Fi):** `pnpm dev:lan`. Ele descobre o IP do computador na rede, mostra o endereço para abrir
+no celular (ex.: `http://192.168.3.71:3000`) e sobe tudo com a API apontando para esse IP (o navegador do celular não
+enxerga o `localhost` do computador). Nenhum arquivo de ambiente é alterado. O CORS do backend e o `allowedDevOrigins` do Next
+aceitam as faixas de rede local (192.168.x.x, 10.x.x.x, 172.16–31.x.x) **só em desenvolvimento**. Testes do script: `pnpm test:scripts`.
 
 ### Variáveis de ambiente
 

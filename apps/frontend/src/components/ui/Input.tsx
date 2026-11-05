@@ -1,6 +1,6 @@
 "use client";
 
-import { type ComponentPropsWithoutRef, type ReactNode, forwardRef, useState } from "react";
+import { type ComponentPropsWithoutRef, type KeyboardEvent, type ReactNode, forwardRef, useState } from "react";
 import clsx from "clsx";
 import { Eye, EyeSlash } from "@phosphor-icons/react/dist/ssr";
 
@@ -15,7 +15,7 @@ interface InputProps extends ComponentPropsWithoutRef<"input"> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, error, hint, id, className, accentScoped, ...props },
+  { label, error, hint, id, className, accentScoped, onKeyDown, onKeyUp, onBlur, ...props },
   ref,
 ) {
   const inputId = id ?? props.name;
@@ -23,6 +23,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   // chama (nada é guardado aqui); só o `type` do input alterna entre "password" e "text".
   const isPassword = props.type === "password";
   const [visible, setVisible] = useState(false);
+  // Aviso de Caps Lock só em campo de senha. O navegador só informa o estado quando uma tecla é pressionada
+  // (getModifierState); some ao sair do campo. Em celular não há evento de Caps Lock, então não aparece.
+  const [capsLock, setCapsLock] = useState(false);
+  const trackCaps = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (isPassword && typeof e.getModifierState === "function") setCapsLock(e.getModifierState("CapsLock"));
+  };
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -46,6 +52,18 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           aria-invalid={!!error}
           aria-describedby={error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
           {...props}
+          onKeyDown={(e) => {
+            trackCaps(e);
+            onKeyDown?.(e);
+          }}
+          onKeyUp={(e) => {
+            trackCaps(e);
+            onKeyUp?.(e);
+          }}
+          onBlur={(e) => {
+            setCapsLock(false);
+            onBlur?.(e);
+          }}
           type={isPassword && visible ? "text" : props.type}
         />
         {isPassword ? (
@@ -60,6 +78,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           </button>
         ) : null}
       </div>
+      {isPassword && capsLock ? (
+        <p role="status" className="text-sm font-medium text-amber-600 dark:text-amber-400">
+          Caps Lock está ligado.
+        </p>
+      ) : null}
       {error ? (
         <p id={`${inputId}-error`} className="text-sm text-red-600 dark:text-red-400">
           {error}
