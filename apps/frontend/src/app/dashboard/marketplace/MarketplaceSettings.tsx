@@ -28,23 +28,13 @@ export function MarketplaceSettings({ settings }: { settings: Settings }) {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Input label="Cidade" name="city" maxLength={120} autoComplete="address-level2" defaultValue={settings.city ?? ""} hint="É o que o cliente filtra na busca." />
-        <Input label="Bairro" name="neighborhood" maxLength={120} defaultValue={settings.neighborhood ?? ""} hint="Opcional, ajuda a achar quem está perto." />
-        <Input
-          label="Latitude"
-          name="latitude"
-          inputMode="decimal"
-          defaultValue={settings.latitude ?? ""}
-          hint="Opcional — usada para ordenar por distância."
-        />
-        <Input
-          label="Longitude"
-          name="longitude"
-          inputMode="decimal"
-          defaultValue={settings.longitude ?? ""}
-        />
-      </div>
+      <AddressLocationPicker
+        initialAddress={settings.address}
+        initialCity={settings.city}
+        initialNeighborhood={settings.neighborhood}
+        initialLatitude={settings.latitude}
+        initialLongitude={settings.longitude}
+      />
 
       <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-700 dark:text-stone-200">
         <span className="flex items-center gap-1.5">

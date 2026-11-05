@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   CheckCircle,
@@ -18,26 +18,29 @@ interface SetupGuideProps {
   setup: TenantSetupStatus;
 }
 
-export function SetupGuide({ setup }: SetupGuideProps) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [mounted, setMounted] = useState(false);
+const emptySubscribe = (notify: () => void) => {
+  window.addEventListener("storage", notify);
+  return () => window.removeEventListener("storage", notify);
+};
 
-  useEffect(() => {
-    setMounted(true);
-    const stored = localStorage.getItem("marquo:setup-guide-collapsed");
-    if (stored === "true" || setup.isFullySetup) {
-      setCollapsed(true);
-    }
-  }, [setup.isFullySetup]);
+export function SetupGuide({ setup }: SetupGuideProps) {
+  const isStoredCollapsed = useSyncExternalStore(
+    emptySubscribe,
+    () => localStorage.getItem("marquo:setup-guide-collapsed") === "true",
+    () => false,
+  );
+
+  const [userToggled, setUserToggled] = useState<boolean | null>(null);
+
+  const isCollapsed =
+    userToggled !== null ? userToggled : (isStoredCollapsed || setup.isFullySetup);
 
   function toggleCollapse() {
-    const next = !collapsed;
-    setCollapsed(next);
+    const next = !isCollapsed;
+    setUserToggled(next);
     localStorage.setItem("marquo:setup-guide-collapsed", String(next));
   }
 
-  // Se não estiver montado no client, renderiza aberto por padrão pra SSR consistente
-  const isCollapsed = mounted ? collapsed : false;
   const percent = Math.round((setup.completedStepsCount / setup.totalStepsCount) * 100);
 
   return (
