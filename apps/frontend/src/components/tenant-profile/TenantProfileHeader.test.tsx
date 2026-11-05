@@ -65,8 +65,33 @@ describe("TenantProfileHeader: localização e contato no cartão preto", () => 
     expect(within(screen.getByRole("complementary")).getByTitle("Mapa de Del Bianco Barbearia")).toBe(map);
   });
 
-  it("sem endereço não há mapa", () => {
-    renderHeader({ address: null });
+  it("prioriza coordenadas exatas (latitude e longitude) para o mapa e link 'Como chegar'", () => {
+    const card = renderHeader({
+      latitude: -22.89889,
+      longitude: -42.46985,
+    });
+    const map = screen.getByTitle("Mapa de Del Bianco Barbearia");
+    expect(map.getAttribute("src")).toContain("google.com/maps?q=-22.89889,-42.46985");
+    expect(map.getAttribute("src")).toContain("output=embed");
+    expect(card.getByRole("link", { name: /Como chegar/ })).toHaveAttribute(
+      "href",
+      "https://www.google.com/maps/search/?api=1&query=-22.89889,-42.46985",
+    );
+  });
+
+  it("exibe o mapa quando possui apenas coordenadas sem texto de endereço", () => {
+    const card = renderHeader({
+      address: null,
+      latitude: -22.89889,
+      longitude: -42.46985,
+    });
+    expect(card.getByText("Localização no mapa")).toBeInTheDocument();
+    const map = screen.getByTitle("Mapa de Del Bianco Barbearia");
+    expect(map.getAttribute("src")).toContain("google.com/maps?q=-22.89889,-42.46985");
+  });
+
+  it("sem endereço e sem coordenadas não há mapa", () => {
+    renderHeader({ address: null, latitude: null, longitude: null });
     expect(screen.queryByTitle(/Mapa de/)).not.toBeInTheDocument();
   });
 

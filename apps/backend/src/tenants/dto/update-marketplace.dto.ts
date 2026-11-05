@@ -22,6 +22,12 @@ export class UpdateMarketplaceDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(300)
+  @Trim()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   @Trim()
   city?: string;
