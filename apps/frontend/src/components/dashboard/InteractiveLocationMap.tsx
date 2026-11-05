@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { Map as LeafletMap, Marker as LeafletMarker, LeafletMouseEvent } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 interface InteractiveLocationMapProps {
@@ -17,12 +18,16 @@ export function InteractiveLocationMap({
   className,
 }: InteractiveLocationMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const markerRef = useRef<LeafletMarker | null>(null);
   const onPositionChangeRef = useRef(onPositionChange);
-  onPositionChangeRef.current = onPositionChange;
+
+  useEffect(() => {
+    onPositionChangeRef.current = onPositionChange;
+  }, [onPositionChange]);
 
   const hasCoords = typeof latitude === "number" && !isNaN(latitude) && typeof longitude === "number" && !isNaN(longitude);
+  const initialCoordsRef = useRef({ hasCoords, latitude, longitude });
 
   useEffect(() => {
     let isMounted = true;
@@ -30,15 +35,17 @@ export function InteractiveLocationMap({
     let timer1: NodeJS.Timeout | null = null;
     let timer2: NodeJS.Timeout | null = null;
 
+    const { hasCoords: initHasCoords, latitude: initLat, longitude: initLng } = initialCoordsRef.current;
+
     async function initMap() {
       if (!containerRef.current || mapRef.current) return;
       const L = await import("leaflet");
 
       if (!isMounted || !containerRef.current) return;
 
-      const defaultLat = hasCoords ? latitude : -14.235; // Centro do Brasil
-      const defaultLng = hasCoords ? longitude : -51.9253;
-      const defaultZoom = hasCoords ? 16 : 4;
+      const defaultLat = initHasCoords && initLat != null ? initLat : -14.235;
+      const defaultLng = initHasCoords && initLng != null ? initLng : -51.9253;
+      const defaultZoom = initHasCoords ? 16 : 4;
 
       const map = L.map(containerRef.current, {
         center: [defaultLat, defaultLng],
@@ -71,8 +78,8 @@ export function InteractiveLocationMap({
         iconAnchor: [16, 42],
       });
 
-      if (hasCoords) {
-        const marker = L.marker([latitude, longitude], {
+      if (initHasCoords && initLat != null && initLng != null) {
+        const marker = L.marker([initLat, initLng], {
           draggable: true,
           icon: pinIcon,
         }).addTo(map);
@@ -86,7 +93,7 @@ export function InteractiveLocationMap({
       }
 
       // Permite clicar em qualquer lugar do mapa para posicionar o pin
-      map.on("click", (e: any) => {
+      map.on("click", (e: LeafletMouseEvent) => {
         const { lat, lng } = e.latlng;
         const fixedLat = Number(lat.toFixed(6));
         const fixedLng = Number(lng.toFixed(6));
@@ -149,7 +156,7 @@ export function InteractiveLocationMap({
 
   // Atualiza posição do pin e visão do mapa quando as coordenadas mudam externamente
   useEffect(() => {
-    if (!mapRef.current || !hasCoords) return;
+    if (!mapRef.current || !hasCoords || latitude == null || longitude == null) return;
 
     const map = mapRef.current;
     map.invalidateSize();

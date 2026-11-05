@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition } from "react";
 import {
   MapPin,
   NavigationArrow,
@@ -27,6 +27,18 @@ interface AddressLocationPickerProps {
   initialLongitude?: number | null;
 }
 
+function parseAddressParts(address: string | null | undefined): { street: string; number: string } {
+  if (!address) return { street: "", number: "" };
+  const parts = address.split(",");
+  if (parts.length >= 2) {
+    return {
+      street: parts[0].trim(),
+      number: parts.slice(1).join(",").trim(),
+    };
+  }
+  return { street: address, number: "" };
+}
+
 export function AddressLocationPicker({
   initialAddress = "",
   initialCity = "",
@@ -34,22 +46,11 @@ export function AddressLocationPicker({
   initialLatitude = null,
   initialLongitude = null,
 }: AddressLocationPickerProps) {
-  // Separa rua e número caso já venha formatado como "Rua X, 123"
-  const parsedInitial = useMemo(() => {
-    if (!initialAddress) return { street: "", number: "" };
-    const parts = initialAddress.split(",");
-    if (parts.length >= 2) {
-      return {
-        street: parts[0].trim(),
-        number: parts.slice(1).join(",").trim(),
-      };
-    }
-    return { street: initialAddress, number: "" };
-  }, [initialAddress]);
+  const [initialParts] = useState(() => parseAddressParts(initialAddress));
 
   const [cep, setCep] = useState("");
-  const [street, setStreet] = useState(parsedInitial.street);
-  const [number, setNumber] = useState(parsedInitial.number);
+  const [street, setStreet] = useState(initialParts.street);
+  const [number, setNumber] = useState(initialParts.number);
   const [city, setCity] = useState(initialCity ?? "");
   const [neighborhood, setNeighborhood] = useState(initialNeighborhood ?? "");
   const [stateUf, setStateUf] = useState("");
