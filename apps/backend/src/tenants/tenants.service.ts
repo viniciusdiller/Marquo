@@ -32,6 +32,8 @@ export class TenantsService {
         updatedAt: true,
         description: true,
         address: true,
+        latitude: true,
+        longitude: true,
         businessHours: true,
         logoUrl: true,
         accentColor: true,
@@ -58,6 +60,8 @@ export class TenantsService {
         slug: true,
         description: true,
         address: true,
+        latitude: true,
+        longitude: true,
         businessHours: true,
         logoUrl: true,
         updatedAt: true,
@@ -110,7 +114,9 @@ export class TenantsService {
       db.tenant.findUniqueOrThrow({
         where: { id: tenantId },
         select: {
+          slug: true,
           listedInMarketplace: true,
+          address: true,
           city: true,
           neighborhood: true,
           latitude: true,

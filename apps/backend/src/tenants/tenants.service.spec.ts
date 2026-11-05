@@ -67,6 +67,21 @@ describe("TenantsService", () => {
       (prisma.tenant.findUnique as jest.Mock).mockResolvedValue(tenant);
       await expect(service.findPublicBySlug("salao-demo")).resolves.toBe(tenant);
     });
+    it("projeta latitude e longitude para o mapa do perfil publico", async () => {
+      const tenant = { id: "tenant-1", slug: "salao-demo", latitude: -22.89889, longitude: -42.46985 };
+      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue(tenant);
+      const res = await service.findPublicBySlug("salao-demo");
+      expect(res).toBe(tenant);
+      expect(prisma.tenant.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: "salao-demo" },
+          select: expect.objectContaining({
+            latitude: true,
+            longitude: true,
+          }),
+        }),
+      );
+    });
   });
 
   describe("updateProfile", () => {
@@ -110,6 +125,21 @@ describe("TenantsService", () => {
   });
 
   describe("getMarketplaceSettings", () => {
+    it("achata as categorias vinculadas em uma lista de slugs e retorna endereco", async () => {
+      (prisma.tenant.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        listedInMarketplace: true,
+        address: "Rua das Flores, 123",
+        city: "São Paulo",
+        categories: [{ category: { slug: "barbearia" } }, { category: { slug: "salao" } }],
+      });
+      (prisma.serviceCategory.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.getMarketplaceSettings("tenant-1");
+
+      expect(result.address).toBe("Rua das Flores, 123");
+      expect(result.categorySlugs).toEqual(["barbearia", "salao"]);
+    });
+
     it("achata as categorias vinculadas em uma lista de slugs", async () => {
       (prisma.tenant.findUniqueOrThrow as jest.Mock).mockResolvedValue({
         listedInMarketplace: true,

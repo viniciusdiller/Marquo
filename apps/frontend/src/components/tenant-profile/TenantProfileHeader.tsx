@@ -48,8 +48,26 @@ export function TenantProfileHeader({
   // banco (não existe upload de "foto de capa" hoje), só reaproveita a mesma imagem
   // que o dono já mandou pra galeria.
   const cover = tenant.galleryImages[0] ?? null;
+  const hasCoordinates =
+    typeof tenant.latitude === "number" &&
+    !isNaN(tenant.latitude) &&
+    typeof tenant.longitude === "number" &&
+    !isNaN(tenant.longitude);
+
+  const mapCoordinates = hasCoordinates ? `${tenant.latitude},${tenant.longitude}` : null;
+  const mapQuery = mapCoordinates ?? (tenant.address ? encodeURIComponent(tenant.address) : null);
+  const directionsUrl = mapQuery ? `https://www.google.com/maps/search/?api=1&query=${mapQuery}` : null;
+  const embedMapUrl = mapQuery ? `https://www.google.com/maps?q=${mapQuery}&hl=pt-BR&z=16&output=embed` : null;
+
   const hasContactBlock =
-    tenant.showContact && Boolean(tenant.address || tenant.businessHours || tenant.whatsappNumber || tenant.instagramUrl);
+    tenant.showContact &&
+    Boolean(
+      tenant.address ||
+      hasCoordinates ||
+      tenant.businessHours ||
+      tenant.whatsappNumber ||
+      tenant.instagramUrl,
+    );
 
   return (
     <>
@@ -186,31 +204,35 @@ export function TenantProfileHeader({
                         Localização e contato
                       </span>
 
-                      {tenant.address ? (
+                      {tenant.address || hasCoordinates ? (
                         <div className="flex items-start gap-2.5 text-sm">
                           <MapPin size={17} className="mt-0.5 shrink-0 text-white/60" />
                           <div className="min-w-0">
-                            <p className="text-white/90">{tenant.address}</p>
-                            <a
-                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(tenant.address)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-1 inline-flex items-center gap-1 text-[13px] font-semibold text-white/70 transition-colors hover:text-white"
-                            >
-                              Como chegar
-                              <ArrowUpRight size={13} weight="bold" />
-                            </a>
+                            {tenant.address ? (
+                              <p className="text-white/90">{tenant.address}</p>
+                            ) : (
+                              <p className="text-white/90">Localização no mapa</p>
+                            )}
+                            {directionsUrl ? (
+                              <a
+                                href={directionsUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-1 inline-flex items-center gap-1 text-[13px] font-semibold text-white/70 transition-colors hover:text-white"
+                              >
+                                Como chegar
+                                <ArrowUpRight size={13} weight="bold" />
+                              </a>
+                            ) : null}
                           </div>
                         </div>
                       ) : null}
 
-                      {tenant.address ? (
-                        // Mesmo mapa embutido da seção de baixo (derivado do endereço em texto, sem chave de API; o
-                        // frame-src do CSP já libera o Google Maps). Dá para arrastar e dar zoom.
+                      {embedMapUrl ? (
                         <div className="relative h-60 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
                           <iframe
                             title={`Mapa de ${tenant.name}`}
-                            src={`https://www.google.com/maps?q=${encodeURIComponent(tenant.address)}&output=embed`}
+                            src={embedMapUrl}
                             className="absolute inset-0 h-full w-full"
                             loading="lazy"
                             referrerPolicy="no-referrer-when-downgrade"

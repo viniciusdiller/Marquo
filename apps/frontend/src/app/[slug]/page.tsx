@@ -64,7 +64,13 @@ export default async function TenantProfilePage({
   // "Informações" aponta para o bloco de localização e contato do cartão preto (some junto com ele).
   const hasContactBlock =
     tenant.showContact &&
-    Boolean(tenant.address || tenant.businessHours || tenant.whatsappNumber || tenant.instagramUrl);
+    Boolean(
+      tenant.address ||
+      (tenant.latitude != null && tenant.longitude != null) ||
+      tenant.businessHours ||
+      tenant.whatsappNumber ||
+      tenant.instagramUrl,
+    );
 
   // Só os atalhos das seções que de fato aparecem nesta página (na mesma ordem em que são renderizadas).
   const navItems: SectionNavItem[] = [

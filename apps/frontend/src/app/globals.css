@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
 /* Troca o dark: de "segue o SO" pra "segue a classe .dark na <html>" — controlado pelo
    ThemeProvider (components/ThemeProvider.tsx). Não quebra nenhum dark: já existente,
@@ -154,4 +155,24 @@ body {
 ::selection {
   background-color: var(--color-accent-500);
   color: white;
+}
+
+.leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 0 !important;
+  font-family: inherit !important;
+  background-color: #f1f5f9;
+}
+.dark .leaflet-container {
+  background-color: #18181b;
+}
+.leaflet-pane {
+  z-index: 10 !important;
+}
+.leaflet-tile-pane {
+  z-index: 10 !important;
+}
+.leaflet-marker-pane {
+  z-index: 20 !important;
 }

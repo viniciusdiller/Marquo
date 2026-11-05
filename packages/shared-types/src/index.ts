@@ -24,6 +24,8 @@ export interface PublicTenant {
   slug: string;
   description: string | null;
   address: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   businessHours: string | null;
   logoUrl: string | null;
   updatedAt: string;
@@ -179,7 +181,9 @@ export interface MarketplaceEstablishment {
 }
 
 export interface MarketplaceSettings {
+  slug?: string;
   listedInMarketplace: boolean;
+  address?: string | null;
   city: string | null;
   neighborhood: string | null;
   latitude: number | null;

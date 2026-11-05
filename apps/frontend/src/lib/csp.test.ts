@@ -33,9 +33,11 @@ describe("buildCsp", () => {
     assert.doesNotMatch(dev, /upgrade-insecure-requests/);
   });
 
-  it("libera só a origem da API para chamadas do navegador e imagens de /uploads", () => {
+    it("libera a origem da API e domínios de tiles do mapa interativo para imagens", () => {
     assert.match(directive(csp, "connect-src"), /https:\/\/api\.marquo\.com\.br/);
     assert.match(directive(csp, "img-src"), /https:\/\/api\.marquo\.com\.br/);
+    assert.match(directive(csp, "img-src"), /https:\/\/\*\.basemaps\.cartocdn\.com/);
+    assert.match(directive(csp, "img-src"), /https:\/\/tile\.openstreetmap\.org/);
     assert.doesNotMatch(directive(csp, "connect-src"), /\*/);
   });
 
