@@ -99,7 +99,7 @@ export function AddressLocationPicker({
           setLongitude(String(result.longitude));
           setFeedback({
             type: "success",
-            message: "Endereço localizado! Como no iFood, digite o número da fachada e ajuste o pin no mapa abaixo.",
+            message: "Endereço localizado! Digite o número da fachada e confira o marcador no mapa abaixo.",
           });
         } else {
           setFeedback({
@@ -343,7 +343,7 @@ export function AddressLocationPicker({
         </div>
       </div>
 
-      {/* Campos de Logradouro e Número (Separados como no iFood) */}
+      {/* Campos de Logradouro e Número */}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="sm:col-span-2">
           <Input
@@ -409,11 +409,11 @@ export function AddressLocationPicker({
         />
       </div>
 
-      {/* Mapa Interativo estilo iFood / Uber */}
+      {/* Mapa Interativo */}
       <div className="space-y-2 pt-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-medium text-zinc-700 dark:text-stone-300">
-            Confirmação no mapa (como no iFood):
+            Confirmação no mapa:
           </p>
           <span className="text-xs text-zinc-400 dark:text-stone-500">
             Clique no mapa ou arraste o pin para ajustar a entrada exata da loja
