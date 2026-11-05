@@ -34,6 +34,13 @@ export class TenantsController {
 
   @Roles(Role.OWNER)
   @SkipBillingCheck()
+  @Get("tenants/me/setup-status")
+  getSetupStatus(@CurrentUser() user: AuthenticatedUser) {
+    return this.tenantsService.getSetupStatus(user.tenantId);
+  }
+
+  @Roles(Role.OWNER)
+  @SkipBillingCheck()
   @Patch("tenants/me")
   updateMe(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateTenantProfileDto) {
     return this.tenantsService.updateProfile(user.tenantId, dto);

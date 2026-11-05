@@ -21,6 +21,10 @@ function buildPrismaMock() {
       update: jest.fn(),
     },
     serviceCategory: { findMany: jest.fn() },
+    service: { count: jest.fn() },
+    professional: { count: jest.fn() },
+    workingHours: { count: jest.fn() },
+    professionalService: { count: jest.fn() },
     tenantCategory: { deleteMany: jest.fn(), createMany: jest.fn() },
     tenantGalleryImage: {
       count: jest.fn(),
@@ -323,6 +327,59 @@ describe("TenantsService", () => {
       await service.removeGalleryImage("tenant-1", "img-1");
 
       expect(prisma.tenantGalleryImage.delete).toHaveBeenCalledWith({ where: { id: "img-1" } });
+    });
+  });
+
+  describe("getSetupStatus", () => {
+    it("rejeita negócio inexistente com NotFoundException", async () => {
+      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.getSetupStatus("inexistente")).rejects.toThrow(NotFoundException);
+    });
+
+    it("reporta passos incompletos para salão recém-criado", async () => {
+      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
+        slug: "barbearia-nova",
+        address: null,
+        city: null,
+        latitude: null,
+        longitude: null,
+        whatsappNumber: null,
+      });
+      (prisma.service.count as jest.Mock).mockResolvedValue(0);
+      (prisma.professional.count as jest.Mock).mockResolvedValue(0);
+      (prisma.workingHours.count as jest.Mock).mockResolvedValue(0);
+      (prisma.professionalService.count as jest.Mock).mockResolvedValue(0);
+
+      const status = await service.getSetupStatus("tenant-novo");
+
+      expect(status.isReadyForBooking).toBe(false);
+      expect(status.isFullySetup).toBe(false);
+      expect(status.completedStepsCount).toBe(0);
+      expect(status.totalStepsCount).toBe(6);
+      expect(status.slug).toBe("barbearia-nova");
+    });
+
+    it("reporta pronto para agendar quando requisitos essenciais estão cumpridos", async () => {
+      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue({
+        slug: "barbearia-top",
+        address: "Rua das Flores, 100",
+        city: "São Paulo",
+        latitude: -23.55,
+        longitude: -46.63,
+        whatsappNumber: "5511999998888",
+      });
+      (prisma.service.count as jest.Mock).mockResolvedValue(2);
+      (prisma.professional.count as jest.Mock).mockResolvedValue(1);
+      (prisma.workingHours.count as jest.Mock).mockResolvedValue(5);
+      (prisma.professionalService.count as jest.Mock).mockResolvedValue(2);
+
+      const status = await service.getSetupStatus("tenant-ativo");
+
+      expect(status.isReadyForBooking).toBe(true);
+      expect(status.isFullySetup).toBe(true);
+      expect(status.completedStepsCount).toBe(6);
+      expect(status.steps.every((s) => s.isComplete)).toBe(true);
     });
   });
 });

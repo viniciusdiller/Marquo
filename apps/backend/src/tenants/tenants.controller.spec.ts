@@ -10,6 +10,7 @@ const meta = (handler: keyof TenantsController) => Reflect.getMetadata(ROLES_KEY
 describe("TenantsController: quem pode chamar o quê", () => {
   it.each([
     "updateMe",
+    "getSetupStatus",
     "updateMarketplace",
     "uploadLogo",
     "removeLogo",

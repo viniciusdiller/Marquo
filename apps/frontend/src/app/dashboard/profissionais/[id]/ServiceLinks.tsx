@@ -31,6 +31,11 @@ export function ServiceLinks({
 
   return (
     <div className="flex flex-col gap-2">
+      {linked.size === 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+          ⚠️ <strong>Atenção:</strong> Este profissional ainda não tem nenhum serviço marcado. Selecione abaixo os serviços que ele atende para liberar os horários na agenda dos clientes.
+        </div>
+      )}
       <ul className="flex flex-col gap-2">
         {services.map((service) => {
           const isLinked = linked.has(service.id);

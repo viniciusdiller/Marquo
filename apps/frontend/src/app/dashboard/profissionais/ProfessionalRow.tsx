@@ -70,6 +70,8 @@ export function ProfessionalRow({
 
           <Link
             href={`/dashboard/profissionais/${id}`}
+            // Âncora do tour guiado (só a primeira linha, para o destaque ser um só).
+            data-tour={index === 0 ? "professional-manage" : undefined}
             className="text-sm font-medium text-zinc-500 hover:text-zinc-800 dark:text-stone-400 dark:hover:text-stone-200"
           >
             Gerenciar

@@ -156,9 +156,11 @@ export function WorkingHoursEditor({
       {error ? <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p> : null}
       {saved ? <p className="mt-4 text-sm text-accent-600 dark:text-accent-300">Horários salvos.</p> : null}
 
-      <Button onClick={handleSave} disabled={isPending} className="mt-5 disabled:opacity-60">
-        {isPending ? "Salvando..." : "Salvar horários"}
-      </Button>
+      <span data-tour="working-hours-save" className="mt-5 inline-block">
+        <Button onClick={handleSave} disabled={isPending} className="disabled:opacity-60">
+          {isPending ? "Salvando..." : "Salvar horários"}
+        </Button>
+      </span>
     </div>
   );
 }

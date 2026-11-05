@@ -114,7 +114,7 @@ export default async function ProfessionalDetailPage({
               Para um intervalo de almoço, cadastre dois horários no mesmo dia (ex.: 09:00–12:00 e 13:30–18:00).
               Só vale depois de clicar em “Salvar horários”.
             </FieldHint>
-            <div className="mt-3">
+            <div className="mt-3" data-tour="working-hours">
               <WorkingHoursEditor professionalId={id} initialIntervals={workingHoursForEditor} />
             </div>
           </section>
@@ -125,7 +125,7 @@ export default async function ProfessionalDetailPage({
                 Serviços que realiza
               </h2>
               <FieldHint>Marque os serviços que ele faz; só serviços ativos aparecem. A marcação vale na hora.</FieldHint>
-              <div className="mt-3">
+              <div className="mt-3" data-tour="service-links">
                 <ServiceLinks
                   professionalId={id}
                   services={activeServices}

@@ -3,6 +3,7 @@ import { mkdir, unlink } from "fs/promises";
 import { randomUUID } from "crypto";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@marquo/database";
+import { TenantSetupStatus, TenantSetupStep } from "@marquo/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
 import { UpdateTenantProfileDto } from "./dto/update-tenant-profile.dto";
 import { UpdateMarketplaceDto } from "./dto/update-marketplace.dto";
@@ -240,5 +241,110 @@ export class TenantsService {
     const filename = image.url.split("/").pop()!;
     await unlink(join(UPLOADS_DIR, "tenants", tenantId, "gallery", filename)).catch(() => {});
     await this.prisma.tenantGalleryImage.delete({ where: { id: imageId } });
+  }
+
+  async getSetupStatus(tenantId: string): Promise<TenantSetupStatus> {
+    const [tenant, servicesCount, professionalsCount, workingHoursCount, linkedServicesCount] = await Promise.all([
+      this.prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: {
+          slug: true,
+          address: true,
+          city: true,
+          latitude: true,
+          longitude: true,
+          whatsappNumber: true,
+        },
+      }),
+      this.prisma.service.count({ where: { tenantId, isActive: true } }),
+      this.prisma.professional.count({ where: { tenantId, isActive: true } }),
+      this.prisma.workingHours.count({ where: { professional: { tenantId, isActive: true } } }),
+      this.prisma.professionalService.count({
+        where: {
+          professional: { tenantId, isActive: true },
+          isActive: true,
+          service: { isActive: true },
+        },
+      }),
+    ]);
+
+    if (!tenant) {
+      throw new NotFoundException("Negócio não encontrado.");
+    }
+
+    const hasServices = servicesCount > 0;
+    const hasProfessionals = professionalsCount > 0;
+    const hasWorkingHours = workingHoursCount > 0;
+    const hasLinkedServices = linkedServicesCount > 0;
+    const hasLocation = Boolean(
+      (tenant.address && tenant.address.trim().length > 0) ||
+      (tenant.latitude != null && tenant.longitude != null)
+    );
+    const hasContact = Boolean(tenant.whatsappNumber && tenant.whatsappNumber.trim().length > 0);
+
+    const steps: TenantSetupStep[] = [
+      {
+        id: "services",
+        title: "Cadastrar serviços",
+        description: "Adicione cortes, barba ou outros serviços com duração e preço.",
+        isComplete: hasServices,
+        href: "/dashboard/servicos",
+        importance: "critical",
+      },
+      {
+        id: "professionals",
+        title: "Cadastrar equipe / barbeiros",
+        description: "Cadastre pelo menos um profissional que atenderá os clientes.",
+        isComplete: hasProfessionals,
+        href: "/dashboard/profissionais",
+        importance: "critical",
+      },
+      {
+        id: "working_hours",
+        title: "Definir horários de expediente",
+        description: "Configure os dias da semana e horários em que cada barbeiro atende.",
+        isComplete: hasWorkingHours,
+        href: "/dashboard/profissionais",
+        importance: "critical",
+      },
+      {
+        id: "service_links",
+        title: "Vincular serviços ao barbeiro",
+        description: "Defina quais serviços cada profissional está habilitado a prestar.",
+        isComplete: hasLinkedServices,
+        href: "/dashboard/profissionais",
+        importance: "critical",
+      },
+      {
+        id: "location",
+        title: "Endereço e localização",
+        description: "Informe o endereço e ponto no mapa para clientes e marketplace encontrarem você.",
+        isComplete: hasLocation,
+        href: "/dashboard/configuracoes",
+        importance: "recommended",
+      },
+      {
+        id: "contact",
+        title: "WhatsApp de atendimento",
+        description: "Adicione o número de WhatsApp para exibir na sua página pública.",
+        isComplete: hasContact,
+        href: "/dashboard/configuracoes",
+        importance: "recommended",
+      },
+    ];
+
+    const completedStepsCount = steps.filter((s) => s.isComplete).length;
+    const totalStepsCount = steps.length;
+    const isReadyForBooking = hasServices && hasProfessionals && hasWorkingHours && hasLinkedServices;
+    const isFullySetup = completedStepsCount === totalStepsCount;
+
+    return {
+      isFullySetup,
+      isReadyForBooking,
+      completedStepsCount,
+      totalStepsCount,
+      slug: tenant.slug,
+      steps,
+    };
   }
 }

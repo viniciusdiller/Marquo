@@ -1,11 +1,11 @@
 "use client";
 
-import { type ComponentPropsWithoutRef, forwardRef, useState } from "react";
+import { type ComponentPropsWithoutRef, type ReactNode, forwardRef, useState } from "react";
 import clsx from "clsx";
 import { Eye, EyeSlash } from "@phosphor-icons/react/dist/ssr";
 
 interface InputProps extends ComponentPropsWithoutRef<"input"> {
-  label: string;
+  label: ReactNode;
   error?: string;
   hint?: string;
   // true dentro da página pública do tenant/wizard/conta do cliente, onde o foco deve usar
