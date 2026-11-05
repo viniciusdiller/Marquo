@@ -11,7 +11,15 @@ vi.mock("@/app/dashboard/marketplace/actions", () => ({
 }));
 
 vi.mock("./InteractiveLocationMap", () => ({
-  InteractiveLocationMap: ({ latitude, longitude, onPositionChange }: any) => (
+  InteractiveLocationMap: ({
+    latitude,
+    longitude,
+    onPositionChange,
+  }: {
+    latitude: number | null;
+    longitude: number | null;
+    onPositionChange: (lat: number, lng: number) => void;
+  }) => (
     <div data-testid="interactive-map">
       <span>Lat: {latitude}</span>
       <span>Lng: {longitude}</span>
