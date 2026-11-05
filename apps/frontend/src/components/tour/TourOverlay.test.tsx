@@ -79,6 +79,17 @@ describe("TourOverlay", () => {
     expect(ring.style.height).toBe(`${RECT.height + 16}px`);
   });
 
+  // Regressão (celular): com rolagem suave o destaque, medido quadro a quadro, ficava deslocado do campo.
+  it("no celular rola de uma vez só (sem animação) até deixar o elemento perto do topo", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
+    Object.defineProperty(window, "scrollY", { value: 100, configurable: true });
+    addAnchor("service-name");
+    setup("services", 1);
+    await screen.findByRole("dialog");
+
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 100 + RECT.top - 88, behavior: "auto" });
+  });
+
   it("Próximo avança e Voltar retrocede (o primeiro ponto não tem Voltar)", async () => {
     addAnchor("service-form-intro");
     const handlers = setup("services", 0);

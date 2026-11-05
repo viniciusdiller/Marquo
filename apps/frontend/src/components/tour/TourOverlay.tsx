@@ -76,8 +76,10 @@ export function TourOverlay({ active, onGoTo, onStop, onStart }: TourOverlayProp
           scrolledTo = el;
           const smooth = !prefersReducedMotion();
           if (vw < MOBILE_BREAKPOINT) {
-            // No celular o balão é uma folha no rodapé: deixa o elemento perto do topo, livre dela.
-            window.scrollTo({ top: Math.max(0, window.scrollY + el.getBoundingClientRect().top - 88), behavior: smooth ? "smooth" : "auto" });
+            // No celular o balão é uma folha no rodapé: deixa o elemento perto do topo, livre dela. Rolagem IMEDIATA (não
+            // suave): no celular a rolagem suave roda fora da thread principal e o destaque, medido quadro a quadro, ficava
+            // para trás (o buraco aparecia deslocado do campo).
+            window.scrollTo({ top: Math.max(0, window.scrollY + el.getBoundingClientRect().top - 88), behavior: "auto" });
           } else {
             el.scrollIntoView?.({ block: "center", behavior: smooth ? "smooth" : "auto" });
           }
