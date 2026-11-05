@@ -13,6 +13,8 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import clsx from "clsx";
 import type { TenantSetupStatus } from "@marquo/shared-types";
+import { useTour } from "@/components/tour/TourProvider";
+import { isTourId } from "@/components/tour/tours";
 
 interface SetupGuideProps {
   setup: TenantSetupStatus;
@@ -24,6 +26,7 @@ const emptySubscribe = (notify: () => void) => {
 };
 
 export function SetupGuide({ setup }: SetupGuideProps) {
+  const tour = useTour();
   const isStoredCollapsed = useSyncExternalStore(
     emptySubscribe,
     () => localStorage.getItem("marquo:setup-guide-collapsed") === "true",
@@ -166,6 +169,10 @@ export function SetupGuide({ setup }: SetupGuideProps) {
                 <div className="mt-4 pt-2">
                   <Link
                     href={step.href}
+                    // Passo pendente: além de ir para a tela, liga o tour guiado (balões apontando onde clicar).
+                    onClick={() => {
+                      if (!step.isComplete && isTourId(step.id)) tour.start(step.id);
+                    }}
                     className={clsx(
                       "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition",
                       step.isComplete

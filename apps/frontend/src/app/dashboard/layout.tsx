@@ -11,6 +11,7 @@ import { type BillingStatusResponse, hasBillingAccess } from "@/lib/billing";
 import { BillingBanner } from "./BillingBanner";
 import { BillingGate } from "./BillingGate";
 import { BrandPattern } from "@/components/brand/BrandPattern";
+import { TourProvider } from "@/components/tour/TourProvider";
 
 const ROLE_LABEL: Record<string, string> = {
   OWNER: "Dono do negócio",
@@ -45,6 +46,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
       .toUpperCase() || "?";
 
   return (
+    <TourProvider>
     <div className="flex min-h-dvh bg-stone-50 dark:bg-zinc-950">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 overflow-y-auto border-r border-zinc-200 p-5 md:block dark:border-white/10">
         <Logo />
@@ -105,5 +107,6 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
         </main>
       </div>
     </div>
+    </TourProvider>
   );
 }

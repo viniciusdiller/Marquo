@@ -177,14 +177,16 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
           defaultValue={tenant.description ?? ""}
           placeholder="Cortes modernos e atendimento personalizado."
         />
-        <Input
-          label="Endereço"
-          name="address"
-          maxLength={300}
-          autoComplete="street-address"
-          defaultValue={tenant.address ?? ""}
-          placeholder="Rua Exemplo, 123 - Centro"
-        />
+        <div data-tour="address">
+          <Input
+            label="Endereço"
+            name="address"
+            maxLength={300}
+            autoComplete="street-address"
+            defaultValue={tenant.address ?? ""}
+            placeholder="Rua Exemplo, 123 - Centro"
+          />
+        </div>
         <Input
           label="Horário de funcionamento"
           name="businessHours"
@@ -192,15 +194,17 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
           defaultValue={tenant.businessHours ?? ""}
           placeholder="Seg-Sex 9h-19h, Sáb 9h-13h"
         />
-        <MaskedInput
-          mask="phone"
-          label="WhatsApp"
-          name="whatsappNumber"
-          type="tel"
-          defaultValue={tenant.whatsappNumber ?? ""}
-          placeholder="(11) 91234-5678"
-          hint="DDD + número. O link do WhatsApp da sua página usa este número."
-        />
+        <div data-tour="whatsapp">
+          <MaskedInput
+            mask="phone"
+            label="WhatsApp"
+            name="whatsappNumber"
+            type="tel"
+            defaultValue={tenant.whatsappNumber ?? ""}
+            placeholder="(11) 91234-5678"
+            hint="DDD + número. O link do WhatsApp da sua página usa este número."
+          />
+        </div>
         <Input
           label="Instagram"
           name="instagramUrl"
@@ -299,9 +303,11 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
         ) : null}
 
         <div>
-          <Button type="submit" disabled={profilePending} className="disabled:opacity-60">
-            {profilePending ? "Salvando..." : "Salvar"}
-          </Button>
+          <span data-tour="profile-save" className="inline-block">
+            <Button type="submit" disabled={profilePending} className="disabled:opacity-60">
+              {profilePending ? "Salvando..." : "Salvar"}
+            </Button>
+          </span>
         </div>
       </form>
     </div>

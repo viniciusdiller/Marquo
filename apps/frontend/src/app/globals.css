@@ -76,6 +76,27 @@ body {
     transform: translateX(100%);
   }
 }
+/* Anel pulsante em volta do elemento destacado pelo tour guiado (components/tour). */
+@keyframes tour-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(108 59 244 / 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgb(108 59 244 / 0);
+  }
+}
+
+/* Entrada do balão do tour: só opacidade (o balão central usa transform para se centralizar). */
+@keyframes tour-card-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes pop-in {
   0% {
     opacity: 0;

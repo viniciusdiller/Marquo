@@ -17,12 +17,15 @@ export function CreateServiceForm() {
       action={action}
       className="grid gap-4 rounded-2xl border border-zinc-200 p-5 sm:grid-cols-3 dark:border-white/10"
     >
-      <div className="sm:col-span-3 rounded-xl border border-accent-100 bg-accent-50/60 p-3 text-xs leading-relaxed text-accent-950 dark:border-accent-500/20 dark:bg-accent-500/10 dark:text-accent-200">
+      <div data-tour="service-form-intro" className="sm:col-span-3 rounded-xl border border-accent-100 bg-accent-50/60 p-3 text-xs leading-relaxed text-accent-950 dark:border-accent-500/20 dark:bg-accent-500/10 dark:text-accent-200">
         💡 <strong>Regra importante da ordem:</strong> Para um cliente agendar este serviço na sua página,
         você precisa cadastrar o serviço e em seguida vinculá-lo ao barbeiro em <strong>Profissionais → Gerenciar</strong>.
       </div>
 
-      <Input label="Nome do serviço" name="name" placeholder="Corte Masculino" required minLength={2} maxLength={120} hint="Como o cliente vê o serviço na página de agendamento." />
+      <div data-tour="service-name">
+        <Input label="Nome do serviço" name="name" placeholder="Corte Masculino" required minLength={2} maxLength={120} hint="Como o cliente vê o serviço na página de agendamento." />
+      </div>
+      <div data-tour="service-duration">
       <Input
         label={
           <span className="flex items-center gap-1.5">
@@ -41,7 +44,10 @@ export function CreateServiceForm() {
         required
         hint="Tempo que o profissional fica ocupado (5 a 1440)."
       />
-      <MaskedInput mask="money" label="Preço (R$)" name="price" placeholder="0,00" required hint="Valor cobrado por este serviço." />
+      </div>
+      <div data-tour="service-price">
+        <MaskedInput mask="money" label="Preço (R$)" name="price" placeholder="0,00" required hint="Valor cobrado por este serviço." />
+      </div>
       <div className="sm:col-span-3">
         <Input label="Descrição (opcional)" name="description" maxLength={1000} hint="Aparece na página pública. Ex.: o que está incluso no serviço." />
       </div>
@@ -51,9 +57,11 @@ export function CreateServiceForm() {
       ) : null}
 
       <div className="sm:col-span-3">
+        <span data-tour="service-submit" className="inline-block">
         <Button type="submit" disabled={pending} className="disabled:opacity-60">
           {pending ? "Cadastrando..." : "Cadastrar serviço"}
         </Button>
+        </span>
       </div>
     </form>
   );
