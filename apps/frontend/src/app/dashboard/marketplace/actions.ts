@@ -304,7 +304,7 @@ export async function saveMarketplaceAction(
     return { error: "Informe latitude e longitude juntas, ou deixe as duas em branco." };
   }
   try {
-    await authedFetch("/tenants/me/marketplace", {
+    const updated = await authedFetch<{ slug?: string }>("/tenants/me/marketplace", {
       method: "PATCH",
       body: JSON.stringify({
         listedInMarketplace: formData.get("listed") === "on",
@@ -317,10 +317,16 @@ export async function saveMarketplaceAction(
         categorySlugs: formData.getAll("categorySlugs").map(String),
       }),
     });
+
+    if (updated?.slug) {
+      revalidatePath(`/${updated.slug}`);
+    }
+    revalidatePath("/[slug]", "page");
+    revalidatePath("/descobrir");
+    revalidatePath("/dashboard/marketplace");
   } catch (err) {
     return fail(err);
   }
-  revalidatePath("/dashboard/marketplace");
   return { ok: true };
 }
 
