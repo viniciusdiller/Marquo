@@ -33,7 +33,16 @@ export function buildCsp({ nonce, isDev, apiUrl }: { nonce: string; isDev: boole
     // Em dev o React usa eval para remontar stack traces no navegador; em produção não é necessário.
     "script-src": ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'", ...(isDev ? ["'unsafe-eval'"] : [])],
     "style-src": ["'self'", "'unsafe-inline'"],
-    "img-src": ["'self'", "blob:", "data:", ...apiSources, "https://picsum.photos"],
+    "img-src": [
+      "'self'",
+      "blob:",
+      "data:",
+      ...apiSources,
+      "https://picsum.photos",
+      "https://*.basemaps.cartocdn.com",
+      "https://*.tile.openstreetmap.org",
+      "https://tile.openstreetmap.org",
+    ],
     "font-src": ["'self'", "data:"],
     "connect-src": ["'self'", ...apiSources, ...(isDev ? ["ws:", "wss:"] : [])],
     "frame-src": ["https://www.google.com"],
