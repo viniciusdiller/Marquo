@@ -227,6 +227,9 @@ export function LoginForm({ next }: { next?: string }) {
             label="E-mail ou telefone"
             name="identifier"
             autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
             required
@@ -237,6 +240,9 @@ export function LoginForm({ next }: { next?: string }) {
             name="password"
             type="password"
             autoComplete="current-password"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
