@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   title: "Descobrir salões e barbearias",
   description:
     "Encontre salões de beleza e barbearias perto de você, veja avaliações e agende online.",
+  alternates: {
+    canonical: "/descobrir",
+  },
 };
 
 async function fetchJson<T>(path: string, fallback: T): Promise<T> {

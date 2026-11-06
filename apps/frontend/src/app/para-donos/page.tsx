@@ -14,6 +14,9 @@ export const metadata: Metadata = {
   title: "Para donos de salão e barbearia",
   description:
     "Veja como o Marquo funciona para donos de salão e barbearia: agenda online, equipe, comandas e uma página própria que aparece na busca de clientes.",
+  alternates: {
+    canonical: "/para-donos",
+  },
 };
 
 const faqSchema = {
