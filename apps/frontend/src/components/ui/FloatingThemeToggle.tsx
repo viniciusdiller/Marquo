@@ -5,7 +5,7 @@ import { ThemeToggle } from "./ThemeToggle";
 // (z-50) pra nunca cobrir um diálogo aberto.
 export function FloatingThemeToggle() {
   return (
-    <div className="fixed right-4 bottom-4 z-40 rounded-full bg-accent-500 p-1 shadow-xl shadow-accent-500/40 ring-4 ring-white/80 print:hidden dark:ring-zinc-900/80">
+    <div className="[body:has([data-site-header])_&]:max-sm:hidden fixed right-4 bottom-4 z-40 rounded-full bg-accent-500 p-1 shadow-xl shadow-accent-500/40 ring-4 ring-white/80 print:hidden dark:ring-zinc-900/80">
       <ThemeToggle className="h-11! w-11! text-white! hover:bg-white/20! hover:text-white!" iconSize={22} />
     </div>
   );
