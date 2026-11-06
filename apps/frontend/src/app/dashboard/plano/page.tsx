@@ -16,7 +16,7 @@ import { PlanCards } from "./PlanCards";
 import { CancelButton } from "./CancelButton";
 import { ReturnSync } from "./ReturnSync";
 
-export const metadata: Metadata = { title: "Plano e cobrança - Marquo" };
+export const metadata: Metadata = { title: "Plano e cobrança" };
 
 const METHOD_LABEL = { CARD_RECURRING: "cartão (cobrança automática todo mês)", PIX_MONTHLY: "Pix mensal" } as const;
 

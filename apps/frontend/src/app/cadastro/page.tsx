@@ -8,7 +8,7 @@ import { BackLink } from "@/components/ui/BackLink";
 import { type PlanInfo, isPlanInfo } from "@/lib/billing";
 import { parsePlanParam } from "@/lib/signup-plan";
 
-export const metadata: Metadata = { title: "Criar conta - Marquo" };
+export const metadata: Metadata = { title: "Criar conta" };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 const TIER_ORDER = ["ESSENCIAL", "PROFISSIONAL", "PREMIUM"];

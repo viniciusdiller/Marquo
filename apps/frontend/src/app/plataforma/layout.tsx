@@ -9,7 +9,7 @@ import { signOutPlatformAction } from "./actions";
 
 // Área interna da empresa: fora dos buscadores e do sitemap.
 export const metadata: Metadata = {
-  title: "Plataforma | Marquo",
+  title: "Plataforma",
   robots: { index: false, follow: false },
 };
 

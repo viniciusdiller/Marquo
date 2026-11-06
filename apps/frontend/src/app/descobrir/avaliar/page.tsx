@@ -7,7 +7,7 @@ import { SiteHeader } from "@/components/account/SiteHeader";
 import { BackLink } from "@/components/ui/BackLink";
 import { ReviewList } from "./ReviewList";
 
-export const metadata: Metadata = { title: "Avaliar visitas - Marquo" };
+export const metadata: Metadata = { title: "Avaliar visitas" };
 
 export default async function AvaliarPage() {
   // Mesma conta global do resto do site (cookie httpOnly único) — sem sessão, vai pro login e

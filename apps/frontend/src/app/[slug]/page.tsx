@@ -30,6 +30,8 @@ async function getMarketplaceData(slug: string) {
   }
 }
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://marquo.com.br";
+
 export async function generateMetadata({
   params,
 }: {
@@ -37,7 +39,37 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const tenant = await getTenant(slug);
-  return { title: tenant ? `${tenant.name} - Marquo` : "Negócio não encontrado" };
+  if (!tenant) {
+    return { title: "Negócio não encontrado" };
+  }
+
+  const pageTitle = `${tenant.name} - Agendamento Online`;
+  const fullTitle = `${pageTitle} | Marquo`;
+  const description =
+    tenant.description?.slice(0, 160) ||
+    `Agende seu horário em ${tenant.name} pelo Marquo. Escolha serviço, profissional e horário sem complicação.`;
+
+  return {
+    title: pageTitle,
+    description,
+    alternates: {
+      canonical: `/${slug}`,
+    },
+    openGraph: {
+      title: fullTitle,
+      description,
+      type: "profile",
+      url: `${SITE_URL}/${slug}`,
+      siteName: "Marquo",
+      images: tenant.logoUrl ? [{ url: tenant.logoUrl, alt: tenant.name }] : undefined,
+    },
+    twitter: {
+      card: "summary",
+      title: fullTitle,
+      description,
+      images: tenant.logoUrl ? [tenant.logoUrl] : undefined,
+    },
+  };
 }
 
 export default async function TenantProfilePage({
@@ -81,8 +113,41 @@ export default async function TenantProfilePage({
     hasContactBlock ? { id: "contato", label: "Informações" } : null,
   ].filter((item): item is SectionNavItem => item !== null);
 
+  const businessSchema = {
+    "@context": "https://schema.org",
+    "@type": "BeautySalon",
+    name: tenant.name,
+    description: tenant.description ?? `Página de agendamento online de ${tenant.name} no Marquo.`,
+    url: `${SITE_URL}/${slug}`,
+    image: tenant.logoUrl ?? undefined,
+    telephone: tenant.whatsappNumber ?? undefined,
+    address: tenant.address
+      ? {
+          "@type": "PostalAddress",
+          streetAddress: tenant.address,
+        }
+      : undefined,
+    geo:
+      tenant.latitude != null && tenant.longitude != null
+        ? {
+            "@type": "GeoCoordinates",
+            latitude: tenant.latitude,
+            longitude: tenant.longitude,
+          }
+        : undefined,
+    parentOrganization: {
+      "@type": "Organization",
+      name: "Marquo",
+      url: SITE_URL,
+    },
+  };
+
   return (
     <main className="flex-1 bg-stone-50 dark:bg-zinc-950">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(businessSchema) }}
+      />
       <TenantProfileHeader
         tenant={tenant}
         rating={marketplaceData?.rating ?? null}

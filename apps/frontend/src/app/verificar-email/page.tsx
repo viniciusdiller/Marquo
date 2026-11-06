@@ -6,7 +6,7 @@ import { Footer } from "@/components/marketing/Footer";
 import { BackLink } from "@/components/ui/BackLink";
 import { BrandPattern } from "@/components/brand/BrandPattern";
 
-export const metadata: Metadata = { title: "Confirmar e-mail - Marquo", robots: { index: false } };
+export const metadata: Metadata = { title: "Confirmar e-mail", robots: { index: false } };
 
 export default async function VerificarEmailPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
   const { token } = await searchParams;

@@ -3,7 +3,7 @@ import { BackLink } from "@/components/ui/BackLink";
 import { Logo } from "@/components/brand/Logo";
 import { BrandPattern } from "@/components/brand/BrandPattern";
 
-export const metadata: Metadata = { title: "Página não encontrada - Marquo" };
+export const metadata: Metadata = { title: "Página não encontrada" };
 
 export default function NotFound() {
   return (

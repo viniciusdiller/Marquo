@@ -22,7 +22,7 @@ import { PasswordForm, ProfileForm } from "@/components/consumer-account/Profile
 import { SessionsList } from "@/components/consumer-account/SessionsList";
 import { logoutConsumerAction } from "./actions";
 
-export const metadata: Metadata = { title: "Minha conta - Marquo" };
+export const metadata: Metadata = { title: "Minha conta" };
 
 const TIMEZONE = "America/Sao_Paulo";
 const PATHNAME = "/minha-conta";

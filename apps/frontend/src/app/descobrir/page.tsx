@@ -10,7 +10,7 @@ import { BrandPattern } from "@/components/brand/BrandPattern";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export const metadata: Metadata = {
-  title: "Descobrir salões e barbearias | Marquo",
+  title: "Descobrir salões e barbearias",
   description:
     "Encontre salões de beleza e barbearias perto de você, veja avaliações e agende online.",
 };

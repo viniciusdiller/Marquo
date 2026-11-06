@@ -6,7 +6,7 @@ import { Footer } from "@/components/marketing/Footer";
 import { BackLink } from "@/components/ui/BackLink";
 import { BrandPattern } from "@/components/brand/BrandPattern";
 
-export const metadata: Metadata = { title: "Esqueci a senha - Marquo", robots: { index: false } };
+export const metadata: Metadata = { title: "Esqueci a senha", robots: { index: false } };
 
 export default function EsqueciSenhaPage() {
   return (
