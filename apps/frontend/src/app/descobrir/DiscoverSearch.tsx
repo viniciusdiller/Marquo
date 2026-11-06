@@ -75,19 +75,23 @@ export function DiscoverSearch({
   return (
     <div>
       <div className="flex flex-wrap gap-2">
-        <div className="flex flex-1 items-center gap-2 rounded-xl border border-zinc-300 px-3 py-2.5 dark:border-white/15">
-          <MagnifyingGlass size={18} className="text-zinc-400" />
+        {/* Linha própria no celular (basis-full): antes dividia a linha com os filtros e encolhia a ponto de mostrar só "Bu". */}
+        <div className="flex basis-full items-center gap-2 rounded-xl border border-zinc-300 px-3 py-2.5 sm:basis-0 sm:min-w-56 sm:flex-1 dark:border-white/15">
+          <MagnifyingGlass size={18} className="shrink-0 text-zinc-400" />
           <input
+            type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar salão, barbearia..."
-            className="w-full bg-transparent text-sm outline-none dark:text-white"
+            placeholder="Buscar salão ou barbearia"
+            aria-label="Buscar salão ou barbearia"
+            autoComplete="off"
+            className="min-w-0 w-full bg-transparent text-base outline-none sm:text-sm dark:text-white"
           />
         </div>
         <select
           value={city}
           onChange={(e) => setCity(e.target.value)}
-          className="rounded-xl border border-zinc-300 px-3 py-2.5 text-sm dark:border-white/15 dark:bg-zinc-900 dark:text-white"
+          className="min-w-0 basis-[calc(50%-0.25rem)] rounded-xl border border-zinc-300 px-3 py-2.5 text-sm sm:flex-none sm:basis-auto dark:border-white/15 dark:bg-zinc-900 dark:text-white"
         >
           <option value="">Todas as cidades</option>
           {cities.map((c) => (
@@ -103,8 +107,8 @@ export function DiscoverSearch({
           aria-pressed={coords != null}
           className={
             coords
-              ? "inline-flex items-center gap-1.5 rounded-xl bg-accent-500 px-3 py-2.5 text-sm font-medium text-white"
-              : "inline-flex items-center gap-1.5 rounded-xl border border-zinc-300 px-3 py-2.5 text-sm dark:border-white/15 dark:text-stone-200"
+              ? "inline-flex basis-[calc(50%-0.25rem)] items-center justify-center gap-1.5 rounded-xl bg-accent-500 px-3 py-2.5 text-sm font-medium text-white sm:basis-auto"
+              : "inline-flex basis-[calc(50%-0.25rem)] items-center justify-center gap-1.5 rounded-xl border border-zinc-300 px-3 py-2.5 text-sm sm:basis-auto dark:border-white/15 dark:text-stone-200"
           }
         >
           <MapPinArea size={16} />
@@ -115,7 +119,7 @@ export function DiscoverSearch({
           onChange={(e) => setSort(e.target.value as "rating" | "distance")}
           disabled={!coords}
           aria-label="Ordenar por"
-          className="rounded-xl border border-zinc-300 px-3 py-2.5 text-sm disabled:opacity-60 dark:border-white/15 dark:bg-zinc-900 dark:text-white"
+          className="min-w-0 basis-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm disabled:opacity-60 sm:flex-none sm:basis-auto dark:border-white/15 dark:bg-zinc-900 dark:text-white"
         >
           <option value="rating">Melhor avaliados</option>
           <option value="distance" disabled={!coords}>
