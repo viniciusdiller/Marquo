@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getTenant } from "./layout";
+import { getTenant } from "./get-tenant";
 import { publicApi } from "@/lib/api";
 import { marketplaceApi } from "@/lib/marketplace-api";
 import { ApiError } from "@/lib/api";

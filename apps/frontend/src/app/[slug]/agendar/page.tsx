@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
-import { getTenant } from "../layout";
+import { getTenant } from "../get-tenant";
 import type { ConsumerMe } from "@marquo/shared-types";
 import { consumerAuthedFetch } from "@/lib/consumer-session";
 import { formatPhoneBR } from "@/lib/masks";

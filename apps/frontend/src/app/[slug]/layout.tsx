@@ -1,21 +1,7 @@
-import { cache } from "react";
 import { notFound } from "next/navigation";
-import { publicApi, ApiError } from "@/lib/api";
+import { getTenant } from "./get-tenant";
 import { TenantFooter } from "@/components/tenant-profile/TenantFooter";
 import { BRAND } from "@/components/brand/palette";
-
-// cache() dedupa chamadas repetidas dentro da mesma requisição: layout + page (e
-// agendar/entrar/conta) podem cada um chamar getTenant(slug) sem gerar fetches extras.
-export const getTenant = cache(async (slug: string) => {
-  try {
-    return await publicApi.getTenant(slug);
-  } catch (err) {
-    if (err instanceof ApiError && err.statusCode === 404) {
-      return null;
-    }
-    throw err;
-  }
-});
 
 export default async function TenantLayout({
   children,

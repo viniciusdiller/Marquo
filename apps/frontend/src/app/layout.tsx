@@ -8,13 +8,11 @@ import { FloatingThemeToggle } from "@/components/ui/FloatingThemeToggle";
 const display = Bricolage_Grotesque({
   variable: "--font-display",
   subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
 });
 
 const body = Manrope({
   variable: "--font-body",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
 });
 
 // Só pro wordmark da marca (components/brand/Logo.tsx) — não substitui --font-display,
