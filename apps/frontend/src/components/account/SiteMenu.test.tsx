@@ -14,11 +14,11 @@ describe("SiteMenu (hambúrguer do celular)", () => {
     render(<SiteMenu />);
     const button = screen.getByRole("button", { name: "Abrir menu" });
     expect(button).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("link", { name: /descobrir salões/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /estabelecimentos/i })).not.toBeInTheDocument();
 
     await userEvent.click(button);
     expect(screen.getByRole("button", { name: "Fechar menu" })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("link", { name: /descobrir salões/i })).toHaveAttribute("href", "/descobrir");
+    expect(screen.getByRole("link", { name: /estabelecimentos/i })).toHaveAttribute("href", "/descobrir");
   });
 
   it("troca o tema pelo menu, oferecendo a opção oposta ao tema atual", async () => {
@@ -40,10 +40,10 @@ describe("SiteMenu (hambúrguer do celular)", () => {
     render(<SiteMenu />);
     await userEvent.click(screen.getByRole("button", { name: "Abrir menu" }));
     fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("link", { name: /descobrir salões/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /estabelecimentos/i })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Abrir menu" }));
     fireEvent.pointerDown(document.body);
-    expect(screen.queryByRole("link", { name: /descobrir salões/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /estabelecimentos/i })).not.toBeInTheDocument();
   });
 });
