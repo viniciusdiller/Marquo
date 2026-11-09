@@ -168,7 +168,7 @@ export default async function MinhaContaPage({
                     href="/descobrir"
                     className="rounded-xl bg-(--tenant-accent) px-5 py-3 text-sm font-semibold text-white transition-[filter] hover:brightness-90"
                   >
-                    Encontrar um salão
+                    Buscar barbearias e salões
                   </Link>
                 </div>
               ) : (

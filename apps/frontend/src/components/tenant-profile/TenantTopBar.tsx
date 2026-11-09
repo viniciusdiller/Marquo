@@ -57,7 +57,7 @@ export function TenantTopBar({
             >
               <ArrowLeft size={16} />
               <span className="sm:hidden">Voltar</span>
-              <span className="hidden sm:inline">Descobrir</span>
+              <span className="hidden sm:inline">Estabelecimentos</span>
             </Link>
             <AccountNav session={session} loginNext={`/${slug}`} />
           </div>

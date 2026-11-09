@@ -10,7 +10,7 @@ import { BrandPattern } from "@/components/brand/BrandPattern";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export const metadata: Metadata = {
-  title: "Descobrir salões e barbearias",
+  title: "Buscar barbearias e salões",
   description:
     "Encontre salões de beleza e barbearias perto de você, veja avaliações e agende online.",
   alternates: {
@@ -52,7 +52,9 @@ export default async function DescobrirPage({
         </Link>
 
         <div className="mt-3 flex items-baseline justify-between gap-3">
-          <h1 className="font-display text-3xl font-bold text-zinc-900 dark:text-white">Descobrir</h1>
+          <h1 className="font-display text-3xl font-bold text-zinc-900 dark:text-white">
+            Buscar barbearias e salões
+          </h1>
           <Link
             href="/descobrir/avaliar"
             className="text-sm font-medium text-accent-600 dark:text-accent-300"
@@ -61,7 +63,7 @@ export default async function DescobrirPage({
           </Link>
         </div>
         <p className="mt-1 text-sm text-zinc-500 dark:text-stone-400">
-          Salões e barbearias perto de você, com avaliações de quem já foi.
+          Encontre os melhores estabelecimentos perto de você e agende seu horário online.
         </p>
 
         <div className="mt-6">

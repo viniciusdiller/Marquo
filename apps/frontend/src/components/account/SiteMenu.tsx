@@ -66,7 +66,7 @@ export function SiteMenu() {
         >
           <Link href="/descobrir" onClick={() => setOpen(false)} className={ITEM_CLASS}>
             <MagnifyingGlass size={20} className="shrink-0 text-accent-600 dark:text-accent-300" />
-            Descobrir salões
+            Estabelecimentos
           </Link>
           <div className="my-1 h-px bg-zinc-200 dark:bg-white/10" />
           <button

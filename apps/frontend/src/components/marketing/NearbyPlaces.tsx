@@ -99,7 +99,7 @@ export function NearbyPlaces() {
             <p className="mt-6 text-sm text-zinc-500 dark:text-stone-400">
               Ainda não há salões cadastrados em até {RADIUS_KM} km de você. Veja todos em{" "}
               <Link href="/descobrir" className="font-medium text-accent-600 dark:text-accent-300">
-                Descobrir
+                Estabelecimentos
               </Link>
               .
             </p>

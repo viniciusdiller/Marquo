@@ -27,8 +27,8 @@ export default async function MarketplacePage() {
         <div className="flex flex-col gap-6">
           <HowItWorks>
             <p>
-              O marketplace (<code>/descobrir</code>) é um portal público onde pessoas
-              <strong> procuram salões por serviço, cidade ou bairro</strong>. Se você ativar,
+              O catálogo de estabelecimentos (<code>/descobrir</code>) é um portal público onde pessoas
+              <strong> procuram barbearias e salões por serviço, cidade ou bairro</strong>. Se você ativar,
               seu negócio aparece nos resultados.
             </p>
             <ul className="list-disc space-y-1 pl-5">

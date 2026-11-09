@@ -35,7 +35,7 @@ export async function SiteHeader({
           href="/descobrir"
           className="hidden text-sm font-semibold text-zinc-600 transition-colors hover:text-zinc-900 sm:inline dark:text-stone-300 dark:hover:text-white"
         >
-          Descobrir salões
+          Estabelecimentos
         </Link>
         <AccountNav session={session} loginNext={loginNext} />
         <SiteMenu />

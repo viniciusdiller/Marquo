@@ -11,7 +11,7 @@ import type { NavSession } from "@/lib/nav-session";
 import { AccountNav } from "../account/AccountNav";
 
 const links = [
-  { href: "/descobrir", label: "Descobrir" },
+  { href: "/descobrir", label: "Estabelecimentos" },
   { href: "/#perto-de-voce", label: "Perto de você" },
 ];
 

@@ -16,9 +16,9 @@ export function MarketplaceSettings({ settings }: { settings: Settings }) {
       <div>
         <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-stone-200">
           <input type="checkbox" name="listed" defaultChecked={settings.listedInMarketplace} />
-          Aparecer no marketplace de descoberta (/descobrir)
-          <FieldHelp title="Marketplace de Descoberta">
-            Quando ativo, clientes que usam a busca geral do Marquo conseguem encontrar seu salão
+          Aparecer na lista de estabelecimentos (/descobrir)
+          <FieldHelp title="Lista de Estabelecimentos">
+            Quando ativo, clientes que usam a busca geral do Marquo conseguem encontrar seu salão ou barbearia
             por proximidade e categorias de serviços oferecidos.
           </FieldHelp>
         </label>
