@@ -1,6 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import Link from "next/link";
+import {
+  Eye,
+  EyeSlash,
+  ArrowSquareOut,
+  ShieldCheck,
+} from "@phosphor-icons/react/dist/ssr";
+import clsx from "clsx";
 import type { MarketplaceSettings as Settings } from "@marquo/shared-types";
 import { FieldHelp } from "@/components/ui/FieldHelp";
 import { AddressLocationPicker } from "@/components/dashboard/AddressLocationPicker";
@@ -10,22 +18,88 @@ const initial: MarketplaceActionState = {};
 
 export function MarketplaceSettings({ settings }: { settings: Settings }) {
   const [state, formAction, pending] = useActionState(saveMarketplaceAction, initial);
+  const [isListed, setIsListed] = useState(settings.listedInMarketplace);
 
   return (
-    <form action={formAction} className="mt-4 space-y-4">
-      <div>
-        <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-stone-200">
-          <input type="checkbox" name="listed" defaultChecked={settings.listedInMarketplace} />
-          Aparecer na lista de estabelecimentos (/descobrir)
-          <FieldHelp title="Lista de Estabelecimentos">
-            Quando ativo, clientes que usam a busca geral do Marquo conseguem encontrar seu salão ou barbearia
-            por proximidade e categorias de serviços oferecidos.
-          </FieldHelp>
-        </label>
-        <p className="mt-1 text-xs text-zinc-400 dark:text-stone-500">
-          É opcional e vem desligado por padrão. Só muda quem consegue te encontrar
-          buscando por serviço/cidade — não afeta seu plano nem cobrança.
-        </p>
+    <form action={formAction} className="mt-4 space-y-6">
+      {/* Card de Visibilidade no Marketplace */}
+      <div
+        className={clsx(
+          "rounded-2xl border p-5 transition-colors",
+          isListed
+            ? "border-emerald-300 bg-emerald-50/40 dark:border-emerald-500/30 dark:bg-emerald-950/10"
+            : "border-zinc-200 bg-zinc-50/60 dark:border-white/10 dark:bg-zinc-900/40",
+        )}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div
+              className={clsx(
+                "flex size-11 shrink-0 items-center justify-center rounded-xl transition-colors",
+                isListed
+                  ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
+                  : "bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-stone-400",
+              )}
+            >
+              {isListed ? <Eye size={22} weight="bold" /> : <EyeSlash size={22} weight="bold" />}
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+                  Visibilidade na busca pública do Marquo
+                </h3>
+                <span
+                  className={clsx(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold",
+                    isListed
+                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                      : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-stone-300",
+                  )}
+                >
+                  {isListed ? "Visível para novos clientes" : "Apenas com link direto"}
+                </span>
+              </div>
+
+              <p className="max-w-2xl text-xs leading-relaxed text-zinc-600 dark:text-stone-300">
+                {isListed
+                  ? "Seu negócio aparece para pessoas procurando barbearias e salões na sua região pelo Marquo. Novos clientes podem te encontrar e agendar online."
+                  : "Seu negócio não aparece nos resultados da busca do Marquo. Apenas quem já possui o seu link direto (na bio do Instagram, WhatsApp ou enviado por você) consegue marcar horário."}
+              </p>
+            </div>
+          </div>
+
+          {/* Switch acessível */}
+          <label className="relative inline-flex cursor-pointer items-center">
+            <input
+              type="checkbox"
+              name="listed"
+              checked={isListed}
+              onChange={(e) => setIsListed(e.target.checked)}
+              className="peer sr-only"
+              aria-label="Ativar visibilidade na busca pública"
+            />
+            <div className="peer h-6 w-11 rounded-full bg-zinc-300 transition-colors after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-emerald-500 peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2 dark:bg-zinc-700 dark:peer-focus-visible:ring-offset-zinc-950" />
+          </label>
+        </div>
+
+        {/* Rodapé do Card com garantias e link */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200/70 pt-3 text-xs text-zinc-500 dark:border-white/10 dark:text-stone-400">
+          <div className="flex items-center gap-1.5 font-medium text-zinc-700 dark:text-stone-300">
+            <ShieldCheck size={16} weight="fill" className="text-emerald-600 dark:text-emerald-400" />
+            <span>100% gratuito: sem comissões por agendamento e sem custos adicionais no seu plano.</span>
+          </div>
+
+          <Link
+            href="/descobrir"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 font-semibold text-accent-600 hover:text-accent-700 hover:underline dark:text-accent-400 dark:hover:text-accent-300"
+          >
+            Ver página de busca
+            <ArrowSquareOut size={13} weight="bold" />
+          </Link>
+        </div>
       </div>
 
       <AddressLocationPicker

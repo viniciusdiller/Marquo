@@ -27,19 +27,19 @@ export default async function MarketplacePage() {
         <div className="flex flex-col gap-6">
           <HowItWorks>
             <p>
-              O catálogo de estabelecimentos (<code>/descobrir</code>) é um portal público onde pessoas
-              <strong> procuram barbearias e salões por serviço, cidade ou bairro</strong>. Se você ativar,
-              seu negócio aparece nos resultados.
+              O catálogo de estabelecimentos é o portal público do Marquo onde pessoas
+              <strong> procuram barbearias e salões por serviço, cidade ou bairro</strong>. Ao ativar a visibilidade,
+              seu negócio passa a ser recomendado para novos clientes na sua região.
             </p>
             <ul className="list-disc space-y-1 pl-5">
-              <li>Vem <strong>desligado</strong> por padrão e não afeta plano nem cobrança.</li>
-              <li>Preencha cidade, bairro, categorias e faixa de preço para ser encontrado nas buscas.</li>
-              <li>Em <strong>Avaliações</strong> você vê o que os clientes escreveram. Pode <strong>ocultar</strong> (some da página pública; hoje não dá para reexibir) ou <strong>denunciar</strong> com um motivo.</li>
+              <li>Vem <strong>desligado</strong> por padrão e não gera comissões nem cobranças extras no seu plano.</li>
+              <li>Preencha cidade, bairro, endereço, categorias e faixa de preço para aparecer bem posicionado nas buscas.</li>
+              <li>Em <strong>Avaliações</strong> você acompanha o que os clientes escreveram e pode moderar os comentários públicos.</li>
             </ul>
           </HowItWorks>
 
           <section>
-            <h2 className="mb-4 text-sm font-semibold text-zinc-900 dark:text-white">Listagem</h2>
+            <h2 className="mb-4 text-sm font-semibold text-zinc-900 dark:text-white">Visibilidade e informações do salão</h2>
             <MarketplaceSettings settings={settings} />
           </section>
         </div>
