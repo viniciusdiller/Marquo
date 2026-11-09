@@ -50,13 +50,30 @@ async function renewConsumerSessionIfNeeded(req: NextRequest, response: NextResp
 }
 
 export default auth(async (req) => {
+  const { pathname } = req.nextUrl;
+
+  if (
+    pathname.endsWith(".webmanifest") ||
+    pathname.endsWith(".ico") ||
+    pathname.endsWith(".svg") ||
+    pathname.endsWith(".png") ||
+    pathname.endsWith(".jpg") ||
+    pathname.endsWith(".jpeg") ||
+    pathname.endsWith(".webp") ||
+    pathname.endsWith(".woff") ||
+    pathname.endsWith(".woff2") ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml"
+  ) {
+    return NextResponse.next();
+  }
+
   // req.auth com `error` (refresh do access token falhou — token deletado/expirado, refresh
   // token vencido) ainda é um objeto truthy. Se essa camada tratasse isso como "logado", ela
   // manda de volta pra /dashboard, o layout do dashboard vê o erro e manda pra /entrar, que
   // essa camada manda de volta pra /dashboard de novo — loop infinito de redirect. As duas
   // camadas precisam concordar sobre o que é "logado".
   const isLoggedIn = !!req.auth && !req.auth.error;
-  const { pathname } = req.nextUrl;
 
   const isDashboardRoute = pathname.startsWith("/dashboard");
   const isAuthPage = AUTH_PAGES.some((page) => pathname.startsWith(page));
@@ -93,5 +110,8 @@ export default auth(async (req) => {
 export const config = {
   // Amplo de propósito: a renovação da sessão do cliente precisa rodar em praticamente toda
   // página pública (home, /descobrir, /[slug], /minha-conta, /entrar...), não só /dashboard.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Exclui assets estáticos, imagens, fontes e rotas de metadados para evitar loop de recompilação do Next.js
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff|woff2|ico)$).*)",
+  ],
 };
