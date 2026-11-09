@@ -35,6 +35,13 @@ export function SetupGuide({ setup }: SetupGuideProps) {
 
   const [userToggled, setUserToggled] = useState<boolean | null>(null);
 
+  if (
+    setup.isFullySetup ||
+    (setup.totalStepsCount > 0 && setup.completedStepsCount >= setup.totalStepsCount)
+  ) {
+    return null;
+  }
+
   const isCollapsed =
     userToggled !== null ? userToggled : (isStoredCollapsed || setup.isFullySetup);
 

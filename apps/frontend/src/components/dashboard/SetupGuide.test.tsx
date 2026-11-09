@@ -110,5 +110,19 @@ describe("SetupGuide", () => {
     await user.click(toggleButton);
     expect(screen.getByText("Definir horários de expediente")).toBeInTheDocument();
   });
+
+  it("não renderiza nada quando a configuração está 100% concluída", () => {
+    const fullySetupStatus: TenantSetupStatus = {
+      ...mockStatus,
+      isFullySetup: true,
+      isReadyForBooking: true,
+      completedStepsCount: 6,
+      totalStepsCount: 6,
+    };
+
+    const { container } = render(<SetupGuide setup={fullySetupStatus} />);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText("Guia de Configuração da Barbearia")).not.toBeInTheDocument();
+  });
 });
 

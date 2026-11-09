@@ -151,7 +151,9 @@ export function AgendaView({
 
   return (
     <div className="mx-auto w-full max-w-7xl">
-      {setupStatus ? <SetupGuide setup={setupStatus} /> : null}
+      {setupStatus && !setupStatus.isFullySetup && setupStatus.completedStepsCount < setupStatus.totalStepsCount ? (
+        <SetupGuide setup={setupStatus} />
+      ) : null}
       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
         <div className="flex flex-col gap-6 lg:col-span-4 xl:col-span-3">
           <div>
