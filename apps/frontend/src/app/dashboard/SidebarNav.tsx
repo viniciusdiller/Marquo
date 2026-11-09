@@ -172,13 +172,16 @@ export function SidebarNav({ onNavigate, scope = "desktop" }: SidebarNavProps) {
           </p>
           <div className="flex flex-col gap-0.5">
             {section.links.map((link) => {
-              const isActive = pathname === link.href;
+              const isActive = Boolean(
+                pathname && (pathname === link.href || pathname.startsWith(`${link.href}/`)),
+              );
               return (
                 <Link
                   key={link.href}
                   href={link.href}
                   onClick={onNavigate}
                   title={link.description}
+                  aria-current={isActive ? "page" : undefined}
                   className={clsx(
                     "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                     isActive
