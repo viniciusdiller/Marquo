@@ -105,126 +105,127 @@ export function TicketPdv({
   }
 
   return (
-    <div className="mt-3 grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-      <div className="flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
-        <div>
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h1 className="font-display text-2xl font-bold text-zinc-900 dark:text-white">
-              Comanda · {ticket.client?.name ?? "avulsa"}
-            </h1>
-            <span className="text-sm text-zinc-400">
-              {ticket.status === "OPEN"
-                ? `aberta ${DateTime.fromISO(ticket.openedAt).setLocale("pt-BR").toRelative()}`
-                : ticket.status === "CLOSED"
-                  ? "fechada"
-                  : "cancelada"}
-            </span>
-          </div>
-
-          {/* Registro de datas: o dia e a hora de cada etapa, no fuso de São Paulo */}
-          <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-zinc-500 dark:text-stone-400">
-            <div className="flex gap-1.5">
-              <dt>Aberta em</dt>
-              <dd className="font-medium text-zinc-700 dark:text-stone-200">{formatDateTime(ticket.openedAt)}</dd>
-            </div>
-            {ticket.closedAt ? (
-              <div className="flex gap-1.5">
-                <dt>Fechada em</dt>
-                <dd className="font-medium text-zinc-700 dark:text-stone-200">{formatDateTime(ticket.closedAt)}</dd>
-              </div>
-            ) : null}
-            {ticket.canceledAt ? (
-              <div className="flex gap-1.5">
-                <dt>Cancelada em</dt>
-                <dd className="font-medium text-zinc-700 dark:text-stone-200">{formatDateTime(ticket.canceledAt)}</dd>
-              </div>
-            ) : null}
-          </dl>
+    <div className="mt-3">
+      <div>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="font-display text-2xl font-bold text-zinc-900 dark:text-white">
+            Comanda · {ticket.client?.name ?? "avulsa"}
+          </h1>
+          <span className="text-sm text-zinc-400">
+            {ticket.status === "OPEN"
+              ? `aberta ${DateTime.fromISO(ticket.openedAt).setLocale("pt-BR").toRelative()}`
+              : ticket.status === "CLOSED"
+                ? "fechada"
+                : "cancelada"}
+          </span>
         </div>
 
-        {/* Cliente da comanda */}
-        <div className="rounded-2xl border border-zinc-200 p-3 text-sm dark:border-white/10">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-zinc-500 dark:text-stone-400">
-              Cliente:{" "}
-              {ticket.client ? (
-                <Link
-                  href={`/dashboard/clientes/${ticket.client.id}`}
-                  className="font-medium text-zinc-900 hover:text-accent-600 dark:text-white dark:hover:text-accent-300"
-                >
-                  {ticket.client.name}
-                </Link>
-              ) : (
-                <span className="font-medium text-zinc-700 dark:text-stone-200">sem cliente vinculado</span>
-              )}
-              {ticket.client ? (
-                <span className="ml-2 text-xs text-zinc-400">{formatPhoneBR(ticket.client.phone)}</span>
-              ) : null}
+        {/* Registro de datas: o dia e a hora de cada etapa, no fuso de São Paulo */}
+        <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-zinc-500 dark:text-stone-400">
+          <div className="flex gap-1.5">
+            <dt>Aberta em</dt>
+            <dd className="font-medium text-zinc-700 dark:text-stone-200">{formatDateTime(ticket.openedAt)}</dd>
+          </div>
+          {ticket.closedAt ? (
+            <div className="flex gap-1.5">
+              <dt>Fechada em</dt>
+              <dd className="font-medium text-zinc-700 dark:text-stone-200">{formatDateTime(ticket.closedAt)}</dd>
+            </div>
+          ) : null}
+          {ticket.canceledAt ? (
+            <div className="flex gap-1.5">
+              <dt>Cancelada em</dt>
+              <dd className="font-medium text-zinc-700 dark:text-stone-200">{formatDateTime(ticket.canceledAt)}</dd>
+            </div>
+          ) : null}
+        </dl>
+      </div>
+
+      <HowItWorks>
+        {readOnly ? (
+          <p>
+            Esta comanda está <strong>{ticket.status === "CLOSED" ? "fechada" : "cancelada"}</strong> e
+            não pode mais ser alterada. Os valores abaixo são o registro final do atendimento.
+          </p>
+        ) : (
+          <>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li><strong>Adicione os itens:</strong> serviços, produtos ou um item avulso. O preço de serviço e produto vem do catálogo e não pode ser mudado aqui; só o item avulso tem preço livre.</li>
+              <li><strong>Escolha o profissional</strong> de cada item. É ele quem recebe a comissão; item “Sem profissional” não gera comissão.</li>
+              <li><strong>Desconto</strong> (opcional): em reais, sobre o total, e não pode passar do subtotal.</li>
+              <li><strong>Registre o pagamento.</strong> Pode ser em mais de uma forma. Se deixar o valor em branco, vale o que ainda falta.</li>
+              <li><strong>Feche a comanda</strong> quando não faltar nada.</li>
+            </ol>
+            <p>
+              Ao fechar, a receita vai para o Financeiro, a comissão é calculada (sobre o preço dos itens, antes do desconto) e o estoque dos produtos baixa. Fechar não tem volta.
             </p>
-            {!readOnly && !ticket.appointmentId ? (
-              <span className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPickingClient((v) => !v)}
-                  className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300"
-                >
-                  {pickingClient ? "Fechar busca" : ticket.client ? "Trocar cliente" : "Vincular cliente"}
-                </button>
+            <p>
+              <strong>Cancelar</strong> só é possível enquanto não houver pagamento registrado, e descarta a comanda.
+            </p>
+          </>
+        )}
+      </HowItWorks>
+
+      <div className="mt-6 grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
+        <div className="flex flex-col gap-6 lg:col-span-7 xl:col-span-8">
+          {/* Cliente da comanda */}
+          <div className="rounded-2xl border border-zinc-200 p-3 text-sm dark:border-white/10">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-zinc-500 dark:text-stone-400">
+                Cliente:{" "}
                 {ticket.client ? (
+                  <Link
+                    href={`/dashboard/clientes/${ticket.client.id}`}
+                    className="font-medium text-zinc-900 hover:text-accent-600 dark:text-white dark:hover:text-accent-300"
+                  >
+                    {ticket.client.name}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-zinc-700 dark:text-stone-200">sem cliente vinculado</span>
+                )}
+                {ticket.client ? (
+                  <span className="ml-2 text-xs text-zinc-400">{formatPhoneBR(ticket.client.phone)}</span>
+                ) : null}
+              </p>
+              {!readOnly && !ticket.appointmentId ? (
+                <span className="flex items-center gap-3">
                   <button
                     type="button"
-                    disabled={isPending}
-                    onClick={() => run(() => setTicketClientAction(ticket.id, null))}
-                    className="text-sm font-medium text-zinc-500 hover:text-red-600 disabled:opacity-50 dark:text-stone-400"
+                    onClick={() => setPickingClient((v) => !v)}
+                    className="text-sm font-medium text-accent-600 hover:underline dark:text-accent-300"
                   >
-                    Remover
+                    {pickingClient ? "Fechar busca" : ticket.client ? "Trocar cliente" : "Vincular cliente"}
                   </button>
-                ) : null}
-              </span>
+                  {ticket.client ? (
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => run(() => setTicketClientAction(ticket.id, null))}
+                      className="text-sm font-medium text-zinc-500 hover:text-red-600 disabled:opacity-50 dark:text-stone-400"
+                    >
+                      Remover
+                    </button>
+                  ) : null}
+                </span>
+              ) : null}
+            </div>
+            {!readOnly && ticket.appointmentId ? (
+              <p className="mt-1 text-xs text-zinc-400 dark:text-stone-500">
+                Comanda aberta a partir de um agendamento: o cliente é o do agendamento.
+              </p>
+            ) : null}
+            {pickingClient && !readOnly ? (
+              <div className="mt-3">
+                <ClientPicker
+                  autoFocus
+                  onSelect={(client) => {
+                    setPickingClient(false);
+                    run(() => setTicketClientAction(ticket.id, client.id));
+                  }}
+                />
+              </div>
             ) : null}
           </div>
-          {!readOnly && ticket.appointmentId ? (
-            <p className="mt-1 text-xs text-zinc-400 dark:text-stone-500">
-              Comanda aberta a partir de um agendamento: o cliente é o do agendamento.
-            </p>
-          ) : null}
-          {pickingClient && !readOnly ? (
-            <div className="mt-3">
-              <ClientPicker
-                autoFocus
-                onSelect={(client) => {
-                  setPickingClient(false);
-                  run(() => setTicketClientAction(ticket.id, client.id));
-                }}
-              />
-            </div>
-          ) : null}
-        </div>
-
-        <HowItWorks defaultOpen={!readOnly && ticket.items.length === 0}>
-          {readOnly ? (
-            <p>
-              Esta comanda está <strong>{ticket.status === "CLOSED" ? "fechada" : "cancelada"}</strong> e
-              não pode mais ser alterada. Os valores abaixo são o registro final do atendimento.
-            </p>
-          ) : (
-            <>
-              <ol className="list-decimal space-y-1 pl-5">
-                <li><strong>Adicione os itens:</strong> serviços, produtos ou um item avulso. O preço de serviço e produto vem do catálogo e não pode ser mudado aqui; só o item avulso tem preço livre.</li>
-                <li><strong>Escolha o profissional</strong> de cada item. É ele quem recebe a comissão; item “Sem profissional” não gera comissão.</li>
-                <li><strong>Desconto</strong> (opcional): em reais, sobre o total, e não pode passar do subtotal.</li>
-                <li><strong>Registre o pagamento.</strong> Pode ser em mais de uma forma. Se deixar o valor em branco, vale o que ainda falta.</li>
-                <li><strong>Feche a comanda</strong> quando não faltar nada.</li>
-              </ol>
-              <p>
-                Ao fechar, a receita vai para o Financeiro, a comissão é calculada (sobre o preço dos itens, antes do desconto) e o estoque dos produtos baixa. Fechar não tem volta.
-              </p>
-              <p>
-                <strong>Cancelar</strong> só é possível enquanto não houver pagamento registrado, e descarta a comanda.
-              </p>
-            </>
-          )}
-        </HowItWorks>
 
         {/* Itens */}
         <div className="rounded-2xl border border-zinc-200 dark:border-white/10">
@@ -509,6 +510,7 @@ export function TicketPdv({
             </div>
           ) : null}
         </div>
+      </div>
       </div>
 
       <ConfirmDialog

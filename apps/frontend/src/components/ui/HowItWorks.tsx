@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { CaretDown, Info } from "@phosphor-icons/react/dist/ssr";
 
 // Explicação fixa de uma tela ("pra que serve, como usar"). <details> nativo: abre/fecha sem
-// JS, funciona em Server Component e é acessível por teclado. Fechado por padrão pra não
-// empurrar o conteúdo — `defaultOpen` só nas telas onde o dono costuma travar.
+// JS, funciona em Server Component e é acessível por teclado. Sempre fechado por padrão para
+// manter a tela limpa e não empurrar o conteúdo de trabalho.
 export function HowItWorks({
   title = "Como funciona",
   defaultOpen = false,

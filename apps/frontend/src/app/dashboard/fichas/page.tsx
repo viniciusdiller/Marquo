@@ -21,7 +21,7 @@ export default async function FichasPage() {
 
       <div className="mt-6 flex flex-col gap-8">
         <div className="flex flex-col gap-6">
-          <HowItWorks defaultOpen={forms.length === 0}>
+          <HowItWorks>
             <p>
               Ficha de anamnese é um <strong>questionário que você monta uma vez</strong> e a
               equipe preenche na ficha de cada cliente (substitui a prancheta de papel).
