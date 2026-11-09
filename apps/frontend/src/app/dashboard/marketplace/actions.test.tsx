@@ -4,7 +4,14 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/api-server", () => ({ authedFetch: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { lookupCepAction, reverseGeocodeAction, geocodeAddressAction } from "./actions";
+import { authedFetch } from "@/lib/api-server";
+import { ApiError } from "@/lib/api";
+import {
+  lookupCepAction,
+  reverseGeocodeAction,
+  geocodeAddressAction,
+  toggleMarketplaceListingAction,
+} from "./actions";
 
 describe("Marketplace Geolocation Actions", () => {
   const originalFetch = global.fetch;
@@ -144,6 +151,43 @@ describe("Marketplace Geolocation Actions", () => {
       expect(res.cep).toBe("01310-200");
       expect(res.latitude).toBe(-23.5615);
       expect(res.longitude).toBe(-46.6559);
+    });
+  });
+
+  describe("toggleMarketplaceListingAction", () => {
+    it("chama PATCH /tenants/me/marketplace com listedInMarketplace true", async () => {
+      vi.mocked(authedFetch).mockResolvedValueOnce({ slug: "barbearia-teste" });
+
+      const res = await toggleMarketplaceListingAction(true);
+
+      expect(res.ok).toBe(true);
+      expect(authedFetch).toHaveBeenCalledWith("/tenants/me/marketplace", {
+        method: "PATCH",
+        body: JSON.stringify({ listedInMarketplace: true }),
+      });
+    });
+
+    it("chama PATCH /tenants/me/marketplace com listedInMarketplace false", async () => {
+      vi.mocked(authedFetch).mockResolvedValueOnce({ slug: "barbearia-teste" });
+
+      const res = await toggleMarketplaceListingAction(false);
+
+      expect(res.ok).toBe(true);
+      expect(authedFetch).toHaveBeenCalledWith("/tenants/me/marketplace", {
+        method: "PATCH",
+        body: JSON.stringify({ listedInMarketplace: false }),
+      });
+    });
+
+    it("retorna o erro formatado caso a API recuse a listagem", async () => {
+      vi.mocked(authedFetch).mockRejectedValueOnce(
+        new ApiError("Para aparecer no marketplace, informe a cidade e ao menos uma categoria.", 400),
+      );
+
+      const res = await toggleMarketplaceListingAction(true);
+
+      expect(res.ok).toBeUndefined();
+      expect(res.error).toBe("Para aparecer no marketplace, informe a cidade e ao menos uma categoria.");
     });
   });
 });

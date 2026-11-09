@@ -6,22 +6,45 @@ import {
   Eye,
   EyeSlash,
   ArrowSquareOut,
-  ShieldCheck,
 } from "@phosphor-icons/react/dist/ssr";
 import clsx from "clsx";
 import type { MarketplaceSettings as Settings } from "@marquo/shared-types";
 import { FieldHelp } from "@/components/ui/FieldHelp";
 import { AddressLocationPicker } from "@/components/dashboard/AddressLocationPicker";
-import { saveMarketplaceAction, type MarketplaceActionState } from "./actions";
+import {
+  saveMarketplaceAction,
+  toggleMarketplaceListingAction,
+  type MarketplaceActionState,
+} from "./actions";
 
 const initial: MarketplaceActionState = {};
 
 export function MarketplaceSettings({ settings }: { settings: Settings }) {
   const [state, formAction, pending] = useActionState(saveMarketplaceAction, initial);
   const [isListed, setIsListed] = useState(settings.listedInMarketplace);
+  const [togglePending, setTogglePending] = useState(false);
+  const [toggleFeedback, setToggleFeedback] = useState<{ ok?: boolean; error?: string } | null>(null);
+
+  async function handleToggle(next: boolean) {
+    setIsListed(next);
+    setTogglePending(true);
+    setToggleFeedback(null);
+
+    const res = await toggleMarketplaceListingAction(next);
+    setTogglePending(false);
+
+    if (res.error) {
+      setIsListed(!next);
+      setToggleFeedback({ error: res.error });
+    } else {
+      setToggleFeedback({ ok: true });
+    }
+  }
 
   return (
     <form action={formAction} className="mt-4 space-y-6">
+      <input type="hidden" name="listed" value={isListed ? "on" : ""} />
+
       {/* Card de Visibilidade no Marketplace */}
       <div
         className={clsx(
@@ -59,6 +82,15 @@ export function MarketplaceSettings({ settings }: { settings: Settings }) {
                 >
                   {isListed ? "Visível para novos clientes" : "Apenas com link direto"}
                 </span>
+                {togglePending ? (
+                  <span className="text-xs text-zinc-400 dark:text-stone-500 animate-pulse">
+                    Salvando...
+                  </span>
+                ) : toggleFeedback?.ok ? (
+                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    Salvo!
+                  </span>
+                ) : null}
               </div>
 
               <p className="max-w-2xl text-xs leading-relaxed text-zinc-600 dark:text-stone-300">
@@ -66,30 +98,32 @@ export function MarketplaceSettings({ settings }: { settings: Settings }) {
                   ? "Seu negócio aparece para pessoas procurando barbearias e salões na sua região pelo Marquo. Novos clientes podem te encontrar e agendar online."
                   : "Seu negócio não aparece nos resultados da busca do Marquo. Apenas quem já possui o seu link direto (na bio do Instagram, WhatsApp ou enviado por você) consegue marcar horário."}
               </p>
+
+              {toggleFeedback?.error && (
+                <p className="pt-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                  {toggleFeedback.error}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Switch acessível */}
+          {/* Switch acessível com auto-save */}
           <label className="relative inline-flex cursor-pointer items-center">
             <input
               type="checkbox"
-              name="listed"
+              name="listed_toggle"
               checked={isListed}
-              onChange={(e) => setIsListed(e.target.checked)}
+              disabled={togglePending}
+              onChange={(e) => handleToggle(e.target.checked)}
               className="peer sr-only"
               aria-label="Ativar visibilidade na busca pública"
             />
-            <div className="peer h-6 w-11 rounded-full bg-zinc-300 transition-colors after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-emerald-500 peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2 dark:bg-zinc-700 dark:peer-focus-visible:ring-offset-zinc-950" />
+            <div className="peer h-6 w-11 rounded-full bg-zinc-300 transition-colors after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-emerald-500 peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2 peer-disabled:opacity-60 dark:bg-zinc-700 dark:peer-focus-visible:ring-offset-zinc-950" />
           </label>
         </div>
 
-        {/* Rodapé do Card com garantias e link */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200/70 pt-3 text-xs text-zinc-500 dark:border-white/10 dark:text-stone-400">
-          <div className="flex items-center gap-1.5 font-medium text-zinc-700 dark:text-stone-300">
-            <ShieldCheck size={16} weight="fill" className="text-emerald-600 dark:text-emerald-400" />
-            <span>100% gratuito: sem comissões por agendamento e sem custos adicionais no seu plano.</span>
-          </div>
-
+        {/* Rodapé do Card com apenas o link para a página pública */}
+        <div className="mt-4 flex items-center justify-end border-t border-zinc-200/70 pt-3 text-xs dark:border-white/10">
           <Link
             href="/descobrir"
             target="_blank"

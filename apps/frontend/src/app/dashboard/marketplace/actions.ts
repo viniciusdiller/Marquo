@@ -330,6 +330,27 @@ export async function saveMarketplaceAction(
   return { ok: true };
 }
 
+export async function toggleMarketplaceListingAction(
+  listed: boolean,
+): Promise<MarketplaceActionState> {
+  try {
+    const updated = await authedFetch<{ slug?: string }>("/tenants/me/marketplace", {
+      method: "PATCH",
+      body: JSON.stringify({ listedInMarketplace: listed }),
+    });
+
+    if (updated?.slug) {
+      revalidatePath(`/${updated.slug}`);
+    }
+    revalidatePath("/[slug]", "page");
+    revalidatePath("/descobrir");
+    revalidatePath("/dashboard/marketplace");
+    return { ok: true };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 export async function hideReviewAction(id: string): Promise<MarketplaceActionState> {
   try {
     await authedFetch(`/reviews/${encodeURIComponent(id)}/hide`, { method: "PATCH" });
