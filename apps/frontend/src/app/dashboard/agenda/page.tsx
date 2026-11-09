@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import type { CalendarResponse, TenantSetupStatus } from "@marquo/shared-types";
 import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
+import { isRedirectError } from "@/lib/redirect";
 import { AgendaView } from "./AgendaView";
 import { fetchCalendarAction } from "./actions";
 
@@ -26,12 +27,21 @@ export default async function AgendaPage() {
   const [calendarResult, services, setupStatus] = await Promise.all([
     fetchCalendarAction(from, to)
       .then((data) => ({ data, error: false }))
-      // Sem isso, qualquer erro (sessão expirada, trial vencido, 500) virava silenciosamente
+      // Sem isso, qualquer erro (trial vencido, 500) virava silenciosamente
       // "nenhum profissional ativo" — o dono não tinha nenhuma pista do motivo real.
-      .catch(() => ({ data: emptyCalendar, error: true })),
-    authedFetch<AgendaService[]>("/services").catch(() => [] as AgendaService[]),
+      .catch((err) => {
+        if (isRedirectError(err)) throw err;
+        return { data: emptyCalendar, error: true };
+      }),
+    authedFetch<AgendaService[]>("/services").catch((err) => {
+      if (isRedirectError(err)) throw err;
+      return [] as AgendaService[];
+    }),
     isOwner
-      ? authedFetch<TenantSetupStatus>("/tenants/me/setup-status").catch(() => null)
+      ? authedFetch<TenantSetupStatus>("/tenants/me/setup-status").catch((err) => {
+          if (isRedirectError(err)) throw err;
+          return null;
+        })
       : Promise.resolve(null),
   ]);
 

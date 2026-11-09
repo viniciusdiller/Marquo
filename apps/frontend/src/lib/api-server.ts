@@ -1,4 +1,5 @@
 import "server-only";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { assertSafeApiPath } from "@/lib/api-path";
@@ -9,7 +10,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 export async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const session = await auth();
   if (!session?.accessToken || session.error) {
-    throw new ApiError("Não autenticado.", 401);
+    redirect("/entrar");
   }
 
   // Upload de arquivo (FormData) não pode ter Content-Type forçado pra application/json —
@@ -27,6 +28,9 @@ export async function authedFetch<T>(path: string, init?: RequestInit): Promise<
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      redirect("/entrar");
+    }
     const body = await response.json().catch(() => null);
     const message = Array.isArray(body?.message)
       ? body.message.join(", ")

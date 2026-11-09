@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { CalendarResponse, CreateStaffAppointmentInput } from "@marquo/shared-types";
 import { authedFetch } from "@/lib/api-server";
 import { ApiError } from "@/lib/api";
+import { isRedirectError } from "@/lib/redirect";
 
 export interface ActionResult {
   ok: boolean;
@@ -11,6 +12,7 @@ export interface ActionResult {
 }
 
 function toError(err: unknown): ActionResult {
+  if (isRedirectError(err)) throw err;
   return { ok: false, error: err instanceof ApiError ? err.message : "Erro inesperado." };
 }
 
