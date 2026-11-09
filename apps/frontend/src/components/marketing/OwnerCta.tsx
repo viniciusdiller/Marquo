@@ -25,9 +25,9 @@ export function OwnerCta() {
               Quer ser encontrado por quem já está procurando um salão?
             </h2>
             <p className="mt-4 max-w-[48ch] text-[15px] leading-relaxed text-accent-50">
-              Cadastre seu negócio no Marquo, apareça na busca acima e
-              comece a receber agendamento direto pelo seu link — sem
-              trocar mensagem. Teste grátis por 14 dias, sem cartão.
+              Cadastre seu negócio no Marquo, seja encontrado na busca de
+              estabelecimentos e no mapa da sua região, e receba agendamentos
+              direto pelo seu link — sem trocar mensagens. Teste grátis por 14 dias, sem cartão.
             </p>
             <div className="mt-8">
               <Button href="/cadastro" variant="secondary" className="bg-white text-accent-700 hover:bg-accent-50">

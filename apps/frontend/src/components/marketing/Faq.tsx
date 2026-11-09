@@ -30,9 +30,9 @@ const faqs = [
       "Sim, a qualquer momento. Para reduzir o plano, é preciso ter no máximo o número de profissionais que o novo plano permite.",
   },
   {
-    question: "Vocês notificam o cliente por WhatsApp?",
+    question: "O sistema envia mensagens automáticas por WhatsApp?",
     answer:
-      "Ainda não. Hoje o foco é deixar a agenda e o link de agendamento redondos. Notificação por WhatsApp e e-mail está no roteiro.",
+      "Os lembretes e confirmações automáticos são enviados por e-mail (confirmação imediata e lembrete 24h antes). Para o WhatsApp, você tem botões de 1 clique em todo o painel (na agenda, nos clientes e na lista de espera) que abrem a conversa direto com o cliente no WhatsApp Web ou celular, sem precisar salvar o número na sua agenda. Disparos automáticos via API do WhatsApp estão em desenvolvimento.",
   },
 ];
 

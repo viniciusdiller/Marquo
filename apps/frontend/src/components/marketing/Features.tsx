@@ -1,7 +1,10 @@
 import {
+  CashRegister,
   Clock,
   HourglassMedium,
   LinkSimple,
+  Percent,
+  Receipt,
   UserCircleMinus,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
@@ -48,7 +51,7 @@ export function Features() {
                   Agenda por profissional
                 </h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-stone-300">
-                  Cada profissional define os próprios horários. Sem conflito
+                  Cada profissional define os próprios horários e pausas. Sem conflito
                   entre agendas.
                 </p>
               </div>
@@ -57,14 +60,13 @@ export function Features() {
 
           <Reveal delay={0.1}>
             <div className="flex h-full flex-col justify-between rounded-2xl border border-zinc-200 p-6 dark:border-white/10">
-              <HourglassMedium size={24} weight="light" className="text-accent-500" />
+              <Receipt size={24} weight="light" className="text-accent-500" />
               <div>
                 <h3 className="mt-4 font-display text-base font-semibold text-zinc-900 dark:text-white">
-                  Lista de espera
+                  Comandas e PDV ágil
                 </h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-stone-300">
-                  Sem horário livre? O cliente entra na fila e você entra em
-                  contato quando abrir vaga.
+                  Lance serviços e produtos na mesma conta, aplique descontos e divida pagamentos em Pix, Cartão ou Dinheiro.
                 </p>
               </div>
             </div>
@@ -72,14 +74,13 @@ export function Features() {
 
           <Reveal delay={0.15}>
             <div className="flex h-full flex-col justify-between rounded-2xl border border-zinc-200 p-6 dark:border-white/10">
-              <UserCircleMinus size={24} weight="light" className="text-accent-500" />
+              <CashRegister size={24} weight="light" className="text-accent-500" />
               <div>
                 <h3 className="mt-4 font-display text-base font-semibold text-zinc-900 dark:text-white">
-                  Sem conta para o cliente
+                  Controle de caixa
                 </h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-stone-300">
-                  Só nome e telefone. Ninguém quer criar login para marcar um
-                  corte de cabelo.
+                  Abertura com fundo, sangrias e conferência cega no fim do dia: o sistema apura sobras e faltas sem margem para erro.
                 </p>
               </div>
             </div>
@@ -87,14 +88,55 @@ export function Features() {
 
           <Reveal delay={0.2}>
             <div className="flex h-full flex-col justify-between rounded-2xl bg-accent-50 p-6 dark:bg-accent-500/10">
+              <Percent size={24} weight="light" className="text-accent-600 dark:text-accent-300" />
+              <div>
+                <h3 className="mt-4 font-display text-base font-semibold text-zinc-900 dark:text-white">
+                  Comissões automáticas
+                </h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-stone-300">
+                  Esqueça planilhas no fim do mês. O repasse de cada profissional é calculado a cada atendimento com extrato pronto para conferir.
+                </p>
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal delay={0.25}>
+            <div className="flex h-full flex-col justify-between rounded-2xl border border-zinc-200 p-6 dark:border-white/10">
+              <UserCircleMinus size={24} weight="light" className="text-accent-500" />
+              <div>
+                <h3 className="mt-4 font-display text-base font-semibold text-zinc-900 dark:text-white">
+                  Sem conta para o cliente
+                </h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-stone-300">
+                  Só nome e telefone. Ninguém precisa criar login ou lembrar senha para agendar um atendimento.
+                </p>
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal delay={0.3}>
+            <div className="flex h-full flex-col justify-between rounded-2xl bg-accent-50 p-6 dark:bg-accent-500/10">
               <Clock size={24} weight="light" className="text-accent-600 dark:text-accent-300" />
               <div>
                 <h3 className="mt-4 font-display text-base font-semibold text-zinc-900 dark:text-white">
-                  Cliente remarca sozinho
+                  Cancelamento e remarcação online
                 </h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-stone-300">
-                  Cancelamento e reagendamento pelo mesmo link, sem precisar
-                  te chamar.
+                  O cliente gerencia os próprios horários na área dele pelo telefone, liberando a vaga na sua agenda na hora sem precisar trocar mensagens.
+                </p>
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal delay={0.35}>
+            <div className="flex h-full flex-col justify-between rounded-2xl border border-zinc-200 p-6 dark:border-white/10">
+              <HourglassMedium size={24} weight="light" className="text-accent-500" />
+              <div>
+                <h3 className="mt-4 font-display text-base font-semibold text-zinc-900 dark:text-white">
+                  Lista de espera
+                </h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-stone-300">
+                  Sem horário livre? O cliente entra na fila e você tem um botão direto para chamá-lo no WhatsApp assim que abrir vaga.
                 </p>
               </div>
             </div>
