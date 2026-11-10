@@ -372,6 +372,9 @@ export interface TicketItem {
   quantity: number;
   unitPriceCents: number;
   totalCents: number;
+  /** Quanto deste item o clube de assinaturas cobre (aberta: previsão do servidor; fechada: o que foi baixado). */
+  clubCoveredUnits: number;
+  clubCoveredCents: number;
   /** Quando o item entrou na comanda (registro de data). */
   createdAt: string;
   professional: { id: string | null; name: string } | null;
@@ -394,6 +397,8 @@ export interface Ticket {
   closedAt: string | null;
   canceledAt: string | null;
   discountCents: number;
+  /** Valor dos serviços cobertos pelo clube de assinaturas (já abatido do total; 0 se o cliente não é membro). */
+  clubCoveredCents: number;
   subtotalCents: number;
   totalCents: number;
   paidCents: number;
@@ -622,6 +627,9 @@ export interface PlanCatalogEntry {
   readonly maxProfessionals: number | null;
   // Frase de apresentação (cadastro e tela de plano). Só texto: não afeta cobrança nem limites.
   readonly audience: string;
+  // Clube de assinaturas (pacotes mensais do negócio para os clientes). Recurso por plano: o servidor confere
+  // (`planIncludesClub`), a tela só mostra. No período de teste (sem assinatura) vale o Essencial, ou seja, sem clube.
+  readonly subscriptionClub: boolean;
 }
 
 export const PLAN_CATALOG: readonly PlanCatalogEntry[] = [
@@ -631,6 +639,7 @@ export const PLAN_CATALOG: readonly PlanCatalogEntry[] = [
     priceCents: 4990,
     maxProfessionals: 2,
     audience: "Para quem trabalha sozinho ou em dupla.",
+    subscriptionClub: false,
   },
   {
     tier: "PROFISSIONAL",
@@ -638,6 +647,7 @@ export const PLAN_CATALOG: readonly PlanCatalogEntry[] = [
     priceCents: 9990,
     maxProfessionals: 5,
     audience: "Para salões e barbearias com equipe pequena.",
+    subscriptionClub: true,
   },
   {
     tier: "PREMIUM",
@@ -645,6 +655,7 @@ export const PLAN_CATALOG: readonly PlanCatalogEntry[] = [
     priceCents: 18990,
     maxProfessionals: null,
     audience: "Para equipes grandes e negócios em crescimento.",
+    subscriptionClub: true,
   },
 ];
 
@@ -654,4 +665,57 @@ export const PLAN_INTERVAL = "month";
 
 export function planCatalogEntry(tier: string): PlanCatalogEntry | undefined {
   return PLAN_CATALOG.find((plan) => plan.tier === tier);
+}
+
+// O plano inclui o clube de assinaturas? Tier desconhecido = não (nunca libera por engano).
+export function planIncludesClub(tier: string | null | undefined): boolean {
+  return !!tier && planCatalogEntry(tier)?.subscriptionClub === true;
+}
+
+// ---- Clube de assinaturas (pacotes mensais de serviços) ----
+// O dono cria pacotes ("4 cortes por mês"), inscreve clientes e marca o mês como pago (o pagamento acontece fora do
+// sistema). Ao fechar a comanda de um membro, os serviços do pacote saem sem cobrança até acabarem os usos do mês.
+export const CLUB_MAX_USES_PER_MONTH = 60;
+export const CLUB_MAX_PLAN_SERVICES = 30;
+export const CLUB_MAX_PRICE_CENTS = 1_000_000; // R$ 10.000,00 por mês
+
+export type ClubMembershipStatus = "ACTIVE" | "CANCELED";
+// Estado mostrado ao dono: "EXPIRED" é decidido na leitura (mês pago acabou e ninguém renovou).
+export type ClubMembershipState = "ACTIVE" | "EXPIRED" | "CANCELED";
+
+export interface ClubPlanSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  priceCents: number;
+  usesPerMonth: number;
+  isActive: boolean;
+  services: Array<{ id: string; name: string }>;
+  activeMembers: number;
+}
+
+export interface ClubMemberSummary {
+  id: string;
+  state: ClubMembershipState;
+  planName: string;
+  client: { id: string; name: string; phone: string };
+  usesPerMonth: number;
+  usesInPeriod: number;
+  usesRemaining: number;
+  periodStart: string;
+  periodEnd: string;
+  priceCents: number;
+  // Dá para marcar o próximo mês como pago agora? (o servidor decide: só perto do fim do mês pago, ou depois dele)
+  canRenew: boolean;
+}
+
+export interface ClubOverview {
+  // O negócio ainda está no período de teste (sem assinatura)? O teste usa o plano de entrada, que não tem clube.
+  onTrial: boolean;
+  // Nome do plano assinado (nulo no teste); só para a tela explicar por que o clube está bloqueado.
+  planName: string | null;
+  // O plano do negócio inclui o clube?
+  planAllowsClub: boolean;
+  // O dono ligou o clube? (só vale se o plano permitir)
+  enabled: boolean;
 }

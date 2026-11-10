@@ -176,6 +176,10 @@ model Tenant {
   // (confirmação, cancelamento, remarcação e lembrete continuam saindo).
   notifyStaffByEmail Boolean @default(true)
 
+  // Clube de assinaturas ligado pelo dono. Só tem efeito se o PLANO do negócio incluir o clube (planIncludesClub, em
+  // shared-types): o servidor confere os dois, então um downgrade desliga o clube sem apagar nada.
+  clubEnabled Boolean @default(false)
+
   users               User[]
   professionals       Professional[]
   services            Service[]
@@ -187,6 +191,9 @@ model Tenant {
   couponRedemptions   CouponRedemption[]
   billingAttempts     BillingAttempt[]
   clients             Client[]
+  clubPlans           ClubPlan[]
+  clubMemberships     ClubMembership[]
+  clubUsages          ClubUsage[]
   galleryImages       TenantGalleryImage[]
   intakeForms         IntakeForm[]
   intakeResponses     IntakeResponse[]
@@ -366,6 +373,7 @@ model Service {
   appointmentItems     AppointmentItem[]
   waitlistEntries      WaitlistEntry[]
   ticketItems          TicketItem[]
+  clubPlanServices     ClubPlanService[]
 
   @@index([tenantId, isActive])
 }
@@ -420,14 +428,14 @@ model Appointment {
   createdAt        DateTime          @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime          @updatedAt @db.Timestamptz(6)
 
-  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  professional    Professional      @relation(fields: [professionalId], references: [id], onDelete: Restrict)
-  client          Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  tenant             Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  professional       Professional         @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  client             Client?              @relation(fields: [clientId], references: [id], onDelete: SetNull)
   notificationOutbox NotificationOutbox[]
-  items           AppointmentItem[]
-  intakeResponses IntakeResponse[]
-  ticket          Ticket?
-  review          Review?
+  items              AppointmentItem[]
+  intakeResponses    IntakeResponse[]
+  ticket             Ticket?
+  review             Review?
   // Constraint EXCLUDE anti-overlap (professionalId + tstzrange) adicionada manualmente na
   // migration SQL, parcial em status IN (SCHEDULED, CONFIRMED, IN_SERVICE).
 
@@ -504,6 +512,7 @@ model Client {
   waitlistEntries WaitlistEntry[]
   intakeResponses IntakeResponse[]
   tickets         Ticket[]
+  clubMemberships ClubMembership[]
   consumerLink    ConsumerTenantLink?
 
   @@unique([tenantId, phone])
@@ -599,18 +608,21 @@ model StockMovement {
 // Comanda: 1..1 opcional com um Appointment (aberta a partir dele) ou avulsa. Fechamento
 // exige soma de pagamentos >= total e gera as baixas de estoque + lançamentos de comissão.
 model Ticket {
-  id             String       @id @default(uuid())
-  tenantId       String
-  appointmentId  String?      @unique
-  clientId       String?
-  openedByUserId String
-  status         TicketStatus @default(OPEN)
-  discountCents  Int          @default(0)
-  note           String?
-  openedAt       DateTime     @default(now()) @db.Timestamptz(6)
-  closedAt       DateTime?    @db.Timestamptz(6)
-  canceledAt     DateTime?    @db.Timestamptz(6)
-  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
+  id               String       @id @default(uuid())
+  tenantId         String
+  appointmentId    String?      @unique
+  clientId         String?
+  openedByUserId   String
+  status           TicketStatus @default(OPEN)
+  discountCents    Int          @default(0)
+  // Valor dos serviços cobertos pelo clube, GRAVADO ao fechar (comanda aberta calcula na hora; fechada nunca recalcula).
+  // Não entra em discountCents: o desconto manual e a cobertura do clube são coisas diferentes.
+  clubCoveredCents Int          @default(0)
+  note             String?
+  openedAt         DateTime     @default(now()) @db.Timestamptz(6)
+  closedAt         DateTime?    @db.Timestamptz(6)
+  canceledAt       DateTime?    @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @db.Timestamptz(6)
 
   tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   appointment       Appointment?      @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
@@ -620,6 +632,7 @@ model Ticket {
   payments          Payment[]
   commissionEntries CommissionEntry[]
   financialEntry    FinancialEntry?
+  clubUsages        ClubUsage[]
 
   @@index([tenantId, status])
   @@index([tenantId, openedAt])
@@ -639,6 +652,7 @@ model TicketItem {
   createdAt      DateTime       @default(now()) @db.Timestamptz(6)
 
   ticket            Ticket            @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  clubUsage         ClubUsage?
   service           Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   product           Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
   professional      Professional?     @relation(fields: [professionalId], references: [id], onDelete: SetNull)
@@ -785,6 +799,7 @@ enum FinancialEntrySource {
   TICKET // receita gerada ao fechar comanda
   COMMISSION // despesa gerada ao fechar comissões do período
   MANUAL // lançado à mão (aluguel, fornecedor, etc.)
+  CLUB // mensalidade do clube de assinaturas marcada como paga (protegida: não se edita como lançamento manual)
 }
 
 model FinancialCategory {
@@ -1139,26 +1154,112 @@ enum NotificationStatus {
 }
 
 model NotificationOutbox {
-  id                 String @id @default(uuid())
+  id                 String             @id @default(uuid())
   tenantId           String
   appointmentId      String
   event              String
   appointmentVersion Int
-  deduplicationKey   String @unique
+  deduplicationKey   String             @unique
   payload            Json
   status             NotificationStatus @default(PENDING)
-  attempts           Int @default(0)
-  availableAt        DateTime @default(now()) @db.Timestamptz(6)
-  lockedUntil        DateTime? @db.Timestamptz(6)
+  attempts           Int                @default(0)
+  availableAt        DateTime           @default(now()) @db.Timestamptz(6)
+  lockedUntil        DateTime?          @db.Timestamptz(6)
   lockToken          String?
-  firstAttemptAt     DateTime? @db.Timestamptz(6)
-  sentAt             DateTime? @db.Timestamptz(6)
+  firstAttemptAt     DateTime?          @db.Timestamptz(6)
+  sentAt             DateTime?          @db.Timestamptz(6)
   lastError          String?
-  createdAt          DateTime @default(now()) @db.Timestamptz(6)
-  tenant             Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  appointment        Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  createdAt          DateTime           @default(now()) @db.Timestamptz(6)
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointment        Appointment        @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@index([status, availableAt])
   @@index([appointmentId, event, appointmentVersion])
   @@index([tenantId, createdAt])
+}
+
+// ---- Clube de assinaturas ----
+// Pacote mensal que o dono vende aos clientes ("4 cortes por mês"). O pagamento acontece FORA do sistema: o dono inscreve o
+// cliente e marca cada mês como pago. A baixa do uso é automática ao fechar a comanda (ver TicketsService + ClubService).
+
+enum ClubMembershipStatus {
+  ACTIVE
+  CANCELED
+}
+
+model ClubPlan {
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  description  String?
+  priceCents   Int // o que o negócio cobra por mês (informativo e base da receita registrada)
+  usesPerMonth Int
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  services    ClubPlanService[]
+  memberships ClubMembership[]
+
+  @@index([tenantId, isActive])
+}
+
+model ClubPlanService {
+  clubPlanId String
+  serviceId  String
+
+  clubPlan ClubPlan @relation(fields: [clubPlanId], references: [id], onDelete: Cascade)
+  service  Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([clubPlanId, serviceId])
+  @@index([serviceId])
+}
+
+// Um cliente por vez com adesão ATIVA (índice único parcial na migration: Prisma não declara índice parcial).
+// usesPerMonth e priceCents são cópias do pacote na hora da adesão/renovação: editar o pacote depois não muda quem já entrou.
+model ClubMembership {
+  id           String               @id @default(uuid())
+  tenantId     String
+  clubPlanId   String
+  clientId     String
+  status       ClubMembershipStatus @default(ACTIVE)
+  usesPerMonth Int
+  priceCents   Int
+  // Mês pago atual. Renovar abre um mês novo A PARTIR DE AGORA (zera os usos); vencido e sem renovar = EXPIRED (decidido na leitura).
+  periodStart  DateTime             @db.Timestamptz(6)
+  periodEnd    DateTime             @db.Timestamptz(6)
+  canceledAt   DateTime?            @db.Timestamptz(6)
+  createdAt    DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime             @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan   ClubPlan    @relation(fields: [clubPlanId], references: [id], onDelete: Restrict)
+  client Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  usages ClubUsage[]
+
+  @@index([tenantId, status])
+  @@index([clientId, status])
+}
+
+// Uso do pacote: uma linha por item de comanda coberto (units = unidades cobertas daquele item). periodStart identifica o
+// mês pago em que foi usado, então renovar zera a contagem sem apagar histórico.
+model ClubUsage {
+  id           String   @id @default(uuid())
+  tenantId     String
+  membershipId String
+  ticketId     String
+  ticketItemId String   @unique
+  periodStart  DateTime @db.Timestamptz(6)
+  units        Int
+  coveredCents Int
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  membership ClubMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  ticket     Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketItem TicketItem     @relation(fields: [ticketItemId], references: [id], onDelete: Cascade)
+
+  @@index([membershipId, periodStart])
+  @@index([ticketId])
 }
