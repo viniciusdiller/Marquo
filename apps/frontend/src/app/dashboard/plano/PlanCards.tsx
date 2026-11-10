@@ -10,6 +10,7 @@ import {
   formatBRL,
   planActionFor,
 } from "@/lib/billing";
+import { planCatalogEntry } from "@marquo/shared-types";
 import { riseIn } from "@/lib/stagger";
 import { CheckoutDialog } from "./CheckoutDialog";
 import { ChangePlanDialog } from "./ChangePlanDialog";
@@ -67,6 +68,16 @@ export function PlanCards({
                 <span className="text-sm font-medium text-zinc-500 dark:text-stone-400"> /mês</span>
               </p>
               <p className="mt-3 text-sm text-zinc-600 dark:text-stone-300">{limitText(plan)}</p>
+              <p
+                className={clsx(
+                  "mt-1 text-sm",
+                  planCatalogEntry(plan.tier)?.subscriptionClub
+                    ? "text-zinc-600 dark:text-stone-300"
+                    : "text-zinc-400 dark:text-stone-500",
+                )}
+              >
+                {planCatalogEntry(plan.tier)?.subscriptionClub ? "Com clube de assinaturas" : "Sem clube de assinaturas"}
+              </p>
 
               <div className="mt-5 flex-1 content-end">
                 {!isOwner ? null : action === "CURRENT" ? (

@@ -118,7 +118,8 @@ export default async function PlanoPage({
 
           <HowItWorks>
             <p>
-              O plano define <strong>quantos profissionais ativos</strong> você pode ter. Todas as contas começam
+              O plano define <strong>quantos profissionais ativos</strong> você pode ter e se o negócio tem o{" "}
+              <strong>clube de assinaturas</strong> (planos Profissional e Premium). Todas as contas começam
               com um período de teste, sem cartão.
             </p>
             <ul className="list-disc space-y-1 pl-5">
