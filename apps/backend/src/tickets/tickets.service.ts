@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { PaymentMethod, Prisma, TicketItemKind, TicketStatus } from "@marquo/database";
+import { CashRegisterStatus, PaymentMethod, Prisma, TicketAuditAction, TicketItemKind, TicketStatus } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProductsService } from "../products/products.service";
 import { CommissionsService } from "../commissions/commissions.service";
@@ -17,9 +17,14 @@ import {
   OpenTicketDto,
   SetTicketClientDto,
   SetTicketDiscountDto,
+  SetTicketNoteDto,
+  TicketReasonDto,
+  UpdateTicketItemDto,
 } from "./dto/ticket-dtos";
-import { resolvePagination } from "../common/pagination/paginate";
+import { resolvePagination, toPage } from "../common/pagination/paginate";
 import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
+
+const formatBrl = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 const TICKET_INCLUDE = {
   items: {
@@ -124,6 +129,27 @@ export class TicketsService {
     // O clube é conferido uma vez para a página inteira (não uma por comanda).
     const clubActive = await this.club.isActive(tenantId);
     return Promise.all(tickets.map((ticket) => this.serialize(ticket, { clubActive })));
+  }
+
+  // Histórico: comandas FECHADAS ou CANCELADAS, paginado, da mais recente para a mais antiga (fechamento/cancelamento). Uma comanda
+  // fechada não pode "sumir": é o registro do atendimento. Só o próprio negócio (tenantId no WHERE).
+  async findFinished(tenantId: string, status: "CLOSED" | "CANCELED", paginationQuery: PaginationQueryDto) {
+    const pagination = resolvePagination(paginationQuery);
+    const where: Prisma.TicketWhereInput = { tenantId, status: status === "CLOSED" ? TicketStatus.CLOSED : TicketStatus.CANCELED };
+    const [tickets, total] = await Promise.all([
+      this.prisma.ticket.findMany({
+        where,
+        include: TICKET_INCLUDE,
+        // Desempate por id: duas comandas no mesmo instante não trocam de página entre uma consulta e outra.
+        orderBy: [status === "CLOSED" ? { closedAt: "desc" } : { canceledAt: "desc" }, { id: "desc" }],
+        skip: pagination.skip,
+        take: pagination.take,
+      }),
+      this.prisma.ticket.count({ where }),
+    ]);
+    // Fechada/cancelada nunca recalcula o clube (usa o valor gravado), então não há consulta extra por comanda.
+    const items = await Promise.all(tickets.map((ticket) => this.serialize(ticket, { clubActive: false })));
+    return toPage(items, total, pagination);
   }
 
   async get(tenantId: string, id: string) {
@@ -316,6 +342,133 @@ export class TicketsService {
     });
   }
 
+  // Edita quantidade e/ou profissional de um item JÁ lançado (comanda aberta). Preço, tipo e serviço nunca mudam por aqui.
+  async updateItem(tenantId: string, userId: string, id: string, itemId: string, dto: UpdateTicketItemDto) {
+    if (dto.quantity === undefined && dto.professionalId === undefined) {
+      throw new BadRequestException("Informe a quantidade ou o profissional.");
+    }
+
+    await this.lockedOpenTicket(tenantId, id, async (tx) => {
+      const item = await tx.ticketItem.findFirst({
+        where: { id: itemId, ticketId: id },
+        include: { professional: { select: { user: { select: { name: true } } } } },
+      });
+      if (!item) throw new NotFoundException("Item não encontrado.");
+
+      const data: Prisma.TicketItemUncheckedUpdateInput = {};
+      const changes: string[] = [];
+
+      if (dto.quantity !== undefined && dto.quantity !== item.quantity) {
+        data.quantity = dto.quantity;
+        changes.push(`quantidade ${item.quantity} → ${dto.quantity}`);
+      }
+
+      if (dto.professionalId !== undefined && dto.professionalId !== item.professionalId) {
+        let newName = "sem profissional";
+        if (dto.professionalId !== null) {
+          // O profissional tem de ser DESTE negócio (nunca confiar no id do body).
+          const professional = await tx.professional.findFirst({
+            where: { id: dto.professionalId, tenantId },
+            select: { id: true, user: { select: { name: true } } },
+          });
+          if (!professional) throw new NotFoundException("Profissional não encontrado.");
+          newName = professional.user.name;
+        }
+        data.professionalId = dto.professionalId;
+        changes.push(`profissional ${item.professional?.user.name ?? "sem profissional"} → ${newName}`);
+      }
+
+      if (changes.length === 0) return; // nada mudou: sem escrita e sem histórico
+      await tx.ticketItem.update({ where: { id: itemId }, data });
+      await this.audit(tx, tenantId, userId, id, TicketAuditAction.ITEM_UPDATED, `Item "${item.description}": ${changes.join("; ")}`);
+    });
+    return this.serialize(await this.getOpenOrAny(tenantId, id));
+  }
+
+  // Observação da comanda aberta: texto troca, null limpa.
+  async setNote(tenantId: string, id: string, dto: SetTicketNoteDto) {
+    await this.lockedOpenTicket(tenantId, id, async (tx) => {
+      const note = dto.note === null || dto.note.trim() === "" ? null : dto.note.trim();
+      await tx.ticket.update({ where: { id }, data: { note } });
+    });
+    return this.serialize(await this.getOpenOrAny(tenantId, id));
+  }
+
+  // Estorna um pagamento lançado errado numa comanda ABERTA (é o que destrava corrigir ou cancelar). O dinheiro de um caixa JÁ
+  // FECHADO não pode sumir: o fechamento do caixa foi conferido contra esses pagamentos.
+  async removePayment(tenantId: string, userId: string, id: string, paymentId: string, dto: TicketReasonDto) {
+    await this.lockedOpenTicket(tenantId, id, async (tx) => {
+      const payment = await tx.payment.findFirst({ where: { id: paymentId, ticketId: id, tenantId } });
+      if (!payment) throw new NotFoundException("Pagamento não encontrado.");
+
+      if (payment.cashRegisterId) {
+        const register = await tx.cashRegister.findFirst({ where: { id: payment.cashRegisterId, tenantId }, select: { status: true } });
+        if (register?.status === CashRegisterStatus.CLOSED) {
+          throw new ConflictException(
+            "Este pagamento entrou num caixa que já foi fechado e conferido, então não pode ser removido. Registre a correção no financeiro.",
+          );
+        }
+      }
+
+      await tx.payment.delete({ where: { id: paymentId } });
+      await this.audit(
+        tx,
+        tenantId,
+        userId,
+        id,
+        TicketAuditAction.PAYMENT_REMOVED,
+        `Pagamento ${payment.method} de ${formatBrl(payment.amountCents)} removido`,
+        dto.reason,
+      );
+    });
+    return this.serialize(await this.getOpenOrAny(tenantId, id));
+  }
+
+  // Reabre uma comanda FECHADA: desfaz TUDO o que o fechamento gerou, na mesma transação e na ordem em que cada passo pode recusar
+  // (comissão já repassada) antes de qualquer mudança definitiva. Os pagamentos ficam (continuam valendo se a comanda for fechada de
+  // novo; se precisar tirar, é o estorno de pagamento). A comanda volta a ABERTA e o cálculo (clube, total) volta a ser feito na hora.
+  async reopen(tenantId: string, userId: string, id: string, dto: TicketReasonDto) {
+    await this.lockedClosedTicket(tenantId, id, async (tx, ticket) => {
+      const commissions = await this.commissions.reverseForTicket(tx, tenantId, id);
+      const income = await this.finance.reverseTicketIncome(tx, tenantId, id);
+      const stock = await this.products.reverseSales(
+        tx,
+        tenantId,
+        ticket.items.map((item) => item.id),
+      );
+      const club = await this.club.releaseUsage(tx, tenantId, id);
+
+      await tx.ticket.update({
+        where: { id },
+        data: { status: TicketStatus.OPEN, closedAt: null, clubCoveredCents: 0 },
+      });
+
+      await this.audit(
+        tx,
+        tenantId,
+        userId,
+        id,
+        TicketAuditAction.REOPENED,
+        `Comanda reaberta: ${income.reversed ? "receita estornada" : "sem receita a estornar"}, ${commissions.count} comissão(ões) desfeita(s), ${stock.count} baixa(s) de estoque devolvida(s), ${club.count} uso(s) do clube devolvido(s)`,
+        dto.reason,
+      );
+    });
+    // Serializa DEPOIS do commit: a cobertura do clube é lida fora da transação e precisa enxergar os usos já devolvidos.
+    return this.serialize(await this.getOpenOrAny(tenantId, id));
+  }
+
+  async history(tenantId: string, id: string) {
+    // A comanda precisa ser DESTE negócio (mesmo 404 de inexistente); o histórico só é lido depois disso.
+    await this.getOpenOrAny(tenantId, id);
+    const rows = await this.prisma.ticketAuditLog.findMany({
+      where: { tenantId, ticketId: id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { id: true, action: true, actorName: true, reason: true, detail: true, createdAt: true },
+    });
+    return rows;
+  }
+
   async cancel(tenantId: string, id: string) {
     await this.lockedOpenTicket(tenantId, id, async (tx, ticket) => {
       if (ticket.payments.length > 0) {
@@ -370,6 +523,39 @@ export class TicketsService {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id})::bigint)`;
       const ticket = await this.requireOpen(tenantId, id, tx);
       return fn(tx, ticket);
+    });
+  }
+
+  // Mesmo lock por comanda, mas para uma comanda FECHADA (reabertura). O status é relido DENTRO do lock: dois "reabrir"
+  // simultâneos não desfazem a receita/comissão duas vezes.
+  private lockedClosedTicket<T>(
+    tenantId: string,
+    id: string,
+    fn: (tx: Prisma.TransactionClient, ticket: TicketWithRelations) => Promise<T>,
+  ): Promise<T> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id})::bigint)`;
+      const ticket = await this.getOpenOrAny(tenantId, id, tx);
+      if (ticket.status !== TicketStatus.CLOSED) {
+        throw new ConflictException("Só uma comanda fechada pode ser reaberta.");
+      }
+      return fn(tx, ticket);
+    });
+  }
+
+  // Histórico de quem mexeu em dinheiro já lançado. O nome de quem agiu fica GRAVADO (o usuário pode ser excluído depois).
+  private async audit(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    userId: string,
+    ticketId: string,
+    action: TicketAuditAction,
+    detail: string,
+    reason?: string,
+  ) {
+    const actor = await tx.user.findFirst({ where: { id: userId, tenantId }, select: { name: true } });
+    await tx.ticketAuditLog.create({
+      data: { tenantId, ticketId, action, actorUserId: userId, actorName: actor?.name ?? "Usuário", reason: reason ?? null, detail },
     });
   }
 

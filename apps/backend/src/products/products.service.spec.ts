@@ -85,3 +85,21 @@ describe("ProductsService", () => {
   });
 });
 
+describe("ProductsService.reverseSales (reabertura de comanda)", () => {
+  it("apaga só as baixas de VENDA dos itens da comanda, deste negócio", async () => {
+    const { service } = build();
+    const tx = { stockMovement: { deleteMany: jest.fn().mockResolvedValue({ count: 2 }) } };
+    const result = await service.reverseSales(tx as never, "t-1", ["it-1", "it-2"]);
+    expect(result.count).toBe(2);
+    expect(tx.stockMovement.deleteMany).toHaveBeenCalledWith({
+      where: { tenantId: "t-1", kind: "SALE", ticketItemId: { in: ["it-1", "it-2"] } },
+    });
+  });
+
+  it("sem itens não consulta nada (e nunca apaga movimento manual)", async () => {
+    const { service } = build();
+    const tx = { stockMovement: { deleteMany: jest.fn() } };
+    expect(await service.reverseSales(tx as never, "t-1", [])).toEqual({ count: 0 });
+    expect(tx.stockMovement.deleteMany).not.toHaveBeenCalled();
+  });
+});

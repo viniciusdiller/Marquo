@@ -77,3 +77,35 @@ describe("ConfirmDialog", () => {
     expect(screen.getByRole("button", { name: "Voltar" })).toBeDisabled();
   });
 });
+
+describe("ConfirmDialog: conteúdo extra e confirmação condicionada", () => {
+  it("mostra o conteúdo extra (children) dentro do diálogo", () => {
+    render(
+      <ConfirmDialog open onOpenChange={() => {}} title="Título" onConfirm={() => {}}>
+        <input aria-label="campo extra" />
+      </ConfirmDialog>,
+    );
+    expect(screen.getByRole("alertdialog")).toContainElement(screen.getByLabelText("campo extra"));
+  });
+
+  it("confirmDisabled desabilita o botão de confirmar sem impedir cancelar", async () => {
+    const onConfirm = vi.fn();
+    const onOpenChange = vi.fn();
+    const user = userEvent.setup();
+    render(<ConfirmDialog open onOpenChange={onOpenChange} title="Título" confirmLabel="Ok" cancelLabel="Voltar" confirmDisabled onConfirm={onConfirm} />);
+
+    expect(screen.getByRole("button", { name: "Ok" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Ok" }));
+    expect(onConfirm).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Voltar" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("sem children e sem confirmDisabled o comportamento é o de sempre", async () => {
+    const onConfirm = vi.fn();
+    const user = userEvent.setup();
+    render(<ConfirmDialog open onOpenChange={() => {}} title="Título" confirmLabel="Ok" onConfirm={onConfirm} />);
+    await user.click(screen.getByRole("button", { name: "Ok" }));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+});

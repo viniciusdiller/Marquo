@@ -380,6 +380,18 @@ export interface TicketItem {
   professional: { id: string | null; name: string } | null;
 }
 
+export type TicketAuditAction = "ITEM_UPDATED" | "PAYMENT_REMOVED" | "REOPENED";
+
+/** Histórico de alterações da comanda (só o dono vê): quem mexeu em dinheiro já lançado, e por quê. */
+export interface TicketAuditEntry {
+  id: string;
+  action: TicketAuditAction;
+  actorName: string;
+  reason: string | null;
+  detail: string;
+  createdAt: string;
+}
+
 export interface TicketPayment {
   id: string;
   method: PaymentMethod;

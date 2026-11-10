@@ -194,6 +194,7 @@ model Tenant {
   clubPlans           ClubPlan[]
   clubMemberships     ClubMembership[]
   clubUsages          ClubUsage[]
+  ticketAuditLogs     TicketAuditLog[]
   galleryImages       TenantGalleryImage[]
   intakeForms         IntakeForm[]
   intakeResponses     IntakeResponse[]
@@ -633,6 +634,7 @@ model Ticket {
   commissionEntries CommissionEntry[]
   financialEntry    FinancialEntry?
   clubUsages        ClubUsage[]
+  auditLogs         TicketAuditLog[]
 
   @@index([tenantId, status])
   @@index([tenantId, openedAt])
@@ -1262,4 +1264,33 @@ model ClubUsage {
 
   @@index([membershipId, periodStart])
   @@index([ticketId])
+}
+
+// ---- Histórico de alterações da comanda ----
+// Quem mexeu em dinheiro depois do lançamento e por quê: remover pagamento, mudar item, reabrir comanda fechada. Sem FK para o
+// usuário de propósito (mesmo padrão do AdminAuditLog): o histórico sobrevive à exclusão de quem agiu, e o nome fica gravado.
+enum TicketAuditAction {
+  ITEM_UPDATED
+  PAYMENT_REMOVED
+  REOPENED
+}
+
+model TicketAuditLog {
+  id          String            @id @default(uuid())
+  tenantId    String
+  ticketId    String
+  action      TicketAuditAction
+  actorUserId String
+  actorName   String
+  // Motivo informado por quem agiu (obrigatório em estorno e reabertura).
+  reason      String?
+  // Resumo curto e sem dado pessoal do cliente (valores, quantidades, nomes de serviço/profissional).
+  detail      String
+  createdAt   DateTime          @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@index([tenantId, createdAt])
 }

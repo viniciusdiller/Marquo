@@ -70,3 +70,32 @@ describe("FinanceService.recordTicketIncome: comanda de total zero", () => {
     expect(tx.financialEntry.create.mock.calls[0][0].data).toMatchObject({ source: "TICKET", amountCents: 4500, ticketId: "tk-1" });
   });
 });
+
+describe("FinanceService.reverseTicketIncome (reabertura de comanda)", () => {
+  function setup(entry: unknown) {
+    const tx = { financialEntry: { findFirst: jest.fn().mockResolvedValue(entry), update: jest.fn() } };
+    return { tx, service: new FinanceService({} as PrismaService) };
+  }
+
+  // Não apaga: fica CANCELADO e solto da comanda (ticketId é único: fechar de novo cria outro), com o motivo na descrição.
+  it("cancela a receita, solta da comanda e registra o motivo na descrição (o histórico financeiro se mantém)", async () => {
+    const { tx, service } = setup({ id: "e-1", description: "Venda (comanda)" });
+    expect(await service.reverseTicketIncome(tx as never, "t-1", "tk-1")).toEqual({ reversed: true });
+    expect(tx.financialEntry.update).toHaveBeenCalledWith({
+      where: { id: "e-1" },
+      data: { status: "CANCELED", ticketId: null, description: "Venda (comanda) (estornada: comanda reaberta)" },
+    });
+  });
+
+  it("procura só a receita DE COMANDA deste negócio e desta comanda", async () => {
+    const { tx, service } = setup(null);
+    await service.reverseTicketIncome(tx as never, "t-1", "tk-1");
+    expect(tx.financialEntry.findFirst.mock.calls[0][0].where).toEqual({ tenantId: "t-1", ticketId: "tk-1", source: "TICKET" });
+  });
+
+  it("comanda sem receita (totalmente coberta pelo clube): nada a estornar", async () => {
+    const { tx, service } = setup(null);
+    expect(await service.reverseTicketIncome(tx as never, "t-1", "tk-1")).toEqual({ reversed: false });
+    expect(tx.financialEntry.update).not.toHaveBeenCalled();
+  });
+});
