@@ -333,6 +333,11 @@ export class ClubService {
     return { ...coverage, membership: { id: membership.id, periodStart: membership.periodStart } };
   }
 
+  // Reabertura de comanda (mesma transação): devolve os usos que o fechamento baixou. Ao fechar de novo, a cobertura é recalculada.
+  async releaseUsage(tx: Prisma.TransactionClient, tenantId: string, ticketId: string): Promise<{ count: number }> {
+    return tx.clubUsage.deleteMany({ where: { tenantId, ticketId } });
+  }
+
   // Grava a baixa dos usos (uma linha por item coberto) na transação do fechamento.
   async recordUsage(tx: Prisma.TransactionClient, tenantId: string, ticketId: string, coverage: TicketCoverage): Promise<void> {
     if (!coverage.membership || coverage.lines.length === 0) return;

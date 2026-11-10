@@ -426,3 +426,12 @@ describe("ClubService.coverageForTicket", () => {
     expect(tx.clubUsage.createMany).not.toHaveBeenCalled();
   });
 });
+
+describe("ClubService.releaseUsage (reabertura de comanda)", () => {
+  it("devolve os usos que o fechamento baixou, só desta comanda e deste negócio", async () => {
+    const { service } = build();
+    const tx = { clubUsage: { deleteMany: jest.fn().mockResolvedValue({ count: 2 }) } };
+    expect(await service.releaseUsage(tx as never, "t-1", "tk-1")).toEqual({ count: 2 });
+    expect(tx.clubUsage.deleteMany).toHaveBeenCalledWith({ where: { tenantId: "t-1", ticketId: "tk-1" } });
+  });
+});

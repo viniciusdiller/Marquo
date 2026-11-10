@@ -416,6 +416,45 @@ export class CommissionsService {
     }
   }
 
+  // Reabertura de comanda (mesma transação): apaga as comissões geradas no fechamento, que serão recalculadas ao fechar de novo.
+  // O saldo a repassar é DERIVADO (comissões − repasses): se o profissional já recebeu o que sobraria depois de tirar esta
+  // comanda, apagar deixaria o saldo NEGATIVO (dinheiro pago sem comissão que o justifique). Nesse caso recusa, e o dono resolve o
+  // repasse antes. O lock é o mesmo do repasse (`commission-payout:<profissional>`), então um repasse simultâneo não passa por baixo.
+  async reverseForTicket(tx: Prisma.TransactionClient, tenantId: string, ticketId: string): Promise<{ count: number }> {
+    const entries = await tx.commissionEntry.findMany({
+      where: { tenantId, ticketId },
+      select: { professionalId: true, amountCents: true, professional: { select: { user: { select: { name: true } } } } },
+    });
+    if (entries.length === 0) return { count: 0 };
+
+    const byProfessional = new Map<string, { cents: number; name: string }>();
+    for (const entry of entries) {
+      const current = byProfessional.get(entry.professionalId) ?? { cents: 0, name: entry.professional.user.name };
+      current.cents += entry.amountCents;
+      byProfessional.set(entry.professionalId, current);
+    }
+
+    // Ordem fixa dos locks (evita deadlock entre duas reaberturas que envolvam os mesmos profissionais).
+    const ids = [...byProfessional.keys()].sort();
+    for (const id of ids) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`commission-payout:${id}`})::bigint)`;
+    }
+    for (const id of ids) {
+      const [accrued, paid] = await Promise.all([
+        tx.commissionEntry.aggregate({ where: { tenantId, professionalId: id }, _sum: { amountCents: true } }),
+        tx.commissionPayout.aggregate({ where: { tenantId, professionalId: id }, _sum: { amountCents: true } }),
+      ]);
+      const after = (accrued._sum.amountCents ?? 0) - byProfessional.get(id)!.cents;
+      if (after < (paid._sum.amountCents ?? 0)) {
+        throw new ConflictException(
+          `Não dá para reabrir: a comissão de ${byProfessional.get(id)!.name} desta comanda já foi repassada. Resolva o repasse antes de reabrir.`,
+        );
+      }
+    }
+
+    return tx.commissionEntry.deleteMany({ where: { tenantId, ticketId } });
+  }
+
   private pickRule(rules: RuleForMatch[], item: TicketItemForCommission): RuleForMatch | null {
     const targetId = item.kind === TicketItemKind.SERVICE ? item.serviceId : item.productId;
     const forPro = rules.filter((r) => r.professionalId === item.professionalId);

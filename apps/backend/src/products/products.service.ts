@@ -141,6 +141,15 @@ export class ProductsService {
     return new Map(rows.map((row) => [row.productId, row._sum.quantity ?? 0]));
   }
 
+  // Reabertura de comanda (mesma transação): desfaz a baixa de estoque das vendas dos itens. O saldo do produto é DERIVADO dos
+  // movimentos, então apagar o movimento SALE do item devolve a unidade; fechar de novo cria outro (ticketItemId é único).
+  async reverseSales(tx: Prisma.TransactionClient, tenantId: string, ticketItemIds: string[]) {
+    if (ticketItemIds.length === 0) return { count: 0 };
+    return tx.stockMovement.deleteMany({
+      where: { tenantId, kind: StockMovementKind.SALE, ticketItemId: { in: ticketItemIds } },
+    });
+  }
+
   // Usado pelo fechamento de comanda (mesma transação): baixa de venda amarrada ao item.
   async registerSale(
     tx: Prisma.TransactionClient,

@@ -269,6 +269,25 @@ export class FinanceService {
     });
   }
 
+  // Reabertura de comanda (mesma transação): estorna a receita lançada no fechamento. NÃO apaga: o lançamento fica CANCELADO e solto
+  // da comanda (ticketId é único: fechar de novo cria outro) e a descrição registra o motivo, então o histórico financeiro se mantém.
+  async reverseTicketIncome(tx: Prisma.TransactionClient, tenantId: string, ticketId: string) {
+    const entry = await tx.financialEntry.findFirst({
+      where: { tenantId, ticketId, source: FinancialEntrySource.TICKET },
+      select: { id: true, description: true },
+    });
+    if (!entry) return { reversed: false };
+    await tx.financialEntry.update({
+      where: { id: entry.id },
+      data: {
+        status: FinancialEntryStatus.CANCELED,
+        ticketId: null,
+        description: `${entry.description} (estornada: comanda reaberta)`,
+      },
+    });
+    return { reversed: true };
+  }
+
   // Mensalidade do clube de assinaturas marcada como paga pelo dono (o dinheiro entrou FORA do sistema). Receita já paga,
   // protegida (source CLUB): não se edita como lançamento manual. Roda na transação da adesão/renovação.
   // Categoria: "Clube de assinaturas", senão "Outras receitas", senão sem categoria. NUNCA cria categoria aqui: criar a
