@@ -19,6 +19,9 @@ export interface CepLookupResult {
   state?: string;
   latitude?: number | null;
   longitude?: number | null;
+  // Quão preciso é o ponto: "street" = a rua foi achada no mapa; "neighborhood" = só o bairro (aproximado, a pessoa deve
+  // arrastar o pin). Sem coordenada, nenhum dos dois.
+  precision?: "street" | "neighborhood";
 }
 
 export interface ReverseGeocodeResult {
@@ -54,6 +57,63 @@ function fail(err: unknown): MarketplaceActionState {
   return { error: err instanceof ApiError ? err.message : "Erro inesperado." };
 }
 
+const NOMINATIM_HEADERS = {
+  "User-Agent": "Marquo-App/1.0 (contato@marquo.com.br)",
+  Accept: "application/json",
+};
+
+// Primeira coordenada que o Nominatim (OpenStreetMap) devolve para a consulta, ou null (sem resultado, erro ou demora).
+async function nominatimFirst(query: string): Promise<{ latitude: number; longitude: number } | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=br&limit=1&${query}`, {
+      signal: controller.signal,
+      headers: NOMINATIM_HEADERS,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+    const latitude = Number(data[0].lat);
+    const longitude = Number(data[0].lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    return { latitude: Number(latitude.toFixed(6)), longitude: Number(longitude.toFixed(6)) };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// "Porto da Roça II (Bacaxá)" → ["Bacaxá", "Porto da Roça II"]: o OpenStreetMap costuma conhecer o nome do bairro maior, não o
+// loteamento. Sem parênteses, devolve o próprio nome.
+function neighborhoodNames(neighborhood: string): string[] {
+  const inside = neighborhood.match(/\(([^)]+)\)/)?.[1]?.trim();
+  const outside = neighborhood.replace(/\([^)]*\)/g, "").trim();
+  return [inside, outside].filter((n): n is string => !!n);
+}
+
+// Ponto no mapa para o endereço de um CEP. NUNCA usa a coordenada que a BrasilAPI manda junto: ela é a do CENTRO DA CIDADE
+// (a mesma para todos os CEPs de uma cidade), então toda busca caía no mesmo lugar. Tenta a rua; se o mapa não a conhece,
+// cai para o bairro (aproximado); sem nenhum dos dois, não inventa ponto.
+async function geocodeCepAddress(
+  street: string,
+  neighborhood: string,
+  city: string,
+  state: string,
+): Promise<{ latitude: number; longitude: number; precision: "street" | "neighborhood" } | null> {
+  if (street) {
+    const found = await nominatimFirst(`street=${encodeURIComponent(street)}&city=${encodeURIComponent(city)}`);
+    if (found) return { ...found, precision: "street" };
+  }
+  for (const name of neighborhoodNames(neighborhood)) {
+    const place = [name, city, state].filter(Boolean).join(", ");
+    const found = await nominatimFirst(`q=${encodeURIComponent(place)}`);
+    if (found) return { ...found, precision: "neighborhood" };
+  }
+  return null;
+}
+
 export async function lookupCepAction(rawCep: string): Promise<CepLookupResult> {
   const cleanCep = rawCep.replace(/\D/g, "");
   if (cleanCep.length !== 8) {
@@ -64,10 +124,8 @@ export async function lookupCepAction(rawCep: string): Promise<CepLookupResult> 
   let neighborhood = "";
   let city = "";
   let state = "";
-  let latitude: number | null = null;
-  let longitude: number | null = null;
 
-  // 1. Tenta BrasilAPI v2 (contém as coordenadas geográficas oficiais do CEP brasileiro)
+  // 1. BrasilAPI v2: só o endereço. (Ela também devolve coordenadas, mas são as do centro da cidade: ver geocodeCepAddress.)
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
@@ -82,16 +140,6 @@ export async function lookupCepAction(rawCep: string): Promise<CepLookupResult> 
       neighborhood = data.neighborhood ?? "";
       city = data.city ?? "";
       state = data.state ?? "";
-
-      const coords = data.location?.coordinates;
-      if (coords?.latitude && coords?.longitude) {
-        const parsedLat = Number(coords.latitude);
-        const parsedLng = Number(coords.longitude);
-        if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
-          latitude = Number(parsedLat.toFixed(6));
-          longitude = Number(parsedLng.toFixed(6));
-        }
-      }
     }
   } catch {
     // BrasilAPI falhou, tenta ViaCEP
@@ -128,32 +176,8 @@ export async function lookupCepAction(rawCep: string): Promise<CepLookupResult> 
     };
   }
 
-  // 3. Se ainda não tem coordenadas exatas, faz geocodificação estruturada
-  if (latitude === null && street) {
-    try {
-      const structuredUrl = `https://nominatim.openstreetmap.org/search?format=json&street=${encodeURIComponent(street)}&city=${encodeURIComponent(city)}${state ? `&state=${encodeURIComponent(state)}` : ""}&countrycodes=br&limit=1`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
-      const geoRes = await fetch(structuredUrl, {
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "Marquo-App/1.0 (contato@marquo.com.br)",
-          Accept: "application/json",
-        },
-      });
-      clearTimeout(timeout);
-
-      if (geoRes.ok) {
-        const geoData = await geoRes.json();
-        if (Array.isArray(geoData) && geoData.length > 0) {
-          latitude = Number(Number(geoData[0].lat).toFixed(6));
-          longitude = Number(Number(geoData[0].lon).toFixed(6));
-        }
-      }
-    } catch {
-      // Falha silenciosa
-    }
-  }
+  // 3. Ponto no mapa pela rua (ou, se o mapa não a conhece, pelo bairro).
+  const point = await geocodeCepAddress(street, neighborhood, city, state);
 
   return {
     ok: true,
@@ -161,8 +185,9 @@ export async function lookupCepAction(rawCep: string): Promise<CepLookupResult> 
     neighborhood,
     city,
     state,
-    latitude,
-    longitude,
+    latitude: point?.latitude ?? null,
+    longitude: point?.longitude ?? null,
+    precision: point?.precision,
   };
 }
 

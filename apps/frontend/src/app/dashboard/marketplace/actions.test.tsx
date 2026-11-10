@@ -24,36 +24,115 @@ describe("Marketplace Geolocation Actions", () => {
       expect(res.error).toMatch(/8 dígitos/i);
     });
 
-    it("busca com sucesso via BrasilAPI v2 com coordenadas oficiais", async () => {
+    // Regressão: a BrasilAPI manda a mesma coordenada (o centro da cidade) para TODOS os CEPs de uma cidade. Usá-la fazia a
+    // busca por CEP cair sempre no mesmo lugar. O ponto vem do geocodificador, pela rua.
+    const CITY_CENTER = { latitude: "-22.89889", longitude: "-42.46985" };
+
+    function mockServices(opts: { street: string; neighborhood: string; nominatim: (url: string) => unknown[] }) {
+      const nominatimUrls: string[] = [];
       global.fetch = vi.fn().mockImplementation(async (url: string) => {
         if (url.includes("brasilapi.com.br/api/cep/v2/")) {
           return {
             ok: true,
             json: async () => ({
-              street: "Avenida Paulista",
-              neighborhood: "Bela Vista",
-              city: "São Paulo",
-              state: "SP",
-              location: {
-                coordinates: {
-                  latitude: "-23.561500",
-                  longitude: "-46.655900",
-                },
-              },
+              street: opts.street,
+              neighborhood: opts.neighborhood,
+              city: "Saquarema",
+              state: "RJ",
+              location: { coordinates: CITY_CENTER },
             }),
           } as Response;
         }
+        if (url.includes("nominatim.openstreetmap.org/search")) {
+          nominatimUrls.push(url);
+          return { ok: true, json: async () => opts.nominatim(url) } as Response;
+        }
         return { ok: false } as Response;
       });
+      return nominatimUrls;
+    }
 
-      const res = await lookupCepAction("01310-100");
+    it("ignora a coordenada da BrasilAPI (centro da cidade) e localiza pela rua", async () => {
+      mockServices({
+        street: "Rua Capitão Nunes",
+        neighborhood: "Barreira (Bacaxá)",
+        nominatim: () => [{ lat: "-22.890500", lon: "-42.493330" }],
+      });
+
+      const res = await lookupCepAction("28994-500");
 
       expect(res.ok).toBe(true);
-      expect(res.street).toBe("Avenida Paulista");
-      expect(res.neighborhood).toBe("Bela Vista");
-      expect(res.city).toBe("São Paulo");
-      expect(res.latitude).toBe(-23.5615);
-      expect(res.longitude).toBe(-46.6559);
+      expect(res.street).toBe("Rua Capitão Nunes");
+      expect(res.city).toBe("Saquarema");
+      expect(res.latitude).toBe(-22.8905);
+      expect(res.longitude).toBe(-42.49333);
+      expect(res.precision).toBe("street");
+      // Nunca o ponto do centro da cidade.
+      expect(res.latitude).not.toBe(Number(CITY_CENTER.latitude));
+    });
+
+    it("dois CEPs da mesma cidade dão pontos diferentes", async () => {
+      const points: Record<string, { lat: string; lon: string }> = {
+        "Rua A": { lat: "-22.9", lon: "-42.4" },
+        "Rua B": { lat: "-22.8", lon: "-42.5" },
+      };
+      mockServices({
+        street: "Rua A",
+        neighborhood: "Centro",
+        nominatim: (url) => [points[decodeURIComponent(url.match(/street=([^&]+)/)![1])]],
+      });
+      const first = await lookupCepAction("28990-100");
+      mockServices({
+        street: "Rua B",
+        neighborhood: "Centro",
+        nominatim: (url) => [points[decodeURIComponent(url.match(/street=([^&]+)/)![1])]],
+      });
+      const second = await lookupCepAction("28990-200");
+
+      expect(first.latitude).not.toBe(second.latitude);
+      expect(first.longitude).not.toBe(second.longitude);
+    });
+
+    it("rua desconhecida no mapa: cai para o bairro (aproximado), tentando o nome entre parênteses", async () => {
+      const urls = mockServices({
+        street: "Rua Jaime Warde Carvalho",
+        neighborhood: "Porto da Roça II (Bacaxá)",
+        nominatim: (url) => (url.includes("street=") ? [] : decodeURIComponent(url).includes("q=Bacaxá,") ? [{ lat: "-22.8939", lon: "-42.4663" }] : []),
+      });
+
+      const res = await lookupCepAction("28994-366");
+
+      expect(res.ok).toBe(true);
+      expect(res.latitude).toBe(-22.8939);
+      expect(res.longitude).toBe(-42.4663);
+      expect(res.precision).toBe("neighborhood");
+      expect(urls.some((u) => u.includes("street="))).toBe(true);
+    });
+
+    it("sem rua nem bairro no mapa: devolve o endereço sem coordenada (não inventa ponto)", async () => {
+      mockServices({ street: "Rua X", neighborhood: "Bairro Y", nominatim: () => [] });
+
+      const res = await lookupCepAction("28990-300");
+
+      expect(res.ok).toBe(true);
+      expect(res.city).toBe("Saquarema");
+      expect(res.latitude).toBeNull();
+      expect(res.longitude).toBeNull();
+      expect(res.precision).toBeUndefined();
+    });
+
+    it("geocodificador fora do ar: o endereço continua preenchido, sem coordenada", async () => {
+      global.fetch = vi.fn().mockImplementation(async (url: string) => {
+        if (url.includes("brasilapi.com.br")) {
+          return { ok: true, json: async () => ({ street: "Rua X", neighborhood: "Centro", city: "Saquarema", state: "RJ", location: { coordinates: CITY_CENTER } }) } as Response;
+        }
+        throw new Error("rede");
+      });
+
+      const res = await lookupCepAction("28990-400");
+
+      expect(res.ok).toBe(true);
+      expect(res.latitude).toBeNull();
     });
 
     it("faz fallback para ViaCEP quando BrasilAPI falha", async () => {
