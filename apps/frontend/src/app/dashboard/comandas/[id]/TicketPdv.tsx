@@ -244,6 +244,12 @@ export function TicketPdv({
                       {item.professional?.name ?? "sem profissional"} · {brl(item.unitPriceCents)} · adicionado{" "}
                       {formatShortDateTime(item.createdAt)}
                     </p>
+                    {item.clubCoveredUnits > 0 ? (
+                      <p className="mt-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                        Coberto pelo clube
+                        {item.quantity > 1 ? ` (${item.clubCoveredUnits} de ${item.quantity})` : ""}: − {brl(item.clubCoveredCents)}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-zinc-700 dark:text-stone-200">
@@ -399,6 +405,12 @@ export function TicketPdv({
               </span>
             )}
           </div>
+          {ticket.clubCoveredCents > 0 ? (
+            <div className="flex justify-between text-emerald-700 dark:text-emerald-300">
+              <span>Clube de assinaturas</span>
+              <span>− {brl(ticket.clubCoveredCents)}</span>
+            </div>
+          ) : null}
           <div className="flex justify-between border-t border-zinc-200 pt-1 font-semibold text-zinc-900 dark:border-white/10 dark:text-white">
             <span>Total</span>
             <span>{brl(ticket.totalCents)}</span>
