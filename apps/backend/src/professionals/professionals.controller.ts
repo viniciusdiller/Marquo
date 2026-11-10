@@ -18,6 +18,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { Role } from "@marquo/database";
 import { ProfessionalsService } from "./professionals.service";
 import { CreateProfessionalDto } from "./dto/create-professional.dto";
+import { CreateSelfProfessionalDto } from "./dto/create-self-professional.dto";
 import { UpdateProfessionalDto } from "./dto/update-professional.dto";
 import { SetWorkingHoursDto } from "./dto/set-working-hours.dto";
 import { FindPublicProfessionalsQueryDto } from "./dto/find-public-professionals-query.dto";
@@ -36,6 +37,13 @@ export class ProfessionalsController {
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateProfessionalDto) {
     return this.professionalsService.create(user.tenantId, dto);
+  }
+
+  // O dono também atende: vira profissional com a conta que já usa (userId do token, nunca do corpo).
+  @Roles(Role.OWNER)
+  @Post("self")
+  createSelf(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateSelfProfessionalDto) {
+    return this.professionalsService.createForOwner(user.tenantId, user.userId, dto);
   }
 
   @Get()

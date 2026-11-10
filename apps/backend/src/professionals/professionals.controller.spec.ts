@@ -16,7 +16,7 @@ const user = (over: Partial<AuthenticatedUser> = {}): AuthenticatedUser => ({
 });
 
 describe("ProfessionalsController: quem pode chamar o quê", () => {
-  it.each(["create", "update", "remove"] as const)("%s exige OWNER", (handler) => {
+  it.each(["create", "createSelf", "update", "remove"] as const)("%s exige OWNER", (handler) => {
     expect(meta(handler)).toEqual([Role.OWNER]);
   });
 
@@ -47,5 +47,17 @@ describe("ProfessionalsController.findOne / setWorkingHours: PROFESSIONAL só ac
     expect(() =>
       controller.setWorkingHours(user({ role: Role.PROFESSIONAL, professionalId: "p-1" }), "p-2", [] as never),
     ).toThrow(ForbiddenException);
+  });
+});
+
+describe("ProfessionalsController.createSelf: o dono se cadastra como profissional", () => {
+  it("usa o userId e o tenantId do TOKEN (o corpo não tem como apontar para outra conta)", () => {
+    const createForOwner = jest.fn();
+    const controller = new ProfessionalsController({ createForOwner } as never);
+    const dto = { serviceIds: ["s-1"] };
+
+    controller.createSelf(user({ userId: "dono-1", tenantId: "t-9" }), dto as never);
+
+    expect(createForOwner).toHaveBeenCalledWith("t-9", "dono-1", dto);
   });
 });
