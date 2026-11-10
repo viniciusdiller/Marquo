@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import clsx from "clsx";
@@ -18,6 +18,10 @@ interface ConfirmDialogProps {
   isLoading?: boolean;
   /** Erro da última tentativa de confirmar — mostrado dentro do diálogo, sem fechar. */
   errorMessage?: string | null;
+  /** Conteúdo extra entre a descrição e os botões (ex.: campo de motivo). */
+  children?: ReactNode;
+  /** Mantém o botão de confirmar desabilitado (ex.: motivo ainda não preenchido). */
+  confirmDisabled?: boolean;
 }
 
 // Nenhuma ação destrutiva do dashboard (cancelar atendimento/comanda, fechar caixa,
@@ -36,6 +40,8 @@ export function ConfirmDialog({
   onConfirm,
   isLoading = false,
   errorMessage,
+  children,
+  confirmDisabled = false,
 }: ConfirmDialogProps) {
   const reduceMotion = useReducedMotion();
 
@@ -95,6 +101,8 @@ export function ConfirmDialog({
               </p>
             ) : null}
 
+            {children ? <div className="mt-3">{children}</div> : null}
+
             {errorMessage ? (
               <p className="mt-3 text-sm text-red-600 dark:text-red-400">{errorMessage}</p>
             ) : null}
@@ -111,7 +119,7 @@ export function ConfirmDialog({
               <button
                 type="button"
                 onClick={onConfirm}
-                disabled={isLoading}
+                disabled={isLoading || confirmDisabled}
                 className={clsx(
                   "flex-1 rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-50",
                   tone === "danger"
