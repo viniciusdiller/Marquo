@@ -164,6 +164,7 @@ model Tenant {
   listedInMarketplace Boolean @default(false)
   city                String?
   neighborhood        String?
+  cep                 String?
   latitude            Float?
   longitude           Float?
   priceRange          Int? // 1..4 ($ a $$$$)

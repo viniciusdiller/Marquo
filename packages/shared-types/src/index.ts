@@ -212,6 +212,7 @@ export interface MarketplaceSettings {
   address?: string | null;
   city: string | null;
   neighborhood: string | null;
+  cep?: string | null;
   latitude: number | null;
   longitude: number | null;
   priceRange: number | null;
