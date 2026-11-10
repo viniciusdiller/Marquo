@@ -55,8 +55,8 @@ describe('ReportsService', () => {
 
     it('should correctly aggregate services and products from different tickets', async () => {
       jest.spyOn(prisma.ticket, 'findMany').mockResolvedValue([
-        { id: 'ticket-1', discountCents: 0, items: [] },
-        { id: 'ticket-2', discountCents: 0, items: [] },
+        { id: 'ticket-1', discountCents: 0, clubCoveredCents: 0, items: [] },
+        { id: 'ticket-2', discountCents: 0, clubCoveredCents: 0, items: [] },
       ] as any);
 
       jest.spyOn(prisma.ticketItem, 'findMany').mockResolvedValue([

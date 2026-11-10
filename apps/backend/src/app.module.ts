@@ -30,6 +30,7 @@ import { TicketsModule } from "./tickets/tickets.module";
 import { CommissionsModule } from "./commissions/commissions.module";
 import { CashRegisterModule } from "./cash-register/cash-register.module";
 import { FinanceModule } from "./finance/finance.module";
+import { ClubModule } from "./club/club.module";
 import { ConsumerAuthModule } from "./consumer-auth/consumer-auth.module";
 import { MarketplaceModule } from "./marketplace/marketplace.module";
 import { ReviewsModule } from "./reviews/reviews.module";
@@ -70,6 +71,7 @@ import { ReportsModule } from './reports/reports.module';
     CommissionsModule,
     CashRegisterModule,
     FinanceModule,
+    ClubModule,
     ConsumerAuthModule,
     MarketplaceModule,
     ReviewsModule,

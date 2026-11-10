@@ -14,6 +14,8 @@ import { TicketsService } from "../src/tickets/tickets.service";
 import { ProductsService } from "../src/products/products.service";
 import { CommissionsService } from "../src/commissions/commissions.service";
 import { CashRegisterService } from "../src/cash-register/cash-register.service";
+import { ClubService } from "../src/club/club.service";
+import { ClubAccessService } from "../src/club/club-access.service";
 import { FinanceService } from "../src/finance/finance.service";
 import { PaymentsService } from "../src/billing/payments/payments.service";
 import { MercadoPagoClient } from "../src/billing/payments/mercadopago.client";
@@ -33,7 +35,7 @@ const config = new ConfigService({ REDIS_URL: process.env.REDIS_URL, JWT_SECRET:
 const email = new EmailService(new ConfigService({})); // no real email/network calls
 const notifier = new AppointmentNotifierService(db, email, config);
 const appointments = (p: PrismaService, n = notifier) => new AppointmentsService(p, new ClientsService(p), {} as ConsumerAuthService, n);
-const tickets = (p: PrismaService) => new TicketsService(p, new ProductsService(p), new CommissionsService(p), new CashRegisterService(p), new FinanceService(p));
+const tickets = (p: PrismaService) => new TicketsService(p, new ProductsService(p), new CommissionsService(p), new CashRegisterService(p), new FinanceService(p), new ClubService(p, new ClubAccessService(p), new FinanceService(p)));
 let tenantId: string;
 let otherTenantId: string;
 let userId: string;

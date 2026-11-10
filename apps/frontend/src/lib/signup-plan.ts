@@ -37,8 +37,8 @@ export function parsePlanCookie(value: string | undefined | null): PlanTier | nu
   return value && isPlanTier(value) ? value : null;
 }
 
-// Tudo é igual entre os planos, menos o tamanho da equipe (backend: Plan.maxProfessionals). Por isso o texto
-// de cada plano fala de equipe, e não de recursos que os outros "não têm". A frase de apresentação de cada plano
+// Os planos mudam em DUAS coisas: o tamanho da equipe (backend: Plan.maxProfessionals) e o clube de assinaturas (só
+// Profissional e Premium; catálogo único em @marquo/shared-types, conferido no servidor). O resto é igual. A frase de apresentação de cada plano
 // (`audience`) vem do catálogo único (@marquo/shared-types); os PREÇOS vêm de GET /plans, nunca daqui.
 export function teamLabel(maxProfessionals: number | null): string {
   if (maxProfessionals === null) return "Profissionais ilimitados";
@@ -53,6 +53,25 @@ export const INCLUDED_IN_ALL_PLANS = [
   "Comandas, caixa e financeiro",
   "Comissões por profissional",
 ] as const;
+
+export const CLUB_FEATURE_LABEL = "Clube de assinaturas: pacotes mensais para seus clientes";
+// O clube NÃO faz parte do período de teste (o teste usa o plano de entrada, sem clube; ver ClubAccessService no backend):
+// só é liberado quando o dono assina o Profissional ou o Premium. A tela precisa deixar isso evidente antes do cadastro.
+export const CLUB_TRIAL_BADGE = "Só depois de assinar";
+export const CLUB_NOT_IN_TRIAL_NOTICE = `O clube de assinaturas não entra nos ${TRIAL_DAYS_LABEL} grátis: ele é liberado quando você assina o Profissional ou o Premium.`;
+
+export interface PlanFeature {
+  label: string;
+  // Não vale durante o período de teste: só depois de assinar o plano.
+  afterTrialOnly: boolean;
+}
+
+// Lista de recursos de um plano para a tela. `includesClub` vem do catálogo (planCatalogEntry(tier)?.subscriptionClub):
+// aqui não se importa nada de fora para este arquivo continuar testável com node --test.
+export function planFeatures(includesClub: boolean): readonly PlanFeature[] {
+  const base = INCLUDED_IN_ALL_PLANS.map((label) => ({ label, afterTrialOnly: false }));
+  return includesClub ? [...base, { label: CLUB_FEATURE_LABEL, afterTrialOnly: true }] : base;
+}
 
 export function planCookieValue(tier: PlanTier): string {
   return `${PLAN_COOKIE}=${tier}; path=/; max-age=${PLAN_COOKIE_MAX_AGE_S}; samesite=lax`;

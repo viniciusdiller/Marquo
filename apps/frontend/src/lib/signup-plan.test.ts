@@ -48,3 +48,28 @@ describe("teamLabel", () => {
     assert.equal(teamLabel(1), "1 profissional");
   });
 });
+
+describe("planFeatures", () => {
+  it("todos os planos têm a lista básica, disponível já no teste", async () => {
+    const { planFeatures, INCLUDED_IN_ALL_PLANS } = await import("./signup-plan.ts");
+    assert.deepEqual(
+      planFeatures(false),
+      INCLUDED_IN_ALL_PLANS.map((label) => ({ label, afterTrialOnly: false })),
+    );
+  });
+
+  it("o clube só aparece quando o catálogo diz que o plano inclui, e SEMPRE marcado como fora do teste", async () => {
+    const { planFeatures, CLUB_FEATURE_LABEL } = await import("./signup-plan.ts");
+    const features = planFeatures(true);
+    const club = features.find((f) => f.label === CLUB_FEATURE_LABEL);
+    assert.ok(club);
+    assert.equal(club.afterTrialOnly, true);
+    assert.equal(features.filter((f) => f.afterTrialOnly).length, 1);
+  });
+
+  it("o aviso fala dos 14 dias grátis e de assinar o Profissional ou o Premium", async () => {
+    const { CLUB_NOT_IN_TRIAL_NOTICE } = await import("./signup-plan.ts");
+    assert.match(CLUB_NOT_IN_TRIAL_NOTICE, /14 dias grátis/);
+    assert.match(CLUB_NOT_IN_TRIAL_NOTICE, /assina o Profissional ou o Premium/);
+  });
+});

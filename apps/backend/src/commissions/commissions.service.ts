@@ -234,7 +234,7 @@ export class CommissionsService {
       closedAt: { gte: fromDate, lte: toDate },
     };
 
-    const [grossRows, discountedTickets, commissionRows, accruedRows, paidRows] =
+    const [grossRows, discountedTickets, clubUsages, commissionRows, accruedRows, paidRows] =
       await Promise.all([
         // Bruto e nº de comandas por profissional. Raw só pra Σ(preço × qtd), que o groupBy do
         // Prisma não expressa; tudo parametrizado pelo template tag.
@@ -259,6 +259,13 @@ export class CommissionsService {
             discountCents: true,
             items: { select: { professionalId: true, unitPriceCents: true, quantity: true } },
           },
+        }),
+        // Serviços cobertos pelo clube: cada baixa de uso pertence a UM item, então o valor vai direto para o profissional daquele
+        // item (nada de rateio). Entra em "Descontos": a casa não recebeu esse valor, e sem isso a "sobra da casa" ficaria inflada.
+        // A comissão NÃO muda: continua sobre o valor de tabela (decisão de negócio, ver CLAUDE.md).
+        this.prisma.clubUsage.findMany({
+          where: { tenantId, ticket: closedInRange },
+          select: { coveredCents: true, ticketItem: { select: { professionalId: true } } },
         }),
         this.prisma.commissionEntry.groupBy({
           by: ["professionalId"],
@@ -290,6 +297,12 @@ export class CommissionsService {
           (discountByPro.get(item.professionalId) ?? 0) + shares[index],
         );
       });
+    }
+
+    for (const usage of clubUsages) {
+      const professionalId = usage.ticketItem.professionalId;
+      if (!professionalId) continue;
+      discountByPro.set(professionalId, (discountByPro.get(professionalId) ?? 0) + usage.coveredCents);
     }
 
     const sumByPro = (

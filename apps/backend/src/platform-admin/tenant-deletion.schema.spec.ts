@@ -46,6 +46,8 @@ describe("exclusão de dados: cobertura do schema", () => {
     before("CommissionPayout", "Professional");
     before("CommissionEntry", "Professional");
     before("StockMovement", "Product");
+    before("ClubUsage", "ClubMembership");
+    before("ClubMembership", "ClubPlan");
     before("Appointment", "Service");
     before("Appointment", "Professional");
     for (const child of ["Ticket", "CashRegister", "FinancialEntry", "CommissionPayout"]) before(child, "User");

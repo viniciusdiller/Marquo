@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import clsx from "clsx";
-import { ArrowRight, CalendarCheck, Check, CheckCircle, Clock, CreditCard, Gift } from "@phosphor-icons/react/dist/ssr";
+import { ArrowRight, CalendarCheck, Check, CheckCircle, Clock, CreditCard, Gift, LockSimple, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { Button } from "@/components/ui/Button";
 import { type PlanInfo, type PlanTier, formatBRL } from "@/lib/billing";
 import { planCatalogEntry } from "@marquo/shared-types";
-import { INCLUDED_IN_ALL_PLANS, TRIAL_DAYS_LABEL, teamLabel } from "@/lib/signup-plan";
+import { CLUB_NOT_IN_TRIAL_NOTICE, CLUB_TRIAL_BADGE, TRIAL_DAYS_LABEL, planFeatures, teamLabel } from "@/lib/signup-plan";
 import { SignupForm } from "./SignupForm";
 
 type Step = "plan" | "account";
@@ -129,10 +129,19 @@ function PlanStep({
           Escolha o plano do seu negócio
         </h1>
         <p className="mt-3 text-[15px] leading-relaxed text-zinc-600 dark:text-stone-300">
-          Todos os planos têm tudo incluído; muda só o tamanho da equipe. Você começa com {TRIAL_DAYS_LABEL} grátis e
+          Todos os planos têm o essencial; mudam o tamanho da equipe e o clube de assinaturas (a partir do Profissional). Você começa com {TRIAL_DAYS_LABEL} grátis e
           só paga se decidir continuar.
         </p>
         <TrialPromise className="mt-5" />
+        <p
+          role="note"
+          className="mx-auto mt-5 flex max-w-xl items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-left text-sm leading-relaxed text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+        >
+          <WarningCircle size={20} weight="fill" className="mt-0.5 shrink-0 text-amber-500" />
+          <span>
+            <strong className="font-semibold">Atenção:</strong> {CLUB_NOT_IN_TRIAL_NOTICE}
+          </span>
+        </p>
       </div>
 
       <div role="radiogroup" aria-label="Planos disponíveis" className="mt-10 grid gap-4 md:grid-cols-3">
@@ -189,10 +198,21 @@ function PlanStep({
               </p>
 
               <ul className="mt-5 flex flex-col gap-2.5 border-t border-zinc-100 pt-5 dark:border-white/10">
-                {INCLUDED_IN_ALL_PLANS.map((item) => (
-                  <li key={item} className="flex items-start gap-2 text-sm text-zinc-600 dark:text-stone-300">
-                    <Check size={16} weight="bold" className="mt-0.5 shrink-0 text-accent-500 dark:text-accent-300" />
-                    {item}
+                {planFeatures(planCatalogEntry(plan.tier)?.subscriptionClub === true).map((item) => (
+                  <li key={item.label} className="flex items-start gap-2 text-sm text-zinc-600 dark:text-stone-300">
+                    {item.afterTrialOnly ? (
+                      <LockSimple size={16} weight="bold" className="mt-0.5 shrink-0 text-amber-500" />
+                    ) : (
+                      <Check size={16} weight="bold" className="mt-0.5 shrink-0 text-accent-500 dark:text-accent-300" />
+                    )}
+                    <span>
+                      {item.label}
+                      {item.afterTrialOnly ? (
+                        <span className="mt-1.5 block w-fit rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-500/20 dark:text-amber-200">
+                          {CLUB_TRIAL_BADGE} · não entra nos {TRIAL_DAYS_LABEL} grátis
+                        </span>
+                      ) : null}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -235,7 +255,11 @@ function AccountStep({
 }) {
   const timeline = [
     { icon: CalendarCheck, title: "Hoje", text: "Crie sua conta e já comece a usar agenda, clientes e caixa." },
-    { icon: Clock, title: `Por ${TRIAL_DAYS_LABEL}`, text: "Teste tudo sem cartão e sem cobrança." },
+    {
+      icon: Clock,
+      title: `Por ${TRIAL_DAYS_LABEL}`,
+      text: "Teste agenda, clientes e caixa sem cartão e sem cobrança. O clube de assinaturas só é liberado depois de assinar o Profissional ou o Premium.",
+    },
     {
       icon: CreditCard,
       title: "No fim do teste",

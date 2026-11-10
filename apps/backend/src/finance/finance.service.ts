@@ -51,6 +51,7 @@ const formatBrl = (cents: number) =>
 const DEFAULT_CATEGORIES: Array<{ name: string; direction: FinancialDirection }> = [
   { name: "Vendas de serviços", direction: FinancialDirection.INCOME },
   { name: "Vendas de produtos", direction: FinancialDirection.INCOME },
+  { name: "Clube de assinaturas", direction: FinancialDirection.INCOME },
   { name: "Outras receitas", direction: FinancialDirection.INCOME },
   { name: "Comissões", direction: FinancialDirection.EXPENSE },
   { name: "Folha / salários", direction: FinancialDirection.EXPENSE },
@@ -61,6 +62,8 @@ const DEFAULT_CATEGORIES: Array<{ name: string; direction: FinancialDirection }>
 ];
 
 const TICKET_INCOME_CATEGORY = "Vendas de serviços";
+const CLUB_INCOME_CATEGORY = "Clube de assinaturas";
+const OTHER_INCOME_CATEGORY = "Outras receitas";
 const COMMISSION_CATEGORY = "Comissões";
 
 @Injectable()
@@ -243,6 +246,8 @@ export class FinanceService {
     userId: string,
     ticket: { id: string; totalCents: number },
   ) {
+    // Comanda totalmente coberta pelo clube (ou com desconto total): não entra receita de R$ 0,00 no financeiro.
+    if (ticket.totalCents <= 0) return;
     const category = await tx.financialCategory.findFirst({
       where: { tenantId, name: TICKET_INCOME_CATEGORY, direction: FinancialDirection.INCOME },
       select: { id: true },
@@ -259,6 +264,39 @@ export class FinanceService {
         ticketId: ticket.id,
         dueDate: new Date(),
         paidAt: new Date(),
+        createdByUserId: userId,
+      },
+    });
+  }
+
+  // Mensalidade do clube de assinaturas marcada como paga pelo dono (o dinheiro entrou FORA do sistema). Receita já paga,
+  // protegida (source CLUB): não se edita como lançamento manual. Roda na transação da adesão/renovação.
+  // Categoria: "Clube de assinaturas", senão "Outras receitas", senão sem categoria. NUNCA cria categoria aqui: criar a
+  // primeira categoria faria listCategories achar que o negócio já tem as padrão e pular a criação delas.
+  async recordClubIncome(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    userId: string,
+    entry: { amountCents: number; description: string },
+  ) {
+    if (entry.amountCents <= 0) return;
+    const categories = await tx.financialCategory.findMany({
+      where: { tenantId, direction: FinancialDirection.INCOME, name: { in: [CLUB_INCOME_CATEGORY, OTHER_INCOME_CATEGORY] } },
+      select: { id: true, name: true },
+    });
+    const category = categories.find((c) => c.name === CLUB_INCOME_CATEGORY) ?? categories.find((c) => c.name === OTHER_INCOME_CATEGORY);
+    const now = new Date();
+    await tx.financialEntry.create({
+      data: {
+        tenantId,
+        direction: FinancialDirection.INCOME,
+        source: FinancialEntrySource.CLUB,
+        status: FinancialEntryStatus.PAID,
+        description: entry.description,
+        amountCents: entry.amountCents,
+        categoryId: category?.id ?? null,
+        dueDate: now,
+        paidAt: now,
         createdByUserId: userId,
       },
     });

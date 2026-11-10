@@ -43,6 +43,10 @@ export const PURGE_STEPS: { model: string; run: (tx: Tx, tenantId: string) => Pr
   { model: "FinancialEntry", run: (tx, tenantId) => tx.financialEntry.deleteMany({ where: { tenantId } }) },
   { model: "FinancialCategory", run: (tx, tenantId) => tx.financialCategory.deleteMany({ where: { tenantId } }) },
   { model: "Payment", run: (tx, tenantId) => tx.payment.deleteMany({ where: { tenantId } }) },
+  // Clube de assinaturas: usos, adesões e pacotes (a adesão aponta para o pacote com RESTRICT, então sai antes dele).
+  { model: "ClubUsage", run: (tx, tenantId) => tx.clubUsage.deleteMany({ where: { tenantId } }) },
+  { model: "ClubMembership", run: (tx, tenantId) => tx.clubMembership.deleteMany({ where: { tenantId } }) },
+  { model: "ClubPlan", run: (tx, tenantId) => tx.clubPlan.deleteMany({ where: { tenantId } }) },
   { model: "Ticket", run: (tx, tenantId) => tx.ticket.deleteMany({ where: { tenantId } }) },
   { model: "CashRegister", run: (tx, tenantId) => tx.cashRegister.deleteMany({ where: { tenantId } }) },
   { model: "Review", run: (tx, tenantId) => tx.review.deleteMany({ where: { tenantId } }) },

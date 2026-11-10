@@ -90,6 +90,7 @@ export class ClientsService {
         openedAt: true,
         closedAt: true,
         discountCents: true,
+        clubCoveredCents: true,
         items: { select: { id: true, description: true, quantity: true, unitPriceCents: true } },
       },
     });
@@ -100,7 +101,7 @@ export class ClientsService {
         status: t.status,
         openedAt: t.openedAt,
         closedAt: t.closedAt,
-        totalCents: Math.max(0, subtotal - t.discountCents),
+        totalCents: Math.max(0, subtotal - t.discountCents - t.clubCoveredCents),
         items: t.items.map((i) => ({
           id: i.id,
           description: i.description,

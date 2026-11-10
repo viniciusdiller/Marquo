@@ -29,6 +29,7 @@ const baseTicket: Ticket = {
   closedAt: null,
   canceledAt: null,
   discountCents: 0,
+  clubCoveredCents: 0,
   subtotalCents: 5000,
   totalCents: 5000,
   paidCents: 0,
@@ -43,6 +44,8 @@ const baseTicket: Ticket = {
       quantity: 1,
       unitPriceCents: 5000,
       totalCents: 5000,
+      clubCoveredUnits: 0,
+      clubCoveredCents: 0,
       createdAt: "2026-10-06T13:05:00.000Z",
       professional: null,
     },
@@ -166,5 +169,42 @@ describe("TicketPdv", () => {
     await user.click(await screen.findByRole("button", { name: /Carla Souza/ }));
 
     expect(await screen.findByText("Cliente não encontrado.")).toBeInTheDocument();
+  });
+});
+
+describe("TicketPdv: clube de assinaturas", () => {
+  const covered: Ticket = {
+    ...baseTicket,
+    clubCoveredCents: 5000,
+    totalCents: 0,
+    dueCents: 0,
+    items: [{ ...baseTicket.items[0], clubCoveredUnits: 1, clubCoveredCents: 5000 }],
+  };
+
+  it("mostra o abatimento do clube no resumo e no item coberto", () => {
+    render(<TicketPdv initialTicket={covered} services={[]} products={[]} team={[]} />);
+    expect(screen.getByText("Clube de assinaturas")).toBeInTheDocument();
+    expect(screen.getByText(/Coberto pelo clube/)).toHaveTextContent("− R$ 50,00");
+  });
+
+  it("comanda 100% coberta já pode ser fechada sem pagamento (nada a pagar)", () => {
+    render(<TicketPdv initialTicket={covered} services={[]} products={[]} team={[]} />);
+    expect(screen.queryByText("Falta")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Fechar/ })).toBeEnabled();
+  });
+
+  it("item com quantidade maior mostra quantas unidades o clube cobre", () => {
+    const partial: Ticket = {
+      ...covered,
+      items: [{ ...covered.items[0], quantity: 3, unitPriceCents: 5000, totalCents: 15000, clubCoveredUnits: 2, clubCoveredCents: 10000 }],
+    };
+    render(<TicketPdv initialTicket={partial} services={[]} products={[]} team={[]} />);
+    expect(screen.getByText(/Coberto pelo clube \(2 de 3\)/)).toBeInTheDocument();
+  });
+
+  it("cliente fora do clube: nenhuma linha de clube aparece", () => {
+    render(<TicketPdv initialTicket={baseTicket} services={[]} products={[]} team={[]} />);
+    expect(screen.queryByText("Clube de assinaturas")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Coberto pelo clube/)).not.toBeInTheDocument();
   });
 });
