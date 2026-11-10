@@ -2,12 +2,13 @@ import { mkdir, unlink } from "fs/promises";
 import { join } from "path";
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
-import { Role } from "@marquo/database";
+import { Prisma, Role } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
 import { PlanLimitService } from "../billing/plan-limit.service";
 import { hasOverlappingIntervals } from "../common/utils/interval.util";
 import { SLOT_BLOCKING_STATUSES } from "../appointments/appointments.service";
 import { CreateProfessionalDto } from "./dto/create-professional.dto";
+import { CreateSelfProfessionalDto } from "./dto/create-self-professional.dto";
 import { UpdateProfessionalDto } from "./dto/update-professional.dto";
 import { SetWorkingHoursDto } from "./dto/set-working-hours.dto";
 import { UPLOADS_DIR, UPLOADS_URL_PREFIX } from "../common/constants/uploads";
@@ -35,7 +36,11 @@ export class ProfessionalsService {
 
     const passwordHash = await bcrypt.hash(dto.initialPassword, BCRYPT_ROUNDS);
 
+    const serviceIds = this.uniqueServiceIds(dto.serviceIds);
+
     return this.prisma.$transaction(async (tx) => {
+      await this.assertServicesBelongToTenant(tx, tenantId, serviceIds);
+
       const user = await tx.user.create({
         data: {
           tenantId,
@@ -48,10 +53,65 @@ export class ProfessionalsService {
         },
       });
 
-      return tx.professional.create({
+      const professional = await tx.professional.create({
         data: { tenantId, userId: user.id, bio: dto.bio },
         include: { user: { select: { id: true, name: true, email: true } } },
       });
+
+      await this.linkServices(tx, professional.id, serviceIds);
+      return professional;
+    });
+  }
+
+  // O dono também atende: cria o Professional ligado à conta DELE (papel continua OWNER, mesmo e-mail e senha de sempre).
+  // O userId vem do token (nunca do corpo). Conta com e-mail de profissional não passa por aqui: só o dono do negócio.
+  async createForOwner(tenantId: string, userId: string, dto: CreateSelfProfessionalDto) {
+    const owner = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId, role: Role.OWNER, isActive: true },
+      select: { id: true, professional: { select: { id: true } } },
+    });
+    if (!owner) {
+      throw new NotFoundException("Conta não encontrada.");
+    }
+    if (owner.professional) {
+      throw new ConflictException("Você já está cadastrado como profissional.");
+    }
+
+    await this.planLimitService.assertCanAddProfessional(tenantId);
+    const serviceIds = this.uniqueServiceIds(dto.serviceIds);
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.assertServicesBelongToTenant(tx, tenantId, serviceIds);
+
+      const professional = await tx.professional.create({
+        data: { tenantId, userId: owner.id, bio: dto.bio },
+        include: { user: { select: { id: true, name: true, email: true } } },
+      });
+
+      await this.linkServices(tx, professional.id, serviceIds);
+      return professional;
+    });
+  }
+
+  // Sem repetição (o DTO já barra, mas o service não depende dele) e sem valor vazio.
+  private uniqueServiceIds(serviceIds?: string[]): string[] {
+    return [...new Set((serviceIds ?? []).filter(Boolean))];
+  }
+
+  // Cada serviço precisa ser deste negócio (tenantId no WHERE): um id de outro negócio dá o MESMO 404 de um inexistente
+  // e nada é criado (a transação inteira desfaz).
+  private async assertServicesBelongToTenant(tx: Prisma.TransactionClient, tenantId: string, serviceIds: string[]) {
+    if (serviceIds.length === 0) return;
+    const owned = await tx.service.findMany({ where: { id: { in: serviceIds }, tenantId }, select: { id: true } });
+    if (owned.length !== serviceIds.length) {
+      throw new NotFoundException("Serviço não encontrado.");
+    }
+  }
+
+  private async linkServices(tx: Prisma.TransactionClient, professionalId: string, serviceIds: string[]) {
+    if (serviceIds.length === 0) return;
+    await tx.professionalService.createMany({
+      data: serviceIds.map((serviceId) => ({ professionalId, serviceId })),
     });
   }
 

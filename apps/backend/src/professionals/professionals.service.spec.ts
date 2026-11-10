@@ -201,3 +201,162 @@ describe("ProfessionalsService.remove", () => {
     expect(prisma.user.delete).not.toHaveBeenCalled();
   });
 });
+
+describe("ProfessionalsService.create — serviços desde o cadastro", () => {
+  const SERVICE_A = "11111111-1111-4111-8111-111111111111";
+  const SERVICE_B = "22222222-2222-4222-8222-222222222222";
+  const baseDto = { name: "Alex", email: "alex@example.com", initialPassword: "senha-forte-123" };
+
+  function buildCreateMocks(ownedServiceIds: string[]) {
+    const tx = {
+      service: { findMany: jest.fn().mockResolvedValue(ownedServiceIds.map((id) => ({ id }))) },
+      user: { create: jest.fn().mockResolvedValue({ id: "user-1" }) },
+      professional: {
+        create: jest.fn().mockResolvedValue({ id: "prof-1", user: { id: "user-1", name: "Alex", email: "alex@example.com" } }),
+      },
+      professionalService: { createMany: jest.fn().mockResolvedValue({ count: ownedServiceIds.length }) },
+    };
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn().mockImplementation(async (cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    return { prisma, tx };
+  }
+
+  it("vincula os serviços escolhidos ao profissional recém-criado, na mesma transação", async () => {
+    const { prisma, tx } = buildCreateMocks([SERVICE_A, SERVICE_B]);
+    const service = new ProfessionalsService(prisma, buildPlanLimitServiceMock());
+
+    await service.create("tenant-1", { ...baseDto, serviceIds: [SERVICE_A, SERVICE_B] });
+
+    expect(tx.professionalService.createMany).toHaveBeenCalledWith({
+      data: [
+        { professionalId: "prof-1", serviceId: SERVICE_A },
+        { professionalId: "prof-1", serviceId: SERVICE_B },
+      ],
+    });
+  });
+
+  it("confere os serviços no negócio (tenantId no WHERE)", async () => {
+    const { prisma, tx } = buildCreateMocks([SERVICE_A]);
+    const service = new ProfessionalsService(prisma, buildPlanLimitServiceMock());
+
+    await service.create("tenant-1", { ...baseDto, serviceIds: [SERVICE_A] });
+
+    expect(tx.service.findMany).toHaveBeenCalledWith({
+      where: { id: { in: [SERVICE_A] }, tenantId: "tenant-1" },
+      select: { id: true },
+    });
+  });
+
+  // Segurança (IDOR): id de serviço de OUTRO negócio não pode ser vinculado, e não pode sobrar usuário/profissional criado.
+  it("recusa serviço de outro negócio (ou inexistente) com 404 e não cria nada", async () => {
+    const { prisma, tx } = buildCreateMocks([SERVICE_A]); // só A é deste tenant; B não
+    const service = new ProfessionalsService(prisma, buildPlanLimitServiceMock());
+
+    await expect(service.create("tenant-1", { ...baseDto, serviceIds: [SERVICE_A, SERVICE_B] })).rejects.toThrow(NotFoundException);
+
+    expect(tx.user.create).not.toHaveBeenCalled();
+    expect(tx.professional.create).not.toHaveBeenCalled();
+    expect(tx.professionalService.createMany).not.toHaveBeenCalled();
+  });
+
+  it("ids repetidos viram um vínculo só (o service não depende do DTO)", async () => {
+    const { prisma, tx } = buildCreateMocks([SERVICE_A]);
+    const service = new ProfessionalsService(prisma, buildPlanLimitServiceMock());
+
+    await service.create("tenant-1", { ...baseDto, serviceIds: [SERVICE_A, SERVICE_A] });
+
+    expect(tx.service.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: [SERVICE_A] }, tenantId: "tenant-1" } }));
+    expect(tx.professionalService.createMany).toHaveBeenCalledWith({ data: [{ professionalId: "prof-1", serviceId: SERVICE_A }] });
+  });
+
+  it("sem serviços: cria o profissional como antes, sem consultar nem vincular serviço", async () => {
+    const { prisma, tx } = buildCreateMocks([]);
+    const service = new ProfessionalsService(prisma, buildPlanLimitServiceMock());
+
+    await service.create("tenant-1", baseDto);
+    await service.create("tenant-1", { ...baseDto, serviceIds: [] });
+
+    expect(tx.professional.create).toHaveBeenCalledTimes(2);
+    expect(tx.service.findMany).not.toHaveBeenCalled();
+    expect(tx.professionalService.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProfessionalsService.createForOwner — o dono também atende", () => {
+  const SERVICE_A = "11111111-1111-4111-8111-111111111111";
+  const SERVICE_B = "22222222-2222-4222-8222-222222222222";
+
+  function buildSelfMocks(opts: { owner?: unknown; ownedServiceIds?: string[] } = {}) {
+    const owner = "owner" in opts ? opts.owner : { id: "owner-1", professional: null };
+    const tx = {
+      service: { findMany: jest.fn().mockResolvedValue((opts.ownedServiceIds ?? []).map((id) => ({ id }))) },
+      professional: {
+        create: jest.fn().mockResolvedValue({ id: "prof-9", userId: "owner-1", user: { id: "owner-1", name: "Dono", email: "dono@x.com" } }),
+      },
+      professionalService: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    };
+    const prisma = {
+      user: { findFirst: jest.fn().mockResolvedValue(owner) },
+      $transaction: jest.fn().mockImplementation(async (cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    const planLimit = buildPlanLimitServiceMock();
+    return { prisma, tx, planLimit, service: new ProfessionalsService(prisma, planLimit) };
+  }
+
+  it("cria o profissional ligado à conta do dono (userId do token) e vincula os serviços", async () => {
+    const { service, tx } = buildSelfMocks({ ownedServiceIds: [SERVICE_A, SERVICE_B] });
+
+    await service.createForOwner("tenant-1", "owner-1", { bio: "Barbeiro e dono", serviceIds: [SERVICE_A, SERVICE_B] });
+
+    expect(tx.professional.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { tenantId: "tenant-1", userId: "owner-1", bio: "Barbeiro e dono" } }),
+    );
+    expect(tx.professionalService.createMany).toHaveBeenCalledWith({
+      data: [
+        { professionalId: "prof-9", serviceId: SERVICE_A },
+        { professionalId: "prof-9", serviceId: SERVICE_B },
+      ],
+    });
+  });
+
+  // Segurança: só o OWNER ativo DESTE negócio (tenantId e papel no WHERE), nunca por um id vindo do corpo.
+  it("busca a conta com tenantId, papel de dono e ativa no WHERE", async () => {
+    const { service, prisma } = buildSelfMocks();
+    await service.createForOwner("tenant-1", "owner-1", {});
+    expect((prisma.user.findFirst as jest.Mock).mock.calls[0][0].where).toEqual({
+      id: "owner-1",
+      tenantId: "tenant-1",
+      role: "OWNER",
+      isActive: true,
+    });
+  });
+
+  it("conta que não é de dono deste negócio (ou inativa) dá 404 e não cria nada", async () => {
+    const { service, tx } = buildSelfMocks({ owner: null });
+    await expect(service.createForOwner("tenant-1", "outro", {})).rejects.toThrow(NotFoundException);
+    expect(tx.professional.create).not.toHaveBeenCalled();
+  });
+
+  it("dono que já é profissional recebe 409 (não duplica)", async () => {
+    const { service, tx } = buildSelfMocks({ owner: { id: "owner-1", professional: { id: "prof-1" } } });
+    await expect(service.createForOwner("tenant-1", "owner-1", {})).rejects.toThrow(ConflictException);
+    expect(tx.professional.create).not.toHaveBeenCalled();
+  });
+
+  it("respeita o limite de profissionais do plano (o dono conta como um)", async () => {
+    const { service, planLimit, tx } = buildSelfMocks();
+    (planLimit.assertCanAddProfessional as jest.Mock).mockRejectedValue(new ConflictException("Limite atingido"));
+    await expect(service.createForOwner("tenant-1", "owner-1", {})).rejects.toThrow(ConflictException);
+    expect(planLimit.assertCanAddProfessional).toHaveBeenCalledWith("tenant-1");
+    expect(tx.professional.create).not.toHaveBeenCalled();
+  });
+
+  it("serviço de outro negócio dá 404 e não cria o profissional", async () => {
+    const { service, tx } = buildSelfMocks({ ownedServiceIds: [SERVICE_A] });
+    await expect(service.createForOwner("tenant-1", "owner-1", { serviceIds: [SERVICE_A, SERVICE_B] })).rejects.toThrow(NotFoundException);
+    expect(tx.professional.create).not.toHaveBeenCalled();
+    expect(tx.professionalService.createMany).not.toHaveBeenCalled();
+  });
+});

@@ -108,9 +108,12 @@ export class AppointmentNotifierService {
     }
 
     if (staffAllowed && (actor === "CLIENT" || options.alsoConfirmToClient)) {
+      // Sem repetição: o dono que também atende é, ao mesmo tempo, "dono ativo" e "profissional", e receberia o aviso em dobro.
       const staff = [
-        ...appointment.tenant.users.map((user) => user.email),
-        ...(appointment.professional.user.isActive ? [appointment.professional.user.email] : []),
+        ...new Set([
+          ...appointment.tenant.users.map((user) => user.email),
+          ...(appointment.professional.user.isActive ? [appointment.professional.user.email] : []),
+        ]),
       ];
       if (staff.length > 0) {
         sends.push(({ to: staff, ...buildAppointmentEmail({ ...base, audience: "STAFF" }) }));

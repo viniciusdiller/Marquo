@@ -91,6 +91,15 @@ describe("AppointmentNotifierService.deliver", () => {
     expect(semCliente.send).not.toHaveBeenCalled();
   });
 
+  // O dono que também atende é, ao mesmo tempo, "dono ativo" e "profissional": o mesmo e-mail não pode aparecer duas vezes.
+  it("dono que também é o profissional recebe o aviso uma vez só", async () => {
+    const { service, send } = build(
+      hydrated({ professional: { user: { name: "Dono", email: "dono@salao.com", isActive: true } } }),
+    );
+    await service.deliver("CREATED", "a", "t", "CLIENT");
+    expect(send.mock.calls[0][0].to).toEqual(["dono@salao.com"]);
+  });
+
   it("profissional desativado não recebe o aviso (só o dono)", async () => {
     const { service, send } = build(
       hydrated({ professional: { user: { name: "Alex", email: "alex@salao.com", isActive: false } } }),

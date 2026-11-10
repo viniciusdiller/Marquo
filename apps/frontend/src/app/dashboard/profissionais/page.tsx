@@ -16,11 +16,25 @@ interface AdminProfessional {
   user: { id: string; name: string; email?: string };
 }
 
+interface ServiceOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
 export default async function ProfessionalsPage() {
   const session = await auth();
   const isOwner = session?.user.role === "OWNER";
 
-  const professionals = await authedFetch<AdminProfessional[]>("/professionals").catch(() => []);
+  const [professionals, services] = await Promise.all([
+    authedFetch<AdminProfessional[]>("/professionals").catch(() => []),
+    // Só o dono cadastra profissional, então só ele precisa da lista de serviços (para marcar os que o novo profissional faz).
+    isOwner ? authedFetch<ServiceOption[]>("/services").catch(() => [] as ServiceOption[]) : Promise.resolve([] as ServiceOption[]),
+  ]);
+  // O dono que já atende aparece na lista com o e-mail dele; aí a opção "Eu também atendo" some do formulário.
+  const ownerEmail = session?.user.email?.toLowerCase();
+  const ownerIsProfessional = !!ownerEmail && professionals.some((p) => p.user.email?.toLowerCase() === ownerEmail);
+  const activeServices = services.filter((service) => service.isActive).map(({ id, name }) => ({ id, name }));
 
   return (
     <div className="mx-auto w-full max-w-7xl">
@@ -46,7 +60,7 @@ export default async function ProfessionalsPage() {
 
           {isOwner ? (
             <div>
-              <CreateProfessionalForm />
+              <CreateProfessionalForm services={activeServices} selfEmail={ownerIsProfessional ? undefined : ownerEmail} />
             </div>
           ) : null}
         </div>
