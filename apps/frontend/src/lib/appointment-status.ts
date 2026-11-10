@@ -38,6 +38,16 @@ export const STATUS_BLOCK_CLASSES: Record<AppointmentStatus, string> = {
     "border-zinc-200 bg-zinc-50 text-zinc-400 line-through dark:border-white/10 dark:bg-white/[0.03]",
 };
 
+// Faixa lateral do bloco no grid (a cor "forte" do status; o resto do bloco usa a versão suave acima).
+export const STATUS_ACCENT_CLASSES: Record<AppointmentStatus, string> = {
+  SCHEDULED: "border-l-amber-500",
+  CONFIRMED: "border-l-accent-500",
+  IN_SERVICE: "border-l-sky-500",
+  COMPLETED: "border-l-emerald-500",
+  NO_SHOW: "border-l-zinc-400",
+  CANCELED: "border-l-zinc-300 dark:border-l-white/20",
+};
+
 // Pill/badge (painel de detalhe) — mesma paleta do bloco, sem borda/line-through.
 export const STATUS_BADGE_CLASSES: Record<AppointmentStatus, string> = {
   SCHEDULED: "bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300",
@@ -77,6 +87,10 @@ export function getStatusLabel(status: string): string {
 
 export function getStatusBlockClasses(status: string): string {
   return isKnownStatus(status) ? STATUS_BLOCK_CLASSES[status] : UNKNOWN_BLOCK;
+}
+
+export function getStatusAccentClasses(status: string): string {
+  return isKnownStatus(status) ? STATUS_ACCENT_CLASSES[status] : "border-l-zinc-400";
 }
 
 export function getStatusBadgeClasses(status: string): string {
