@@ -39,6 +39,12 @@ export class UpdateMarketplaceDto {
   neighborhood?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  @Trim()
+  cep?: string;
+
+  @IsOptional()
   @IsLatitude()
   latitude?: number;
 

@@ -120,6 +120,7 @@ export class TenantsService {
           address: true,
           city: true,
           neighborhood: true,
+          cep: true,
           latitude: true,
           longitude: true,
           priceRange: true,
