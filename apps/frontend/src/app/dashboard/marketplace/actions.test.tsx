@@ -11,6 +11,7 @@ import {
   reverseGeocodeAction,
   geocodeAddressAction,
   toggleMarketplaceListingAction,
+  saveMarketplaceAction,
 } from "./actions";
 
 describe("Marketplace Geolocation Actions", () => {
@@ -31,7 +32,7 @@ describe("Marketplace Geolocation Actions", () => {
       expect(res.error).toMatch(/8 dígitos/i);
     });
 
-    it("busca com sucesso via BrasilAPI v2 com coordenadas oficiais", async () => {
+    it("busca rua via BrasilAPI e geocodifica as coordenadas da rua via Nominatim", async () => {
       global.fetch = vi.fn().mockImplementation(async (url: string) => {
         if (url.includes("brasilapi.com.br/api/cep/v2/")) {
           return {
@@ -43,11 +44,23 @@ describe("Marketplace Geolocation Actions", () => {
               state: "SP",
               location: {
                 coordinates: {
-                  latitude: "-23.561500",
-                  longitude: "-46.655900",
+                  latitude: "-23.547500", // centro genérico de SP
+                  longitude: "-46.636110",
                 },
               },
             }),
+          } as Response;
+        }
+        if (url.includes("nominatim.openstreetmap.org/search")) {
+          return {
+            ok: true,
+            json: async () => [
+              {
+                lat: "-23.561500", // coordenadas específicas da Avenida Paulista
+                lon: "-46.655900",
+                display_name: "Avenida Paulista, Bela Vista, São Paulo, SP",
+              },
+            ],
           } as Response;
         }
         return { ok: false } as Response;
@@ -59,8 +72,45 @@ describe("Marketplace Geolocation Actions", () => {
       expect(res.street).toBe("Avenida Paulista");
       expect(res.neighborhood).toBe("Bela Vista");
       expect(res.city).toBe("São Paulo");
+      // As coordenadas retornadas devem ser da rua (Nominatim), não o centróide genérico
       expect(res.latitude).toBe(-23.5615);
       expect(res.longitude).toBe(-46.6559);
+    });
+
+    it("usa centróide da BrasilAPI como fallback se Nominatim não encontrar a rua", async () => {
+      global.fetch = vi.fn().mockImplementation(async (url: string) => {
+        if (url.includes("brasilapi.com.br/api/cep/v2/")) {
+          return {
+            ok: true,
+            json: async () => ({
+              street: "Rua Não Cadastrada",
+              neighborhood: "Bairro",
+              city: "Cidade Exemplo",
+              state: "SP",
+              location: {
+                coordinates: {
+                  latitude: "-23.123456",
+                  longitude: "-46.123456",
+                },
+              },
+            }),
+          } as Response;
+        }
+        if (url.includes("nominatim.openstreetmap.org/search")) {
+          return {
+            ok: true,
+            json: async () => [],
+          } as Response;
+        }
+        return { ok: false } as Response;
+      });
+
+      const res = await lookupCepAction("12345-678");
+
+      expect(res.ok).toBe(true);
+      expect(res.street).toBe("Rua Não Cadastrada");
+      expect(res.latitude).toBe(-23.123456);
+      expect(res.longitude).toBe(-46.123456);
     });
 
     it("faz fallback para ViaCEP quando BrasilAPI falha", async () => {
@@ -188,6 +238,41 @@ describe("Marketplace Geolocation Actions", () => {
 
       expect(res.ok).toBeUndefined();
       expect(res.error).toBe("Para aparecer no marketplace, informe a cidade e ao menos uma categoria.");
+    });
+  });
+
+  describe("saveMarketplaceAction", () => {
+    it("envia dados completos com cep formatado para a API", async () => {
+      vi.mocked(authedFetch).mockResolvedValueOnce({ slug: "barbearia-teste" });
+
+      const formData = new FormData();
+      formData.set("listed", "on");
+      formData.set("address", "Avenida Paulista, 1500");
+      formData.set("cep", "01310-100");
+      formData.set("city", "São Paulo");
+      formData.set("neighborhood", "Bela Vista");
+      formData.set("latitude", "-23.5615");
+      formData.set("longitude", "-46.6559");
+      formData.set("priceRange", "2");
+      formData.append("categorySlugs", "barbearia");
+
+      const res = await saveMarketplaceAction({}, formData);
+
+      expect(res.ok).toBe(true);
+      expect(authedFetch).toHaveBeenCalledWith("/tenants/me/marketplace", {
+        method: "PATCH",
+        body: JSON.stringify({
+          listedInMarketplace: true,
+          address: "Avenida Paulista, 1500",
+          cep: "01310100",
+          city: "São Paulo",
+          neighborhood: "Bela Vista",
+          latitude: -23.5615,
+          longitude: -46.6559,
+          priceRange: 2,
+          categorySlugs: ["barbearia"],
+        }),
+      });
     });
   });
 });

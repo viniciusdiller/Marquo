@@ -38,23 +38,61 @@ describe("AddressLocationPicker", () => {
     vi.clearAllMocks();
   });
 
-  it("renderiza os campos com valores iniciais", () => {
-    render(
+  it("renderiza os campos com valores iniciais incluindo CEP", () => {
+    const { container } = render(
       <AddressLocationPicker
         initialAddress="Rua das Palmeiras, 100"
         initialCity="São Paulo"
         initialNeighborhood="Pinheiros"
         initialLatitude={-23.56}
         initialLongitude={-46.68}
+        initialCep="01310100"
       />,
     );
 
+    expect(screen.getByPlaceholderText("00000-000")).toHaveValue("01310-100");
     expect(screen.getByLabelText(/rua \/ logradouro/i)).toHaveValue("Rua das Palmeiras");
     expect(screen.getByLabelText(/número da fachada/i)).toHaveValue("100");
     expect(screen.getByLabelText(/cidade/i)).toHaveValue("São Paulo");
     expect(screen.getByLabelText(/bairro/i)).toHaveValue("Pinheiros");
     expect(screen.getByLabelText(/^latitude$/i)).toHaveValue("-23.56");
     expect(screen.getByLabelText(/^longitude$/i)).toHaveValue("-46.68");
+
+    const hiddenCep = container.querySelector('input[type="hidden"][name="cep"]');
+    expect(hiddenCep).toHaveValue("01310100");
+  });
+
+  it("calcula coordenadas pelo número ao sair do campo (onBlur)", async () => {
+    vi.mocked(actions.geocodeAddressAction).mockResolvedValue({
+      ok: true,
+      latitude: -23.56177,
+      longitude: -46.65533,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <AddressLocationPicker
+        initialAddress="Avenida Paulista"
+        initialCity="São Paulo"
+        initialNeighborhood="Bela Vista"
+      />,
+    );
+
+    const numberInput = screen.getByLabelText(/número da fachada/i);
+    await user.type(numberInput, "1500");
+    await user.tab();
+
+    await waitFor(() => {
+      expect(actions.geocodeAddressAction).toHaveBeenCalledWith({
+        street: "Avenida Paulista",
+        number: "1500",
+        neighborhood: "Bela Vista",
+        city: "São Paulo",
+        state: "",
+      });
+      expect(screen.getByLabelText(/^latitude$/i)).toHaveValue("-23.56177");
+      expect(screen.getByLabelText(/^longitude$/i)).toHaveValue("-46.65533");
+    });
   });
 
   it("abre e fecha o tutorial do Google Maps", async () => {
