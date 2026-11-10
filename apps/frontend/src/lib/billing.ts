@@ -86,6 +86,10 @@ export interface BannerInfo {
 }
 
 // Mensagens iguais às do backend (billingBlockMessage) para o mesmo estado.
+// Sem acesso ativo o negócio sai do ar para o público (some do marketplace e a página pública vira 404; ver billingAccessWhere
+// no backend). O dono precisa saber disso, porque é um efeito que ele não vê no painel.
+const OFFLINE_NOTE = "Enquanto isso, seu negócio fica fora do ar: some do marketplace e da página pública.";
+
 export function bannerFor(billing: BillingStatusResponse, now: number = Date.now()): BannerInfo | null {
   switch (billing.status) {
     case "ACTIVE":
@@ -104,13 +108,13 @@ export function bannerFor(billing: BillingStatusResponse, now: number = Date.now
       };
     case "EXPIRED":
       return {
-        message: "Seu acesso de cortesia terminou. Escolha um plano para continuar usando o Marquo.",
+        message: `Seu acesso de cortesia terminou. Escolha um plano para continuar usando o Marquo. ${OFFLINE_NOTE}`,
         tone: "danger",
         ctaLabel: "Escolher plano",
       };
     case "PERIOD_ENDED":
       return {
-        message: "O mês do seu plano terminou. Gere o Pix do próximo mês para voltar a usar o Marquo.",
+        message: `O mês do seu plano terminou. Gere o Pix do próximo mês para voltar a usar o Marquo. ${OFFLINE_NOTE}`,
         tone: "danger",
         ctaLabel: "Pagar o próximo mês",
       };
@@ -125,8 +129,7 @@ export function bannerFor(billing: BillingStatusResponse, now: number = Date.now
     }
     case "TRIAL_EXPIRED":
       return {
-        message:
-          "Seu período de teste acabou. A página pública também parou de aceitar novos agendamentos até você assinar um plano.",
+        message: `Seu período de teste acabou. Assine um plano para voltar. ${OFFLINE_NOTE}`,
         tone: "danger",
         ctaLabel: "Assinar agora",
       };
@@ -138,20 +141,19 @@ export function bannerFor(billing: BillingStatusResponse, now: number = Date.now
       };
     case "CANCELED":
       return {
-        message: "Sua assinatura foi cancelada. Assine novamente para voltar a usar o Marquo.",
+        message: `Sua assinatura foi cancelada. Assine novamente para voltar a usar o Marquo. ${OFFLINE_NOTE}`,
         tone: "danger",
         ctaLabel: "Assinar novamente",
       };
     case "UNPAID":
       return {
-        message:
-          "Não conseguimos confirmar o pagamento da sua assinatura. Regularize para reativar o acesso.",
+        message: `Não conseguimos confirmar o pagamento da sua assinatura. Regularize para reativar o acesso. ${OFFLINE_NOTE}`,
         tone: "danger",
         ctaLabel: "Regularizar pagamento",
       };
     case "INCOMPLETE":
       return {
-        message: "O pagamento da sua assinatura ainda não foi concluído. Conclua o pagamento para liberar o acesso.",
+        message: `O pagamento da sua assinatura ainda não foi concluído. Conclua o pagamento para liberar o acesso. ${OFFLINE_NOTE}`,
         tone: "danger",
         ctaLabel: "Concluir pagamento",
       };
