@@ -18,6 +18,7 @@ function buildPrismaMock() {
     tenant: {
       findUniqueOrThrow: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
     },
     serviceCategory: { findMany: jest.fn() },
@@ -62,23 +63,33 @@ describe("TenantsService", () => {
 
   describe("findPublicBySlug", () => {
     it("rejeita slug de negócio inexistente", async () => {
-      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.tenant.findFirst as jest.Mock).mockResolvedValue(null);
       await expect(service.findPublicBySlug("nao-existe")).rejects.toThrow(NotFoundException);
     });
 
     it("retorna o tenant quando o slug existe", async () => {
       const tenant = { id: "tenant-1", slug: "salao-demo" };
-      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue(tenant);
+      (prisma.tenant.findFirst as jest.Mock).mockResolvedValue(tenant);
       await expect(service.findPublicBySlug("salao-demo")).resolves.toBe(tenant);
     });
+    // O negócio sem acesso ativo (teste vencido, cancelado, inadimplente, suspenso) some da página pública: a consulta leva o
+    // filtro de acesso e, sem resultado, é o mesmo 404 de um slug inexistente (não confirma que o negócio existe).
+    it("filtra pelo acesso ativo do negócio: sem acesso é o mesmo 404 do slug inexistente", async () => {
+      (prisma.tenant.findFirst as jest.Mock).mockResolvedValue(null);
+      await expect(service.findPublicBySlug("teste-vencido")).rejects.toThrow(NotFoundException);
+      const where = (prisma.tenant.findFirst as jest.Mock).mock.calls[0][0].where;
+      expect(where.slug).toBe("teste-vencido");
+      expect(where.AND[0]).toMatchObject({ suspendedAt: null, OR: expect.any(Array) });
+    });
+
     it("projeta latitude e longitude para o mapa do perfil publico", async () => {
       const tenant = { id: "tenant-1", slug: "salao-demo", latitude: -22.89889, longitude: -42.46985 };
-      (prisma.tenant.findUnique as jest.Mock).mockResolvedValue(tenant);
+      (prisma.tenant.findFirst as jest.Mock).mockResolvedValue(tenant);
       const res = await service.findPublicBySlug("salao-demo");
       expect(res).toBe(tenant);
-      expect(prisma.tenant.findUnique).toHaveBeenCalledWith(
+      expect(prisma.tenant.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { slug: "salao-demo" },
+          where: { slug: "salao-demo", AND: [expect.objectContaining({ suspendedAt: null })] },
           select: expect.objectContaining({
             latitude: true,
             longitude: true,

@@ -1,4 +1,4 @@
-import { SubscriptionStatus } from "@marquo/database";
+import { BillingMethod, SubscriptionStatus } from "@marquo/database";
 import {
   BillingStatus,
   billingBlockMessage,
@@ -136,5 +136,85 @@ describe("billingBlockMessage", () => {
 
   it("Pix mensal vencido tem mensagem própria, que fala do Pix do próximo mês", () => {
     expect(billingBlockMessage("PERIOD_ENDED")).toMatch(/Pix do próximo mês/);
+  });
+});
+
+// ───────── billingAccessWhere: o filtro de banco tem de dar a MESMA resposta que hasBillingAccess(computeBillingStatus) ─────────
+// Interpretador mínimo do subconjunto de filtro do Prisma que o filtro usa, com a semântica do SQL: comparar coluna NULL com
+// qualquer coisa (inclusive `not`) NÃO casa. É exatamente a armadilha que o filtro evita escrevendo sem NOT.
+import { billingAccessWhere, computeBillingStatus as statusOf, hasBillingAccess as hasAccess, PAST_DUE_GRACE_MS } from "./billing-status.util";
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !(v instanceof Date);
+
+function matchField(value: unknown, cond: unknown): boolean {
+  if (cond === null) return value === null || value === undefined;
+  if (isObj(cond)) {
+    // Operador sobre coluna nula nunca casa (SQL).
+    if (value === null || value === undefined) return false;
+    const v = value instanceof Date ? value.getTime() : value;
+    const c = (x: unknown) => (x instanceof Date ? x.getTime() : x);
+    if ("gt" in cond && !((v as number) > (c(cond.gt) as number))) return false;
+    if ("gte" in cond && !((v as number) >= (c(cond.gte) as number))) return false;
+    if ("lte" in cond && !((v as number) <= (c(cond.lte) as number))) return false;
+    if ("not" in cond && !(v !== c(cond.not))) return false;
+    return true;
+  }
+  return value === cond;
+}
+
+function matches(row: Obj | null, where: Obj): boolean {
+  return Object.entries(where).every(([key, cond]) => {
+    if (key === "OR") return (cond as Obj[]).some((c) => matches(row, c));
+    if (key === "AND") return (cond as Obj[]).every((c) => matches(row, c));
+    if (key === "subscription") {
+      const rel = cond as { is: Obj | null };
+      const sub = (row?.subscription ?? null) as Obj | null;
+      return rel.is === null ? sub === null : sub !== null && matches(sub, rel.is);
+    }
+    return matchField(row?.[key], cond);
+  });
+}
+
+describe("billingAccessWhere: equivalente a hasBillingAccess(computeBillingStatus)", () => {
+  const NOW = new Date("2026-11-10T12:00:00.000Z");
+  const H = 3_600_000;
+  const offsets: Array<number | null> = [null, -10 * 24 * H, -PAST_DUE_GRACE_MS - H, -PAST_DUE_GRACE_MS, -PAST_DUE_GRACE_MS + H, -H, 0, H, 10 * 24 * H];
+  const statuses = Object.values(SubscriptionStatus);
+  const methods: Array<BillingMethod | null> = [null, BillingMethod.CARD_RECURRING, BillingMethod.PIX_MONTHLY];
+
+  const cases: Array<{ tenant: Obj; subscription: Obj | null }> = [];
+  for (const suspended of [false, true]) {
+    for (const trialOffset of [-H, H]) {
+      const tenant = { suspendedAt: suspended ? new Date(NOW.getTime() - H) : null, trialEndsAt: new Date(NOW.getTime() + trialOffset) };
+      cases.push({ tenant, subscription: null });
+      for (const status of statuses)
+        for (const courtesy of [false, true])
+          for (const method of methods)
+            for (const cancelAtPeriodEnd of [false, true])
+              for (const off of offsets)
+                cases.push({
+                  tenant,
+                  subscription: { status, courtesy, method, cancelAtPeriodEnd, currentPeriodEnd: off === null ? null : new Date(NOW.getTime() + off) },
+                });
+    }
+  }
+
+  it(`dá a mesma resposta nas ${cases.length} combinações (assinatura, cortesia, Pix, cancelamento, atraso, teste, suspensão)`, () => {
+    const where = billingAccessWhere(NOW) as Obj;
+    const divergent = cases.filter(({ tenant, subscription }) => {
+      const expected = hasAccess(statusOf(tenant as never, subscription as never, NOW.getTime()));
+      return matches({ ...tenant, subscription }, where) !== expected;
+    });
+    expect(divergent).toEqual([]);
+  });
+
+  it("negócio no teste, assinatura ativa sem data de fim e PAST_DUE na tolerância aparecem; teste vencido e suspenso não", () => {
+    const where = billingAccessWhere(NOW) as Obj;
+    const t = (trialOffset: number, suspended = false) => ({ suspendedAt: suspended ? NOW : null, trialEndsAt: new Date(NOW.getTime() + trialOffset) });
+    expect(matches({ ...t(H), subscription: null }, where)).toBe(true);
+    expect(matches({ ...t(-H), subscription: null }, where)).toBe(false);
+    expect(matches({ ...t(H, true), subscription: null }, where)).toBe(false);
+    expect(matches({ ...t(-H), subscription: { status: "ACTIVE", courtesy: false, method: null, cancelAtPeriodEnd: false, currentPeriodEnd: null } }, where)).toBe(true);
   });
 });

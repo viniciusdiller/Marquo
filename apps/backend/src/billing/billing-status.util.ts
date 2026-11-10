@@ -1,4 +1,4 @@
-import { BillingMethod, SubscriptionStatus } from "@marquo/database";
+import { BillingMethod, Prisma, SubscriptionStatus } from "@marquo/database";
 
 // SUSPENDED = suspensão manual pela plataforma (Tenant.suspendedAt): vence qualquer estado de cobrança.
 // EXPIRED = cortesia concedida pela plataforma que chegou ao fim (Subscription.courtesy + currentPeriodEnd).
@@ -61,6 +61,38 @@ export function computeBillingStatus(
 // PAST_DUE ainda concede acesso (período de graça durante as novas tentativas de cobrança); os demais estados bloqueiam.
 export function hasBillingAccess(status: BillingStatus): boolean {
   return status === "TRIALING" || status === "ACTIVE" || status === "PAST_DUE";
+}
+
+// O MESMO critério de hasBillingAccess(computeBillingStatus(...)), mas como filtro de banco, para esconder do público os
+// negócios sem acesso (teste vencido, cancelado, inadimplente, suspenso...) em listagens e contagens sem ler tudo em memória.
+// Tem de ficar IDÊNTICO ao código acima: billing-status.util.spec.ts compara os dois em centenas de combinações.
+//
+// Sem `NOT`: no SQL, NOT de uma comparação com coluna NULL dá NULL e a linha some (ex.: assinatura ativa sem data de fim
+// seria escondida). Cada condição é escrita de forma positiva, com o ramo "nulo" explícito.
+export function billingAccessWhere(now: Date = new Date()): Prisma.TenantWhereInput {
+  const periodNotOver: Prisma.SubscriptionWhereInput = { OR: [{ currentPeriodEnd: null }, { currentPeriodEnd: { gt: now } }] };
+  // Cortesia vencida (courtesy && periodOver) bloqueia: vale a cortesia sem fim, ou o fim ainda no futuro.
+  const courtesyNotOver: Prisma.SubscriptionWhereInput = { OR: [{ courtesy: false }, periodNotOver] };
+  // Pix mensal vencido (não-cortesia && PIX_MONTHLY && periodOver) bloqueia.
+  const pixNotOver: Prisma.SubscriptionWhereInput = {
+    OR: [{ courtesy: true }, { method: null }, { method: { not: BillingMethod.PIX_MONTHLY } }, periodNotOver],
+  };
+  // Em atraso: acesso só até o fim do período + tolerância (cortesia ou sem data de fim nunca cai por atraso).
+  const withinGrace: Prisma.SubscriptionWhereInput = {
+    OR: [{ courtesy: true }, { currentPeriodEnd: null }, { currentPeriodEnd: { gte: new Date(now.getTime() - PAST_DUE_GRACE_MS) } }],
+  };
+  // Cancelada ao fim do período: acesso só até o fim do que foi pago.
+  const cancelNotOver: Prisma.SubscriptionWhereInput = { OR: [{ cancelAtPeriodEnd: false }, periodNotOver] };
+
+  return {
+    suspendedAt: null,
+    OR: [
+      // Sem assinatura: período de teste em andamento.
+      { subscription: { is: null }, trialEndsAt: { gt: now } },
+      { subscription: { is: { status: SubscriptionStatus.ACTIVE, AND: [courtesyNotOver, pixNotOver, cancelNotOver] } } },
+      { subscription: { is: { status: SubscriptionStatus.PAST_DUE, AND: [courtesyNotOver, pixNotOver, withinGrace] } } },
+    ],
+  };
 }
 
 // Mensagem mostrada quando o guard bloqueia. Uma por estado: "período de teste encerrado" para quem

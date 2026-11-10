@@ -5,6 +5,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { Prisma } from "@marquo/database";
 import { TenantSetupStatus, TenantSetupStep } from "@marquo/shared-types";
 import { PrismaService } from "../prisma/prisma.service";
+import { billingAccessWhere } from "../billing/billing-status.util";
 import { UpdateTenantProfileDto } from "./dto/update-tenant-profile.dto";
 import { UpdateMarketplaceDto } from "./dto/update-marketplace.dto";
 import { UPLOADS_DIR, UPLOADS_URL_PREFIX } from "../common/constants/uploads";
@@ -52,9 +53,11 @@ export class TenantsService {
     });
   }
 
+  // Página pública do negócio. Sem acesso ativo (teste vencido, cancelado, inadimplente, suspenso) é o MESMO 404 de um slug que
+  // não existe: o negócio some para o público, sem confirmar que existe. Quem já tem agendamento segue gerindo pela conta.
   async findPublicBySlug(slug: string) {
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { slug },
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { slug, AND: [billingAccessWhere()] },
       select: {
         id: true,
         name: true,
