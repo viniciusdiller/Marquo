@@ -49,7 +49,7 @@ describe("ProfessionalsService.updatePhoto", () => {
     expect(photoUrl).toMatch(new RegExp(`^/uploads/tenants/${TENANT}/professionals/${PROF}-[a-z0-9]+\\.webp$`));
     expect(convertMock).toHaveBeenCalledWith(
       expect.any(Buffer),
-      expect.objectContaining({ maxDimension: 512, crop: "square", outPath: expect.stringContaining(`/tenants/${TENANT}/professionals/`) }),
+      expect.objectContaining({ maxDimension: 512, crop: "square", outPath: expect.stringMatching(/[/\\]tenants[/\\]11111111-1111-4111-8111-111111111111[/\\]professionals[/\\]/) }),
     );
     expect(prisma.professional.updateMany).toHaveBeenCalledWith({ where: { id: PROF, tenantId: TENANT }, data: { photoUrl } });
   });

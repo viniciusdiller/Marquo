@@ -187,7 +187,7 @@ describe("TenantDeletionService.purge", () => {
       deletedAt: NOW,
     });
     expect(rmMock).toHaveBeenCalledTimes(1);
-    expect(String(rmMock.mock.calls[0][0])).toContain(`tenants/${TENANT_ID}`);
+    expect(String(rmMock.mock.calls[0][0]).replace(/\\/g, "/")).toContain(`tenants/${TENANT_ID}`);
   });
 
   it("toda escrita é filtrada pelo tenantId (nunca apaga dado de outro negócio)", async () => {

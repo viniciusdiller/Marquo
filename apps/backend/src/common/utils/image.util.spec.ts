@@ -6,8 +6,15 @@ import sharp from "sharp";
 import { convertToWebp } from "./image.util";
 
 describe("convertToWebp", () => {
+  sharp.cache(false);
   const dir = mkdtempSync(join(tmpdir(), "img-"));
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  afterAll(() => {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Ignora erro de lock em SOs com retenção temporária de handles
+    }
+  });
   const opts = (name: string) => ({ maxDimension: 100, quality: 80, outPath: join(dir, name) });
 
   it("converte PNG válido pra WebP dentro do limite de dimensão", async () => {

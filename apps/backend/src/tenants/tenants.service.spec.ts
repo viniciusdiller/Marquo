@@ -134,6 +134,7 @@ describe("TenantsService", () => {
         listedInMarketplace: true,
         address: "Rua das Flores, 123",
         city: "São Paulo",
+        cep: "01310-100",
         categories: [{ category: { slug: "barbearia" } }, { category: { slug: "salao" } }],
       });
       (prisma.serviceCategory.findMany as jest.Mock).mockResolvedValue([]);
@@ -141,6 +142,7 @@ describe("TenantsService", () => {
       const result = await service.getMarketplaceSettings("tenant-1");
 
       expect(result.address).toBe("Rua das Flores, 123");
+      expect(result.cep).toBe("01310-100");
       expect(result.categorySlugs).toEqual(["barbearia", "salao"]);
     });
 
