@@ -122,6 +122,16 @@ describe("bannerFor", () => {
     }
   });
 
+  // Sem acesso ativo o negócio some do marketplace e da página pública: o aviso do painel precisa dizer isso (o dono não vê
+  // esse efeito sozinho). Quem ainda tem acesso (teste em andamento, em atraso) não recebe esse aviso.
+  it("todo estado SEM acesso avisa que o negócio ficou fora do ar; os com acesso não", () => {
+    for (const status of ["TRIAL_EXPIRED", "CANCELED", "UNPAID", "INCOMPLETE", "EXPIRED", "PERIOD_ENDED"] as const) {
+      assert.match(bannerFor(billing(status), NOW)?.message ?? "", /fora do ar: some do marketplace e da página pública/, status);
+    }
+    assert.doesNotMatch(bannerFor(withSub("PAST_DUE"), NOW)?.message ?? "", /fora do ar/);
+    assert.doesNotMatch(bannerFor(billing("TRIALING", { trialEndsAt: iso(1) }), NOW)?.message ?? "", /fora do ar/);
+  });
+
   it("em atraso é aviso (ainda tem acesso), não perigo", () => {
     const banner = bannerFor(withSub("PAST_DUE"), NOW);
     assert.equal(banner?.tone, "warning");

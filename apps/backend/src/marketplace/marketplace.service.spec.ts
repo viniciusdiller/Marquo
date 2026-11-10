@@ -38,7 +38,9 @@ describe("MarketplaceService.listCategories", () => {
     expect(prisma.serviceCategory.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          tenants: { some: { tenant: { listedInMarketplace: true, suspendedAt: null } } },
+          tenants: {
+            some: { tenant: { listedInMarketplace: true, suspendedAt: null, AND: [expect.objectContaining({ OR: expect.any(Array) })] } },
+          },
         },
       }),
     );
@@ -161,5 +163,37 @@ describe("MarketplaceService.search", () => {
     const { service, prisma } = build();
     (prisma.tenant.findFirst as jest.Mock).mockResolvedValue(null);
     await expect(service.establishmentProfile("x")).rejects.toThrow(NotFoundException);
+  });
+});
+
+// Negócio sem acesso ativo (teste vencido, cancelado, inadimplente, suspenso) some do marketplace INTEIRO, não só da busca:
+// perfil, categorias e cidades também, senão o visitante acha um negócio que já não aceita agendamento.
+describe("MarketplaceService: negócio sem acesso ativo some", () => {
+  const accessFilter = expect.objectContaining({ suspendedAt: null, OR: expect.any(Array) });
+
+  it("a busca filtra pelo acesso ativo, junto com a busca por texto (OR do texto não colide com o OR do acesso)", async () => {
+    const { service, prisma } = build();
+    await service.search({ q: "bianco" });
+    const where = (prisma.tenant.findMany as jest.Mock).mock.calls[0][0].where;
+    expect(where.AND).toEqual([accessFilter]);
+    expect(where.OR).toHaveLength(2); // nome/descrição
+    expect(where.listedInMarketplace).toBe(true);
+  });
+
+  it("o perfil do estabelecimento só existe com acesso ativo (senão é o mesmo 404)", async () => {
+    const { service, prisma } = build();
+    (prisma.tenant.findFirst as jest.Mock).mockResolvedValue(null);
+    await expect(service.establishmentProfile("teste-vencido")).rejects.toThrow(NotFoundException);
+    const where = (prisma.tenant.findFirst as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ slug: "teste-vencido", listedInMarketplace: true });
+    expect(where.AND).toEqual([accessFilter]);
+  });
+
+  it("a lista de cidades considera só negócios com acesso ativo", async () => {
+    const { service, prisma } = build();
+    await service.listCities();
+    const where = (prisma.tenant.findMany as jest.Mock).mock.calls[0][0].where;
+    expect(where.AND).toEqual([accessFilter]);
+    expect(where.city).toEqual({ not: null });
   });
 });
