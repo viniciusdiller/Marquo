@@ -72,13 +72,10 @@ export async function addPaymentAction(id: string, body: unknown): Promise<Ticke
   return mutate(`/tickets/${encodeURIComponent(id)}/payments`, body);
 }
 
+// Fechar NÃO redireciona: a comanda fechada é o registro do atendimento e continua na tela (agora só leitura), em vez de "sumir"
+// de volta para a lista de abertas. Ela passa a aparecer na aba "Fechadas".
 export async function closeTicketAction(id: string): Promise<TicketActionResult> {
-  const result = await mutate(`/tickets/${encodeURIComponent(id)}/close`, {});
-  if (result.ok) {
-    revalidatePath("/dashboard/comandas");
-    redirect("/dashboard/comandas");
-  }
-  return result;
+  return mutate(`/tickets/${encodeURIComponent(id)}/close`, {});
 }
 
 export async function cancelTicketAction(id: string): Promise<TicketActionResult> {
@@ -100,6 +97,47 @@ export async function setTicketClientAction(id: string, clientId: string | null)
     });
     revalidatePath("/dashboard/comandas");
     revalidatePath(`/dashboard/comandas/${id}`);
+    return { ok: true, ticket };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// Edita quantidade e/ou profissional de um item da comanda aberta. Preço, tipo e serviço nunca mudam por aqui (o backend recusa).
+// Ids só passam se forem UUID (argumento de Server Action é controlado pelo cliente).
+export async function updateTicketItemAction(
+  id: string,
+  itemId: string,
+  changes: { quantity?: number; professionalId?: string | null },
+): Promise<TicketActionResult> {
+  if (!UUID_RE.test(id) || !UUID_RE.test(itemId) || (changes.professionalId && !UUID_RE.test(changes.professionalId))) {
+    return { ok: false, error: "Dados inválidos." };
+  }
+  return send(`/tickets/${id}/items/${itemId}`, "PATCH", changes);
+}
+
+export async function setTicketNoteAction(id: string, note: string | null): Promise<TicketActionResult> {
+  if (!UUID_RE.test(id)) return { ok: false, error: "Dados inválidos." };
+  return send(`/tickets/${id}/note`, "PATCH", { note });
+}
+
+// Estorna um pagamento da comanda aberta, com motivo (vai para o histórico).
+export async function removeTicketPaymentAction(id: string, paymentId: string, reason: string): Promise<TicketActionResult> {
+  if (!UUID_RE.test(id) || !UUID_RE.test(paymentId)) return { ok: false, error: "Dados inválidos." };
+  return send(`/tickets/${id}/payments/${paymentId}/remove`, "POST", { reason });
+}
+
+// Reabre uma comanda fechada (só o dono): desfaz receita, comissão, estoque e uso do clube. O backend confere o papel.
+export async function reopenTicketAction(id: string, reason: string): Promise<TicketActionResult> {
+  if (!UUID_RE.test(id)) return { ok: false, error: "Dados inválidos." };
+  return send(`/tickets/${id}/reopen`, "POST", { reason });
+}
+
+async function send(path: string, method: "POST" | "PATCH", body: unknown): Promise<TicketActionResult> {
+  try {
+    const ticket = await authedFetch<Ticket>(path, { method, body: JSON.stringify(body) });
+    revalidatePath("/dashboard/comandas");
+    if (ticket?.id) revalidatePath(`/dashboard/comandas/${ticket.id}`);
     return { ok: true, ticket };
   } catch (err) {
     return fail(err);

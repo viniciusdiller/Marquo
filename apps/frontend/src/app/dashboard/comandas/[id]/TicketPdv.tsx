@@ -3,24 +3,30 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { DateTime } from "luxon";
-import { Trash } from "@phosphor-icons/react/dist/ssr";
+import { ArrowCounterClockwise, PencilSimple, Trash } from "@phosphor-icons/react/dist/ssr";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { HowItWorks, FieldHint } from "@/components/ui/HowItWorks";
 import { formatCentsBRL, formatPhoneBR, moneyToCents } from "@/lib/masks";
 import { formatDateTime, formatShortDateTime } from "@/lib/datetime";
 import { brl } from "@/lib/money";
-import type { AdminProduct, PaymentMethod, Ticket } from "@marquo/shared-types";
+import type { AdminProduct, PaymentMethod, Ticket, TicketAuditEntry } from "@marquo/shared-types";
 import {
   addItemAction,
   addPaymentAction,
   cancelTicketAction,
   closeTicketAction,
   removeItemAction,
+  removeTicketPaymentAction,
+  reopenTicketAction,
   setDiscountAction,
   setTicketClientAction,
+  setTicketNoteAction,
+  updateTicketItemAction,
 } from "../actions";
 import { ClientPicker } from "../ClientPicker";
+import { EditItemForm } from "./EditItemForm";
+import { ReasonDialog } from "./ReasonDialog";
 
 // Texto BRL → centavos; valor mal formado dá null (nunca um 0 silencioso que zeraria desconto/pagamento).
 const centsFromReais = (v: string) => moneyToCents(v);
@@ -44,11 +50,16 @@ export function TicketPdv({
   services,
   products,
   team,
+  isOwner = false,
+  history = [],
 }: {
   initialTicket: Ticket;
   services: CatalogService[];
   products: AdminProduct[];
   team: { id: string; name: string }[];
+  // Só o dono reabre comanda fechada e vê o histórico de alterações (o backend confere o papel; aqui só evita oferecer o que ele recusaria).
+  isOwner?: boolean;
+  history?: TicketAuditEntry[];
 }) {
   const [ticket, setTicket] = useState(initialTicket);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +81,12 @@ export function TicketPdv({
   );
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [pickingClient, setPickingClient] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [removingPayment, setRemovingPayment] = useState<{ id: string; label: string } | null>(null);
+  const [reopening, setReopening] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(initialTicket.note ?? "");
+  // Acabou de fechar nesta tela: avisa que a comanda ficou guardada (ela NÃO some; fica aqui, só leitura, e na aba Fechadas).
+  const [justClosed, setJustClosed] = useState(false);
 
   const readOnly = ticket.status !== "OPEN";
 
@@ -141,11 +158,32 @@ export function TicketPdv({
         </dl>
       </div>
 
+      {justClosed && ticket.status === "CLOSED" ? (
+        <div
+          role="status"
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100"
+        >
+          <p>
+            <strong className="font-semibold">Comanda fechada.</strong> A receita foi lançada no Financeiro e a comanda continua guardada aqui e na aba
+            Fechadas.
+          </p>
+          <span className="flex items-center gap-4 font-semibold">
+            <Link href="/dashboard/comandas?aba=fechadas" className="underline underline-offset-2 hover:no-underline">
+              Ver fechadas
+            </Link>
+            <Link href="/dashboard/comandas" className="underline underline-offset-2 hover:no-underline">
+              Voltar às abertas
+            </Link>
+          </span>
+        </div>
+      ) : null}
+
       <HowItWorks>
         {readOnly ? (
           <p>
             Esta comanda está <strong>{ticket.status === "CLOSED" ? "fechada" : "cancelada"}</strong> e
-            não pode mais ser alterada. Os valores abaixo são o registro final do atendimento.
+            não pode ser editada. Os valores abaixo são o registro do atendimento.
+            {ticket.status === "CLOSED" ? " Se houver um erro, o dono pode reabri-la (com motivo) para corrigir." : ""}
           </p>
         ) : (
           <>
@@ -157,10 +195,11 @@ export function TicketPdv({
               <li><strong>Feche a comanda</strong> quando não faltar nada.</li>
             </ol>
             <p>
-              Ao fechar, a receita vai para o Financeiro, a comissão é calculada (sobre o preço dos itens, antes do desconto) e o estoque dos produtos baixa. Fechar não tem volta.
+              Ao fechar, a receita vai para o Financeiro, a comissão é calculada (sobre o preço dos itens, antes do desconto) e o estoque dos produtos baixa. Depois de fechada, só o dono consegue reabrir a comanda (com motivo) para corrigir.
             </p>
             <p>
-              <strong>Cancelar</strong> só é possível enquanto não houver pagamento registrado, e descarta a comanda.
+              <strong>Editar item</strong> (lápis) muda a quantidade e o profissional; o preço vem do catálogo. <strong>Remover</strong> um pagamento lançado errado pede um motivo.{" "}
+              <strong>Cancelar</strong> só é possível enquanto não houver pagamento registrado (remova antes), e a comanda fica no histórico como cancelada.
             </p>
           </>
         )}
@@ -227,6 +266,37 @@ export function TicketPdv({
             ) : null}
           </div>
 
+        {/* Observação */}
+        {!readOnly ? (
+          <div className="rounded-2xl border border-zinc-200 p-3 text-sm dark:border-white/10">
+            <label className="flex flex-col gap-1.5 font-medium text-zinc-700 dark:text-stone-200">
+              Observação
+              <textarea
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                maxLength={1000}
+                rows={2}
+                placeholder="Ex.: cliente prefere máquina 2"
+                className="resize-none rounded-lg border border-zinc-300 bg-white px-3 py-2 font-normal text-zinc-900 dark:border-white/15 dark:bg-zinc-900 dark:text-white"
+              />
+            </label>
+            {noteDraft.trim() !== (ticket.note ?? "") ? (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => run(() => setTicketNoteAction(ticket.id, noteDraft.trim() === "" ? null : noteDraft.trim()))}
+                className="mt-2 rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 disabled:opacity-50 dark:border-white/15 dark:text-stone-200"
+              >
+                Salvar observação
+              </button>
+            ) : null}
+          </div>
+        ) : ticket.note ? (
+          <p className="rounded-2xl border border-zinc-200 p-3 text-sm text-zinc-600 dark:border-white/10 dark:text-stone-300">
+            <span className="font-medium text-zinc-700 dark:text-stone-200">Observação:</span> {ticket.note}
+          </p>
+        ) : null}
+
         {/* Itens */}
         <div className="rounded-2xl border border-zinc-200 dark:border-white/10">
           {ticket.items.length === 0 ? (
@@ -234,7 +304,8 @@ export function TicketPdv({
           ) : (
             <ul className="divide-y divide-zinc-100 dark:divide-white/5">
               {ticket.items.map((item) => (
-                <li key={item.id} className="flex items-center justify-between gap-3 p-3">
+                <li key={item.id} className="p-3">
+                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-zinc-900 dark:text-white">
                       {item.quantity > 1 ? `${item.quantity}× ` : ""}
@@ -256,18 +327,43 @@ export function TicketPdv({
                       {brl(item.totalCents)}
                     </span>
                     {!readOnly ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setRemovingItem({ id: item.id, description: item.description })
-                        }
-                        className="text-zinc-300 hover:text-red-500"
-                        aria-label="Remover item"
-                      >
-                        <Trash size={16} />
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEditingItemId((current) => (current === item.id ? null : item.id))}
+                          className="text-zinc-300 hover:text-accent-600"
+                          aria-label="Editar item"
+                          aria-expanded={editingItemId === item.id}
+                        >
+                          <PencilSimple size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setRemovingItem({ id: item.id, description: item.description })
+                          }
+                          className="text-zinc-300 hover:text-red-500"
+                          aria-label="Remover item"
+                        >
+                          <Trash size={16} />
+                        </button>
+                      </>
                     ) : null}
                   </div>
+                 </div>
+                 {!readOnly && editingItemId === item.id ? (
+                   <EditItemForm
+                     quantity={item.quantity}
+                     professionalId={item.professional?.id ?? null}
+                     team={team}
+                     pending={isPending}
+                     onCancel={() => setEditingItemId(null)}
+                     onSave={(changes) => {
+                       setEditingItemId(null);
+                       run(() => updateTicketItemAction(ticket.id, item.id, changes));
+                     }}
+                   />
+                 ) : null}
                 </li>
               ))}
             </ul>
@@ -432,12 +528,29 @@ export function TicketPdv({
           {ticket.payments.length > 0 ? (
             <ul className="space-y-1 text-sm text-zinc-500 dark:text-stone-400">
               {ticket.payments.map((p) => (
-                <li key={p.id} className="flex justify-between">
+                <li key={p.id} className="flex items-center justify-between gap-3">
                   <span>
                     {METHODS.find((m) => m.value === p.method)?.label ?? p.method}
                     <span className="ml-2 text-xs text-zinc-400">{formatDateTime(p.createdAt)}</span>
                   </span>
-                  <span>{brl(p.amountCents)}</span>
+                  <span className="flex items-center gap-3">
+                    {brl(p.amountCents)}
+                    {!readOnly ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRemovingPayment({
+                            id: p.id,
+                            label: `${METHODS.find((m) => m.value === p.method)?.label ?? p.method} de ${brl(p.amountCents)}`,
+                          })
+                        }
+                        className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                        aria-label={`Remover pagamento ${METHODS.find((m) => m.value === p.method)?.label ?? p.method}`}
+                      >
+                        Remover
+                      </button>
+                    ) : null}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -498,7 +611,18 @@ export function TicketPdv({
               <button
                 type="button"
                 disabled={isPending || ticket.dueCents > 0 || ticket.items.length === 0}
-                onClick={() => run(() => closeTicketAction(ticket.id))}
+                onClick={() => {
+                  setError(null);
+                  startTransition(async () => {
+                    const result = await closeTicketAction(ticket.id);
+                    if (result.ok && result.ticket) {
+                      setTicket(result.ticket);
+                      setJustClosed(true);
+                    } else if (!result.ok) {
+                      setError(result.error ?? "Erro.");
+                    }
+                  });
+                }}
                 className="rounded-full bg-accent-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-600 disabled:opacity-40"
               >
                 Fechar comanda
@@ -517,9 +641,48 @@ export function TicketPdv({
             <div className="mt-3">
               <FieldHint>
                 “Fechar comanda” só habilita com pelo menos um item e nenhum valor faltando. “Cancelar” só
-                habilita se ainda não houver pagamento.
+                habilita se ainda não houver pagamento: para cancelar, remova antes os pagamentos registrados.
               </FieldHint>
             </div>
+          ) : null}
+
+          {readOnly && ticket.status === "CLOSED" && isOwner ? (
+            <div className="mt-6">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setReopening(true)}
+                className="inline-flex items-center gap-2 rounded-full border border-zinc-300 px-5 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-900/5 disabled:opacity-50 dark:border-white/15 dark:text-stone-200 dark:hover:bg-white/10"
+              >
+                <ArrowCounterClockwise size={16} weight="bold" />
+                Reabrir comanda
+              </button>
+              <div className="mt-2">
+                <FieldHint>
+                  Para corrigir um erro depois de fechar. Desfaz a receita, a comissão, a baixa de estoque e o uso do clube desta
+                  comanda; depois é só ajustar e fechar de novo.
+                </FieldHint>
+              </div>
+            </div>
+          ) : null}
+
+          {isOwner && history.length > 0 ? (
+            <details className="mt-6 rounded-2xl border border-zinc-200 p-3 text-sm dark:border-white/10">
+              <summary className="cursor-pointer font-medium text-zinc-700 dark:text-stone-200">
+                Histórico de alterações ({history.length})
+              </summary>
+              <ul className="mt-3 flex flex-col gap-3">
+                {history.map((entry) => (
+                  <li key={entry.id} className="text-zinc-600 dark:text-stone-300">
+                    <p>{entry.detail}</p>
+                    {entry.reason ? <p className="text-xs text-zinc-500 dark:text-stone-400">Motivo: {entry.reason}</p> : null}
+                    <p className="text-xs text-zinc-400">
+                      {entry.actorName} · {formatDateTime(entry.createdAt)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </details>
           ) : null}
         </div>
       </div>
@@ -540,6 +703,40 @@ export function TicketPdv({
           const id = removingItem.id;
           setRemovingItem(null);
           run(() => removeItemAction(ticket.id, id));
+        }}
+      />
+
+      <ReasonDialog
+        open={removingPayment !== null}
+        onOpenChange={(open) => !open && setRemovingPayment(null)}
+        title="Remover este pagamento?"
+        description={
+          removingPayment
+            ? `O pagamento ${removingPayment.label} sai da comanda e volta a faltar esse valor. Fica registrado no histórico.`
+            : ""
+        }
+        confirmLabel="Remover pagamento"
+        isLoading={isPending}
+        onConfirm={(reason) => {
+          if (!removingPayment) return;
+          const id = removingPayment.id;
+          setRemovingPayment(null);
+          run(() => removeTicketPaymentAction(ticket.id, id, reason));
+        }}
+      />
+
+      <ReasonDialog
+        open={reopening}
+        onOpenChange={setReopening}
+        title="Reabrir esta comanda?"
+        description="Desfaz o que o fechamento gerou: estorna a receita no Financeiro, apaga as comissões, devolve a baixa de estoque e os usos do clube. Os pagamentos continuam. Não dá para reabrir se a comissão já foi repassada."
+        confirmLabel="Reabrir comanda"
+        placeholder="Ex.: item lançado errado"
+        isLoading={isPending}
+        onConfirm={(reason) => {
+          setReopening(false);
+          setJustClosed(false);
+          run(() => reopenTicketAction(ticket.id, reason));
         }}
       />
 
