@@ -10,6 +10,7 @@ import { ProductsService } from "../products/products.service";
 import { CommissionsService } from "../commissions/commissions.service";
 import { CashRegisterService } from "../cash-register/cash-register.service";
 import { FinanceService } from "../finance/finance.service";
+import { ClubService, type TicketCoverage } from "../club/club.service";
 import {
   AddPaymentDto,
   AddTicketItemDto,
@@ -21,7 +22,13 @@ import { resolvePagination } from "../common/pagination/paginate";
 import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
 
 const TICKET_INCLUDE = {
-  items: { include: { professional: { include: { user: { select: { name: true } } } } } },
+  items: {
+    include: {
+      professional: { include: { user: { select: { name: true } } } },
+      // Quanto do item o clube cobriu (só existe em comanda FECHADA de membro).
+      clubUsage: { select: { units: true, coveredCents: true } },
+    },
+  },
   payments: true,
   client: { select: { id: true, name: true, phone: true } },
   appointment: { select: { id: true, startAt: true } },
@@ -37,6 +44,7 @@ export class TicketsService {
     private readonly commissions: CommissionsService,
     private readonly cashRegister: CashRegisterService,
     private readonly finance: FinanceService,
+    private readonly club: ClubService,
   ) {}
 
   async open(tenantId: string, userId: string, dto: OpenTicketDto) {
@@ -113,7 +121,9 @@ export class TicketsService {
       take: hasPagination ? pagination.take : undefined,
       ...(hasPagination ? { skip: pagination.skip } : {}),
     });
-    return tickets.map((ticket) => this.serialize(ticket));
+    // O clube é conferido uma vez para a página inteira (não uma por comanda).
+    const clubActive = await this.club.isActive(tenantId);
+    return Promise.all(tickets.map((ticket) => this.serialize(ticket, { clubActive })));
   }
 
   async get(tenantId: string, id: string) {
@@ -227,7 +237,8 @@ export class TicketsService {
 
   async addPayment(tenantId: string, id: string, dto: AddPaymentDto) {
     await this.lockedOpenTicket(tenantId, id, async (tx, ticket) => {
-      const total = this.totalCents(ticket);
+      const coverage = await this.club.coverageForTicket(tx, tenantId, this.coverageInput(ticket));
+      const total = this.totalCents(ticket, coverage.coveredCents);
       const paid = ticket.payments.reduce((sum, p) => sum + p.amountCents, 0);
       if (paid + dto.amountCents > total) {
         throw new BadRequestException(
@@ -256,15 +267,19 @@ export class TicketsService {
       if (ticket.items.length === 0) {
         throw new BadRequestException("Comanda sem itens.");
       }
-      const total = this.totalCents(ticket);
+      // Clube de assinaturas: o servidor decide quais serviços do membro saem sem cobrança (nunca o cliente HTTP). Com lock na
+      // adesão, para dois fechamentos simultâneos do mesmo membro não gastarem o mesmo uso.
+      const coverage = await this.club.coverageForTicket(tx, tenantId, this.coverageInput(ticket), { lock: true });
+      const total = this.totalCents(ticket, coverage.coveredCents);
       const paid = ticket.payments.reduce((sum, p) => sum + p.amountCents, 0);
       if (paid < total) {
         throw new BadRequestException(`Faltam ${total - paid} centavos em pagamento.`);
       }
 
+      await this.club.recordUsage(tx, tenantId, id, coverage);
       const closed = await tx.ticket.update({
         where: { id },
-        data: { status: TicketStatus.CLOSED, closedAt: new Date() },
+        data: { status: TicketStatus.CLOSED, closedAt: new Date(), clubCoveredCents: coverage.coveredCents },
         include: TICKET_INCLUDE,
       });
 
@@ -294,7 +309,7 @@ export class TicketsService {
       // Receita no financeiro (regime de caixa: já quitada, pois close exige pago >= total).
       await this.finance.recordTicketIncome(tx, tenantId, userId, {
         id,
-        totalCents: this.totalCents(closed),
+        totalCents: this.totalCents(closed, closed.clubCoveredCents),
       });
 
       return this.serialize(closed);
@@ -362,13 +377,39 @@ export class TicketsService {
     return ticket.items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0);
   }
 
-  private totalCents(ticket: TicketWithRelations) {
-    return Math.max(0, this.subtotalCents(ticket) - ticket.discountCents);
+  // total = itens − desconto manual − serviços cobertos pelo clube. `clubCoveredCents` é calculado na hora para comanda aberta e
+  // vem GRAVADO (ticket.clubCoveredCents) para comanda fechada.
+  private totalCents(ticket: TicketWithRelations, clubCoveredCents: number) {
+    return Math.max(0, this.subtotalCents(ticket) - ticket.discountCents - clubCoveredCents);
   }
 
-  private serialize(ticket: TicketWithRelations) {
+  private coverageInput(ticket: TicketWithRelations) {
+    return {
+      clientId: ticket.clientId,
+      items: ticket.items.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        serviceId: item.serviceId,
+        quantity: item.quantity,
+        unitPriceCents: item.unitPriceCents,
+        createdAt: item.createdAt,
+      })),
+    };
+  }
+
+  private async serialize(ticket: TicketWithRelations, options: { clubActive?: boolean } = {}) {
+    const isOpen = ticket.status === TicketStatus.OPEN;
+    let coverage: TicketCoverage | null = null;
+    if (isOpen && options.clubActive !== false) {
+      coverage = await this.club.coverageForTicket(this.prisma, ticket.tenantId, this.coverageInput(ticket), {
+        assumeActive: options.clubActive === true,
+      });
+    }
+    const coveredByItem = new Map((coverage?.lines ?? []).map((line) => [line.itemId, line]));
+    const clubCoveredCents = isOpen ? (coverage?.coveredCents ?? 0) : ticket.clubCoveredCents;
+
     const subtotalCents = this.subtotalCents(ticket);
-    const totalCents = this.totalCents(ticket);
+    const totalCents = this.totalCents(ticket, clubCoveredCents);
     const paidCents = ticket.payments.reduce((sum, p) => sum + p.amountCents, 0);
     return {
       id: ticket.id,
@@ -380,24 +421,31 @@ export class TicketsService {
       closedAt: ticket.closedAt,
       canceledAt: ticket.canceledAt,
       discountCents: ticket.discountCents,
+      clubCoveredCents,
       subtotalCents,
       totalCents,
       paidCents,
       dueCents: Math.max(0, totalCents - paidCents),
-      items: ticket.items.map((item) => ({
-        id: item.id,
-        kind: item.kind,
-        serviceId: item.serviceId,
-        productId: item.productId,
-        description: item.description,
-        quantity: item.quantity,
-        unitPriceCents: item.unitPriceCents,
-        totalCents: item.unitPriceCents * item.quantity,
-        createdAt: item.createdAt,
-        professional: item.professional
-          ? { id: item.professionalId, name: item.professional.user.name }
-          : null,
-      })),
+      items: ticket.items.map((item) => {
+        const line = coveredByItem.get(item.id);
+        return {
+          id: item.id,
+          kind: item.kind,
+          serviceId: item.serviceId,
+          productId: item.productId,
+          description: item.description,
+          quantity: item.quantity,
+          unitPriceCents: item.unitPriceCents,
+          totalCents: item.unitPriceCents * item.quantity,
+          // Quanto deste item o clube cobre (aberta: previsão do servidor; fechada: o que foi de fato baixado).
+          clubCoveredUnits: isOpen ? (line?.units ?? 0) : (item.clubUsage?.units ?? 0),
+          clubCoveredCents: isOpen ? (line?.coveredCents ?? 0) : (item.clubUsage?.coveredCents ?? 0),
+          createdAt: item.createdAt,
+          professional: item.professional
+            ? { id: item.professionalId, name: item.professional.user.name }
+            : null,
+        };
+      }),
       payments: ticket.payments.map((payment) => ({
         id: payment.id,
         method: payment.method,

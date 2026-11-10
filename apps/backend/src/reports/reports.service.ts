@@ -19,6 +19,7 @@ export class ReportsService {
       select: {
         id: true,
         discountCents: true,
+        clubCoveredCents: true,
         items: { select: { unitPriceCents: true, quantity: true } }
       },
     });
@@ -26,7 +27,7 @@ export class ReportsService {
     let totalRevenueCents = 0;
     for (const t of closedTickets) {
       const subtotal = t.items.reduce((sum, i) => sum + i.unitPriceCents * i.quantity, 0);
-      totalRevenueCents += Math.max(0, subtotal - t.discountCents);
+      totalRevenueCents += Math.max(0, subtotal - t.discountCents - t.clubCoveredCents);
     }
     const totalTickets = closedTickets.length;
     const averageTicketCents = totalTickets > 0 ? Math.floor(totalRevenueCents / totalTickets) : 0;

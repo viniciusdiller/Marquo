@@ -202,6 +202,7 @@ export class DataExportService {
               appointmentId: true,
               status: true,
               discountCents: true,
+              clubCoveredCents: true,
               note: true,
               openedAt: true,
               closedAt: true,

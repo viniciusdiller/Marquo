@@ -9,6 +9,7 @@ const TO = "2026-10-31T23:59:59Z";
 type Mocks = {
   gross?: Array<{ professionalId: string; gross: bigint; tickets: bigint }>;
   discounted?: unknown[];
+  clubUsages?: unknown[];
   period?: unknown[];
   accrued?: unknown[];
   paid?: unknown[];
@@ -19,6 +20,7 @@ function build(m: Mocks = {}) {
   const prisma = {
     $queryRaw: jest.fn().mockResolvedValue(m.gross ?? []),
     ticket: { findMany: jest.fn().mockResolvedValue(m.discounted ?? []) },
+    clubUsage: { findMany: jest.fn().mockResolvedValue(m.clubUsages ?? []) },
     // 1ª chamada = comissões do período, 2ª = acumulado de todo o histórico (ordem do Promise.all).
     commissionEntry: {
       groupBy: jest
@@ -167,5 +169,26 @@ describe("CommissionsService.report: PROFESSIONAL sem vínculo", () => {
     const r = await svc.report("t-1", FROM, TO, undefined, { role: Role.PROFESSIONAL });
     expect(r).toEqual({ totalCents: 0, byProfessional: [], entries: [] });
     expect(findMany).not.toHaveBeenCalled();
+  });
+
+  // Clube de assinaturas: o serviço coberto não rendeu dinheiro à casa. Entra em "Descontos" do profissional DONO DO ITEM (sem
+  // rateio) e reduz o líquido; a comissão (bruto) não muda.
+  it("serviço coberto pelo clube entra nos descontos do profissional do item e reduz o líquido", async () => {
+    const { svc } = build({
+      gross: [{ professionalId: "p1", gross: 8000n, tickets: 2n }],
+      clubUsages: [
+        { coveredCents: 3000, ticketItem: { professionalId: "p1" } },
+        { coveredCents: 3000, ticketItem: { professionalId: null } }, // item sem profissional não entra por profissional
+      ],
+      period: [{ professionalId: "p1", ...sum(2400) }],
+      accrued: [{ professionalId: "p1", ...sum(2400) }],
+      professionals: [pro("p1", "Alex")],
+    });
+    const r = await svc.earnings("t-1", FROM, TO, undefined, { role: Role.OWNER });
+    const p1 = r.professionals.find((p) => p.professionalId === "p1")!;
+    expect(p1.grossCents).toBe(8000);
+    expect(p1.discountCents).toBe(3000);
+    expect(p1.netCents).toBe(5000);
+    expect(p1.commissionCents).toBe(2400); // comissão segue o bruto
   });
 });

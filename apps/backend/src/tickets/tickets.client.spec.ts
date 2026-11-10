@@ -8,6 +8,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ProductsService } from "../products/products.service";
 import { CommissionsService } from "../commissions/commissions.service";
 import { CashRegisterService } from "../cash-register/cash-register.service";
+import { ClubService } from "../club/club.service";
 import { FinanceService } from "../finance/finance.service";
 
 const CLIENT = "3f2b8c1e-8a3d-4c55-9d5e-0a1b2c3d4e5f";
@@ -50,6 +51,7 @@ function build(found: unknown = ticket(), clientFound: unknown = { id: CLIENT })
     {} as CommissionsService,
     {} as CashRegisterService,
     {} as FinanceService,
+    { coverageForTicket: jest.fn().mockResolvedValue({ coveredCents: 0, lines: [], membership: null }) } as unknown as ClubService,
   );
   return { tx, prisma, service };
 }

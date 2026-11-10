@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ProductsService } from "../products/products.service";
 import { CommissionsService } from "../commissions/commissions.service";
 import { CashRegisterService } from "../cash-register/cash-register.service";
+import { ClubService } from "../club/club.service";
 import { FinanceService } from "../finance/finance.service";
 
 function ticket(over: Record<string, unknown> = {}) {
@@ -61,8 +62,14 @@ function build(over: Record<string, unknown> = {}) {
   const commissions = { computeForTicket: jest.fn() } as unknown as CommissionsService;
   const cash = { currentOpen: jest.fn().mockResolvedValue(null) } as unknown as CashRegisterService;
   const finance = { recordTicketIncome: jest.fn() } as unknown as FinanceService;
+  // Clube desligado por padrão: nenhuma cobertura (os testes do clube na comanda ficam em tickets.club.spec.ts).
+  const club = {
+    isActive: jest.fn().mockResolvedValue(false),
+    coverageForTicket: jest.fn().mockResolvedValue({ coveredCents: 0, lines: [], membership: null }),
+    recordUsage: jest.fn(),
+  } as unknown as ClubService;
   return {
-    service: new TicketsService(prisma, products, commissions, cash, finance),
+    service: new TicketsService(prisma, products, commissions, cash, finance, club),
     prisma,
     products,
     commissions,
