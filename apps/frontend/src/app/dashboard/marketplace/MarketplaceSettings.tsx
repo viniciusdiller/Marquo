@@ -142,6 +142,7 @@ export function MarketplaceSettings({ settings }: { settings: Settings }) {
         initialNeighborhood={settings.neighborhood}
         initialLatitude={settings.latitude}
         initialLongitude={settings.longitude}
+        initialCep={settings.cep}
       />
 
       <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-700 dark:text-stone-200">

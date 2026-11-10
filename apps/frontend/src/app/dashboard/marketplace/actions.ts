@@ -66,8 +66,10 @@ export async function lookupCepAction(rawCep: string): Promise<CepLookupResult> 
   let state = "";
   let latitude: number | null = null;
   let longitude: number | null = null;
+  let fallbackLat: number | null = null;
+  let fallbackLng: number | null = null;
 
-  // 1. Tenta BrasilAPI v2 (contém as coordenadas geográficas oficiais do CEP brasileiro)
+  // 1. Tenta BrasilAPI v2 (para obter rua, bairro, cidade, estado)
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
@@ -88,8 +90,8 @@ export async function lookupCepAction(rawCep: string): Promise<CepLookupResult> 
         const parsedLat = Number(coords.latitude);
         const parsedLng = Number(coords.longitude);
         if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
-          latitude = Number(parsedLat.toFixed(6));
-          longitude = Number(parsedLng.toFixed(6));
+          fallbackLat = Number(parsedLat.toFixed(6));
+          fallbackLng = Number(parsedLng.toFixed(6));
         }
       }
     }
@@ -128,10 +130,13 @@ export async function lookupCepAction(rawCep: string): Promise<CepLookupResult> 
     };
   }
 
-  // 3. Se ainda não tem coordenadas exatas, faz geocodificação estruturada
-  if (latitude === null && street) {
+  // 3. Geocodificação exata da RUA via Nominatim:
+  // Se o CEP possui rua, busca as coordenadas daquela rua na cidade/bairro.
+  // Isso posiciona o pin diretamente na rua correspondente ao CEP, e não no centróide genérico da cidade.
+  if (street) {
     try {
-      const structuredUrl = `https://nominatim.openstreetmap.org/search?format=json&street=${encodeURIComponent(street)}&city=${encodeURIComponent(city)}${state ? `&state=${encodeURIComponent(state)}` : ""}&countrycodes=br&limit=1`;
+      const query = [street, neighborhood, city, state].filter(Boolean).join(", ");
+      const structuredUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=br&limit=1`;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 4000);
       const geoRes = await fetch(structuredUrl, {
@@ -151,8 +156,41 @@ export async function lookupCepAction(rawCep: string): Promise<CepLookupResult> 
         }
       }
     } catch {
-      // Falha silenciosa
+      // Fallback abaixo
     }
+
+    // Se a busca completa não achou, tenta apenas rua + cidade
+    if (latitude === null) {
+      try {
+        const structuredUrl = `https://nominatim.openstreetmap.org/search?format=json&street=${encodeURIComponent(street)}&city=${encodeURIComponent(city)}${state ? `&state=${encodeURIComponent(state)}` : ""}&countrycodes=br&limit=1`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
+        const geoRes = await fetch(structuredUrl, {
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "Marquo-App/1.0 (contato@marquo.com.br)",
+            Accept: "application/json",
+          },
+        });
+        clearTimeout(timeout);
+
+        if (geoRes.ok) {
+          const geoData = await geoRes.json();
+          if (Array.isArray(geoData) && geoData.length > 0) {
+            latitude = Number(Number(geoData[0].lat).toFixed(6));
+            longitude = Number(Number(geoData[0].lon).toFixed(6));
+          }
+        }
+      } catch {
+        // Fallback abaixo
+      }
+    }
+  }
+
+  // 4. Se a busca pela rua não achou coordenadas (ou CEP de cidade única sem rua), usa o centróide
+  if (latitude === null && fallbackLat !== null && fallbackLng !== null) {
+    latitude = fallbackLat;
+    longitude = fallbackLng;
   }
 
   return {
@@ -304,11 +342,14 @@ export async function saveMarketplaceAction(
     return { error: "Informe latitude e longitude juntas, ou deixe as duas em branco." };
   }
   try {
+    const rawCep = String(formData.get("cep") ?? "").replace(/\D/g, "").slice(0, 8);
+    const cep = rawCep || undefined;
     const updated = await authedFetch<{ slug?: string }>("/tenants/me/marketplace", {
       method: "PATCH",
       body: JSON.stringify({
         listedInMarketplace: formData.get("listed") === "on",
         address: String(formData.get("address") ?? "").trim() || undefined,
+        cep,
         city: String(formData.get("city") ?? "").trim() || undefined,
         neighborhood: String(formData.get("neighborhood") ?? "").trim() || undefined,
         latitude,

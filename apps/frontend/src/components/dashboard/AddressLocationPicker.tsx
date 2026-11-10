@@ -25,6 +25,13 @@ interface AddressLocationPickerProps {
   initialNeighborhood?: string | null;
   initialLatitude?: number | null;
   initialLongitude?: number | null;
+  initialCep?: string | null;
+}
+
+function formatCep(value: string) {
+  const raw = value.replace(/\D/g, "").slice(0, 8);
+  if (raw.length <= 5) return raw;
+  return `${raw.slice(0, 5)}-${raw.slice(5)}`;
 }
 
 function parseAddressParts(address: string | null | undefined): { street: string; number: string } {
@@ -45,10 +52,11 @@ export function AddressLocationPicker({
   initialNeighborhood = "",
   initialLatitude = null,
   initialLongitude = null,
+  initialCep = "",
 }: AddressLocationPickerProps) {
   const [initialParts] = useState(() => parseAddressParts(initialAddress));
 
-  const [cep, setCep] = useState("");
+  const [cep, setCep] = useState(() => (initialCep ? formatCep(initialCep) : ""));
   const [street, setStreet] = useState(initialParts.street);
   const [number, setNumber] = useState(initialParts.number);
   const [city, setCity] = useState(initialCity ?? "");
@@ -66,12 +74,6 @@ export function AddressLocationPicker({
 
   // String unificada para salvar no banco
   const fullAddress = [street, number].filter(Boolean).join(", ");
-
-  function formatCep(value: string) {
-    const raw = value.replace(/\D/g, "").slice(0, 8);
-    if (raw.length <= 5) return raw;
-    return `${raw.slice(0, 5)}-${raw.slice(5)}`;
-  }
 
   function handleCepSearch(cepToSearch?: string) {
     const targetCep = cepToSearch || cep;
@@ -365,6 +367,11 @@ export function AddressLocationPicker({
               maxLength={20}
               value={number}
               onChange={(e) => setNumber(e.target.value)}
+              onBlur={() => {
+                if (number.trim() && street.trim() && city.trim() && !loadingGeocode) {
+                  handleGeocodeWithNumber();
+                }
+              }}
               placeholder="Ex: 1500"
               hint="Obrigatório para rotas e entregas."
             />
@@ -386,8 +393,9 @@ export function AddressLocationPicker({
         </div>
       )}
 
-      {/* Input de endereço completo enviado ao backend */}
+      {/* Input de endereço completo e CEP enviados ao backend */}
       <input type="hidden" name="address" value={fullAddress} />
+      <input type="hidden" name="cep" value={cep.replace(/\D/g, "")} />
 
       {/* Cidade e Bairro */}
       <div className="grid gap-3 sm:grid-cols-2">
