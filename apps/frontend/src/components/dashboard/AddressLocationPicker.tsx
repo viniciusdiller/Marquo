@@ -98,14 +98,21 @@ export function AddressLocationPicker({
         if (result.latitude !== null && result.latitude !== undefined && result.longitude !== null && result.longitude !== undefined) {
           setLatitude(String(result.latitude));
           setLongitude(String(result.longitude));
-          setFeedback({
-            type: "success",
-            message: "Endereço localizado! Digite o número da fachada e confira o marcador no mapa abaixo.",
-          });
+          setFeedback(
+            result.precision === "neighborhood"
+              ? {
+                  type: "info",
+                  message: "Achamos o bairro, mas não a rua exata. O pin está aproximado: digite o número e arraste o pin até a sua entrada no mapa.",
+                }
+              : {
+                  type: "success",
+                  message: "Endereço localizado! Digite o número da fachada e confira o marcador no mapa abaixo.",
+                },
+          );
         } else {
           setFeedback({
             type: "info",
-            message: "Rua e bairro localizados. Digite o número e clique no mapa para marcar sua barbearia.",
+            message: "Rua e bairro preenchidos, mas o mapa não conhece esse endereço. Clique no mapa para marcar a entrada da sua barbearia.",
           });
         }
       } catch {
