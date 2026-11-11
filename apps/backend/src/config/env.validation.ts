@@ -101,6 +101,18 @@ class EnvironmentVariables {
   @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
   BACKEND_PUBLIC_URL?: string;
 
+  // Base https do endereço de volta do checkout do cartão (opcional; padrão = FRONTEND_URL). O Mercado Pago recusa http/localhost
+  // como back_url, então em dev aponte para um túnel https do frontend.
+  @ValidateIf((o) => o.MERCADOPAGO_BACK_URL_BASE !== undefined)
+  @IsUrl({ require_tld: false, require_protocol: true, protocols: ["https"] })
+  MERCADOPAGO_BACK_URL_BASE?: string;
+
+  // E-mail do COMPRADOR de teste do Mercado Pago ("Contas de teste" no painel de desenvolvedores). Só em desenvolvimento: com
+  // credenciais de teste o pagador precisa ser um usuário de teste; em produção é proibido (o pagador é sempre o dono).
+  @ValidateIf((o) => o.MERCADOPAGO_TEST_PAYER_EMAIL !== undefined)
+  @IsEmail()
+  MERCADOPAGO_TEST_PAYER_EMAIL?: string;
+
   // Só para testes com um servidor falso do provedor; ignorado em produção (o cliente usa sempre o host oficial).
   @ValidateIf((o) => o.MERCADOPAGO_API_BASE !== undefined)
   @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
@@ -142,7 +154,24 @@ class EnvironmentVariables {
   PLATFORM_ADMIN_PASSWORD_HASH?: string;
 }
 
-export function validateEnv(config: Record<string, unknown>) {
+// `CHAVE=` (vazio) no arquivo de ambiente vale como "não definida". Assim o `.env.example` lista TODAS as variáveis sem comentário
+// (é só preencher o que for usar) e copiá-lo não derruba o boot nem liga, sem querer, uma integração com valor falso.
+// Obrigatória vazia continua falhando (some e cai na regra de "faltando"); em produção, idem.
+function withoutBlankValues(config: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (typeof value === "string" && value.trim() === "") {
+      // Sem isto o ConfigService cairia no process.env e devolveria "" (e `?? padrão` não pega string vazia).
+      delete process.env[key];
+      continue;
+    }
+    result[key] = value;
+  }
+  return result;
+}
+
+export function validateEnv(rawConfig: Record<string, unknown>) {
+  const config = withoutBlankValues(rawConfig);
   const validated = plainToInstance(EnvironmentVariables, config, {
     enableImplicitConversion: true,
   });
@@ -150,6 +179,11 @@ export function validateEnv(config: Record<string, unknown>) {
 
   if (errors.length > 0) {
     throw new Error(`Config inválida: ${errors.toString()}`);
+  }
+
+  // Comprador de teste só existe em desenvolvimento: em produção ele trocaria o pagador real por um e-mail fixo.
+  if (validated.NODE_ENV === "production" && validated.MERCADOPAGO_TEST_PAYER_EMAIL) {
+    throw new Error("Config inválida: MERCADOPAGO_TEST_PAYER_EMAIL não pode ser usado em produção.");
   }
 
   // 2FA ligado sem como entregar o código = ninguém mais entra no painel. Falha no boot, não no primeiro login.

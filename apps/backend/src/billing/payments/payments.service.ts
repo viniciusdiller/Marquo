@@ -97,6 +97,14 @@ export class PaymentsService {
     return base ? `${base.replace(/\/+$/, "")}/webhooks/mercadopago` : null;
   }
 
+  // Base do endereço de volta do checkout do cartão (back_url). O Mercado Pago só aceita https público, então em dev
+  // (FRONTEND_URL=http://localhost:3000) o cartão falha com "Invalid value for back_url": aponte MERCADOPAGO_BACK_URL_BASE
+  // para um túnel https do frontend. FRONTEND_URL fica como está porque também é a origem liberada no CORS.
+  private backUrlBase(): string {
+    const override = this.config.get<string>("MERCADOPAGO_BACK_URL_BASE");
+    return (override ?? this.frontendUrl()).replace(/\/+$/, "");
+  }
+
   private frontendUrl(): string {
     return (this.config.get<string>("FRONTEND_URL") ?? "http://localhost:3000").replace(/\/+$/, "");
   }
@@ -287,6 +295,10 @@ export class PaymentsService {
   private async ownerEmail(tenantId: string, userId: string): Promise<string> {
     const user = await this.prisma.user.findFirst({ where: { id: userId, tenantId }, select: { email: true } });
     if (!user) throw new NotFoundException("Usuário não encontrado.");
+    // Só em desenvolvimento: com credenciais de TESTE o Mercado Pago exige um comprador de teste ("Contas de teste" no painel);
+    // com o e-mail real do dono responde "Unauthorized use of live credentials". Em produção é sempre o e-mail do dono.
+    const testPayer = this.config.get<string>("MERCADOPAGO_TEST_PAYER_EMAIL");
+    if (testPayer && this.config.get<string>("NODE_ENV") !== "production") return testPayer;
     return user.email;
   }
 
@@ -301,7 +313,7 @@ export class PaymentsService {
         externalReference: attempt.id,
         payerEmail: email,
         amountCents: attempt.chargeCents,
-        backUrl: `${this.frontendUrl()}/dashboard/plano?checkout=cartao&tentativa=${attempt.id}`,
+        backUrl: `${this.backUrlBase()}/dashboard/plano?checkout=cartao&tentativa=${attempt.id}`,
         notificationUrl: this.notificationUrl(),
         idempotencyKey: attempt.id,
       });

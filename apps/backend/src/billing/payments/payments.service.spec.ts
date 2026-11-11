@@ -21,6 +21,7 @@ interface World {
   pendingRedemption?: Record<string, unknown> | null;
   existingRedemption?: Record<string, unknown> | null;
   configured?: boolean;
+  env?: Record<string, string>;
 }
 
 function build(world: World = {}) {
@@ -115,7 +116,7 @@ function build(world: World = {}) {
 
   const config = {
     get: (key: string) =>
-      ({ FRONTEND_URL: "https://app.marquo.test", BACKEND_PUBLIC_URL: "https://api.marquo.test" })[key],
+      ({ FRONTEND_URL: "https://app.marquo.test", BACKEND_PUBLIC_URL: "https://api.marquo.test", ...world.env })[key],
   } as unknown as ConfigService;
   const planLimit = { assertCanDowngrade: jest.fn().mockResolvedValue(undefined) } as unknown as PlanLimitService;
 
@@ -279,6 +280,34 @@ describe("PaymentsService.startCard", () => {
       }),
     );
     expect(result).toMatchObject({ attemptId: ATTEMPT, url: "https://mp.test/checkout/pre-1" });
+  });
+
+  // O Mercado Pago recusa http/localhost como back_url ("Invalid value for back_url"): em dev a base vem de um túnel https.
+  it("MERCADOPAGO_BACK_URL_BASE (https) vira a base do back_url sem mexer no FRONTEND_URL", async () => {
+    const { service, mp } = build({
+      coupon: percentCoupon,
+      env: { FRONTEND_URL: "http://localhost:3000", MERCADOPAGO_BACK_URL_BASE: "https://abc123.ngrok-free.app/" },
+    });
+    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, "PROMO20");
+    const { backUrl } = (mp.createPreapproval as jest.Mock).mock.calls[0][0];
+    expect(backUrl).toBe(`https://abc123.ngrok-free.app/dashboard/plano?checkout=cartao&tentativa=${ATTEMPT}`);
+  });
+
+  it("sem MERCADOPAGO_BACK_URL_BASE o back_url usa o FRONTEND_URL", async () => {
+    const { service, mp } = build({ coupon: percentCoupon });
+    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, "PROMO20");
+    expect((mp.createPreapproval as jest.Mock).mock.calls[0][0].backUrl).toMatch(/^https:\/\/app\.marquo\.test\/dashboard\/plano\?/);
+  });
+
+  it("MERCADOPAGO_TEST_PAYER_EMAIL troca o pagador por um comprador de teste (só fora de produção)", async () => {
+    const dev = build({ coupon: percentCoupon, env: { MERCADOPAGO_TEST_PAYER_EMAIL: "test_user_1@testuser.com" } });
+    await dev.service.startCard(TENANT, USER, "PROFISSIONAL" as never, "PROMO20");
+    expect((dev.mp.createPreapproval as jest.Mock).mock.calls[0][0].payerEmail).toBe("test_user_1@testuser.com");
+
+    // Em produção a variável é ignorada: o pagador é sempre o dono.
+    const prod = build({ coupon: percentCoupon, env: { MERCADOPAGO_TEST_PAYER_EMAIL: "test_user_1@testuser.com", NODE_ENV: "production" } });
+    await prod.service.startCard(TENANT, USER, "PROFISSIONAL" as never, "PROMO20");
+    expect((prod.mp.createPreapproval as jest.Mock).mock.calls[0][0].payerEmail).toBe("dono@salao.com");
   });
 
   it("já tem cartão ativo: 409 (nada de cobrar em dobro)", async () => {

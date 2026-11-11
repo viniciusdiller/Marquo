@@ -1,4 +1,6 @@
 import "reflect-metadata";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { validateEnv } from "./env.validation";
 
 const base = {
@@ -181,3 +183,111 @@ it("requires a valid shared Redis URL", () => {
   expect(() => validateEnv({ DATABASE_URL: "postgresql://x", JWT_SECRET: "x".repeat(40) })).toThrow();
   expect(() => validateEnv({ DATABASE_URL: "postgresql://x", JWT_SECRET: "x".repeat(40), REDIS_URL: "https://example.com" })).toThrow();
 });
+
+describe("validateEnv: variável em branco (CHAVE=) vale como não definida", () => {
+  const strong = { REDIS_URL: "redis://localhost:6379", DATABASE_URL: "postgresql://x", JWT_SECRET: "a".repeat(40) };
+  const blanks = {
+    SITE_URL: "",
+    TRUST_PROXY_HOPS: "",
+    CLIENT_IP_SECRET: "",
+    INTERNAL_API_SECRET: "",
+    MERCADOPAGO_ACCESS_TOKEN: "",
+    MERCADOPAGO_WEBHOOK_SECRET: "",
+    BACKEND_PUBLIC_URL: "",
+    PLATFORM_ADMIN_EMAIL: "",
+    PLATFORM_ADMIN_PASSWORD_HASH: "",
+    PLATFORM_ADMIN_2FA: "",
+    RESEND_API_KEY: "",
+    EMAIL_FROM: "",
+  };
+
+  it("o .env.example completo (opcionais em branco) sobe em desenvolvimento", () => {
+    expect(() => validateEnv({ ...strong, ...blanks })).not.toThrow();
+  });
+
+  it("espaços sozinhos também contam como em branco", () => {
+    expect(() => validateEnv({ ...strong, MERCADOPAGO_ACCESS_TOKEN: "   ", RESEND_API_KEY: "\t" })).not.toThrow();
+  });
+
+  it("o par do Resend em branco não exige o outro (não liga e-mail com valor falso)", () => {
+    const result = validateEnv({ ...strong, RESEND_API_KEY: "", EMAIL_FROM: "" });
+    expect(result.RESEND_API_KEY).toBeUndefined();
+    expect(result.EMAIL_FROM).toBeUndefined();
+  });
+
+  it("a variável em branco é removida do process.env (o ConfigService não devolve string vazia)", () => {
+    process.env.MERCADOPAGO_ACCESS_TOKEN = "";
+    validateEnv({ ...strong, MERCADOPAGO_ACCESS_TOKEN: "" });
+    expect(process.env.MERCADOPAGO_ACCESS_TOKEN).toBeUndefined();
+  });
+
+  it("obrigatória em branco continua falhando (JWT_SECRET, DATABASE_URL, REDIS_URL)", () => {
+    expect(() => validateEnv({ ...strong, JWT_SECRET: "" })).toThrow();
+    expect(() => validateEnv({ ...strong, DATABASE_URL: "" })).toThrow();
+    expect(() => validateEnv({ ...strong, REDIS_URL: "" })).toThrow();
+  });
+
+  it("em produção, segredo obrigatório em branco falha como se estivesse ausente", () => {
+    const prod = {
+      ...strong,
+      NODE_ENV: "production",
+      CLIENT_IP_SECRET: "c".repeat(32),
+      INTERNAL_API_SECRET: "i".repeat(32),
+      FRONTEND_URL: "https://marquo.com.br",
+    };
+    expect(() => validateEnv(prod)).not.toThrow();
+    expect(() => validateEnv({ ...prod, CLIENT_IP_SECRET: "" })).toThrow();
+    expect(() => validateEnv({ ...prod, INTERNAL_API_SECRET: "" })).toThrow();
+  });
+
+  it("MERCADOPAGO_BACK_URL_BASE só aceita https (o Mercado Pago recusa http/localhost como back_url)", () => {
+    expect(() => validateEnv({ ...strong, MERCADOPAGO_BACK_URL_BASE: "https://abc.ngrok-free.app" })).not.toThrow();
+    expect(() => validateEnv({ ...strong, MERCADOPAGO_BACK_URL_BASE: "http://localhost:3000" })).toThrow();
+    expect(() => validateEnv({ ...strong, MERCADOPAGO_BACK_URL_BASE: "" })).not.toThrow();
+  });
+
+  it("MERCADOPAGO_TEST_PAYER_EMAIL: e-mail válido em dev; proibido em produção", () => {
+    expect(() => validateEnv({ ...strong, MERCADOPAGO_TEST_PAYER_EMAIL: "test_user_1@testuser.com" })).not.toThrow();
+    expect(() => validateEnv({ ...strong, MERCADOPAGO_TEST_PAYER_EMAIL: "nao-e-email" })).toThrow();
+    const prod = { ...strong, NODE_ENV: "production", CLIENT_IP_SECRET: "c".repeat(32), INTERNAL_API_SECRET: "i".repeat(32), FRONTEND_URL: "https://marquo.com.br" };
+    expect(() => validateEnv({ ...prod, MERCADOPAGO_TEST_PAYER_EMAIL: "test_user_1@testuser.com" })).toThrow(/produção/);
+    expect(() => validateEnv(prod)).not.toThrow();
+  });
+
+  it("valor preenchido continua sendo validado (token com prefixo errado falha)", () => {
+    expect(() => validateEnv({ ...strong, MERCADOPAGO_ACCESS_TOKEN: "qualquer-coisa" })).toThrow();
+    expect(() => validateEnv({ ...strong, MERCADOPAGO_ACCESS_TOKEN: "TEST-1234567890abcdef" })).not.toThrow();
+  });
+});
+
+describe("arquivo de exemplo de ambiente da raiz", () => {
+  const raw = readFileSync(join(__dirname, "../../../../.env.example"), "utf8");
+  // Leitor mínimo (linhas CHAVE=valor; ignora comentários e linhas em branco; tira aspas): o suficiente para o arquivo de exemplo.
+  const parsed: Record<string, string> = {};
+  for (const line of raw.split("\n")) {
+    const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
+    if (match) parsed[match[1]] = match[2].replace(/^(["'])(.*)\1$/, "$2");
+  }
+
+  it("copiado do jeito que está, o backend sobe (o que não é preenchido fica desligado)", () => {
+    expect(() => validateEnv({ ...parsed })).not.toThrow();
+  });
+
+  it("não deixa variável de configuração comentada: toda chave da validação aparece ativa", () => {
+    for (const key of [
+      "REDIS_URL", "DATABASE_URL", "JWT_SECRET", "JWT_EXPIRES_IN", "PORT", "FRONTEND_URL", "SITE_URL", "TRUST_PROXY_HOPS",
+      "CLIENT_IP_SECRET", "INTERNAL_API_SECRET", "MERCADOPAGO_ACCESS_TOKEN", "MERCADOPAGO_WEBHOOK_SECRET", "BACKEND_PUBLIC_URL", "MERCADOPAGO_BACK_URL_BASE", "MERCADOPAGO_TEST_PAYER_EMAIL",
+      "PLATFORM_ADMIN_EMAIL", "PLATFORM_ADMIN_PASSWORD_HASH", "PLATFORM_ADMIN_2FA", "RESEND_API_KEY", "EMAIL_FROM",
+    ]) {
+      expect(Object.keys(parsed)).toContain(key);
+    }
+  });
+
+  it("não traz segredo de verdade: valores preenchidos são só os de desenvolvimento/placeholder", () => {
+    expect(parsed.JWT_SECRET).toMatch(/^CHANGE_ME/);
+    for (const key of ["MERCADOPAGO_ACCESS_TOKEN", "MERCADOPAGO_WEBHOOK_SECRET", "RESEND_API_KEY", "PLATFORM_ADMIN_PASSWORD_HASH", "INTERNAL_API_SECRET", "CLIENT_IP_SECRET"]) {
+      expect(parsed[key]).toBe("");
+    }
+  });
+});
+
