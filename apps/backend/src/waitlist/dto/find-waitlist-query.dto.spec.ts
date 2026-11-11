@@ -27,4 +27,15 @@ describe("FindWaitlistQueryDto", () => {
     const errors = await validateDto({ status: "PENDING" });
     expect(errors).toHaveLength(0);
   });
+
+  it("aceita CLOSED (a aba 'Encerrados': resolvidos e cancelados)", async () => {
+    expect(await validateDto({ status: "CLOSED" })).toHaveLength(0);
+    for (const status of ["CONTACTED", "RESOLVED", "CANCELED"]) expect(await validateDto({ status })).toHaveLength(0);
+  });
+
+  it("recusa minúsculas e texto solto", async () => {
+    for (const status of ["pending", "closed", "ALL", "PENDING; DROP"]) {
+      expect((await validateDto({ status })).some((e) => e.property === "status")).toBe(true);
+    }
+  });
 });
