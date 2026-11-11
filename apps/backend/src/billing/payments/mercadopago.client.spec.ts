@@ -1,6 +1,6 @@
 import { ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { MercadoPagoClient, PaymentProviderError } from "./mercadopago.client";
+import { describeAccessToken, MercadoPagoClient, PaymentProviderError } from "./mercadopago.client";
 
 function build(env: Record<string, string | undefined> = { MERCADOPAGO_ACCESS_TOKEN: "TEST-token-de-teste-123" }) {
   const config = { get: (key: string) => env[key] } as unknown as ConfigService;
@@ -112,5 +112,37 @@ describe("MercadoPagoClient", () => {
       NODE_ENV: "production",
     }).getPayment("1");
     expect(prod.mock.calls[0][0]).toBe("https://api.mercadopago.com/v1/payments/1");
+  });
+});
+
+
+describe("describeAccessToken (log do boot: de quem é o token)", () => {
+  const secretPart = "609b56373e9be83a10b55725ba9cd18c";
+
+  it("mostra só aplicação e usuário e NUNCA o hash (o segredo)", () => {
+    const text = describeAccessToken(`APP_USR-2588112191055519-102610-${secretPart}-3678103060`);
+    expect(text).toBe("aplicação 2588112191055519, usuário 3678103060");
+    expect(text).not.toContain(secretPart);
+  });
+
+  it("reconhece o prefixo TEST- sem ecoar o valor", () => {
+    const text = describeAccessToken("TEST-1234567890abcdef");
+    expect(text).toContain("TEST-");
+    expect(text).not.toContain("1234567890abcdef");
+  });
+
+  it("formato desconhecido não vaza nada do conteúdo", () => {
+    expect(describeAccessToken("qualquer-coisa-secreta")).toBe("formato não reconhecido");
+  });
+});
+
+describe("MercadoPagoClient.onModuleInit", () => {
+  it("loga ligado (com os ids) ou desligado, e nunca lança", () => {
+    const log = jest.spyOn(require("@nestjs/common").Logger.prototype, "log").mockImplementation(() => undefined);
+    expect(() => build({ MERCADOPAGO_ACCESS_TOKEN: "APP_USR-111-010101-abc123-222" }).onModuleInit()).not.toThrow();
+    expect(log).toHaveBeenLastCalledWith("Mercado Pago ligado: aplicação 111, usuário 222");
+    build({}).onModuleInit();
+    expect(String(log.mock.calls.at(-1)?.[0])).toContain("desligado");
+    log.mockRestore();
   });
 });

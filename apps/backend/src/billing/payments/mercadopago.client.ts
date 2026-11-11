@@ -1,4 +1,4 @@
-import { BadGatewayException, Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
+import { BadGatewayException, Injectable, Logger, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { centsToReais } from "./pricing";
 
@@ -36,6 +36,16 @@ export interface MpAuthorizedPayment {
   status?: string;
 }
 
+// Só identifica de quem é o token, para conferir no log do boot se é a credencial que você pensa que é (teste x produção).
+// Formato do Mercado Pago: APP_USR-<aplicação>-<data>-<hash>-<usuário>. Devolve APENAS os dois números de identificação
+// (não são segredo e aparecem no painel do desenvolvedor); o hash, que é o segredo, nunca sai daqui.
+export function describeAccessToken(token: string): string {
+  const match = /^APP_USR-(\d+)-\d+-[a-f0-9]+-(\d+)$/i.exec(token.trim());
+  if (match) return `aplicação ${match[1]}, usuário ${match[2]}`;
+  if (token.trim().startsWith("TEST-")) return "credencial de teste (prefixo TEST-)";
+  return "formato não reconhecido";
+}
+
 // Falha ao falar com o provedor. A mensagem do provedor/corpo da resposta NUNCA vai para o cliente (pode conter
 // dado interno); ela só é logada, sem o token.
 export class PaymentProviderError extends Error {
@@ -50,8 +60,14 @@ export class PaymentProviderError extends Error {
 // Cliente HTTP mínimo do Mercado Pago (sem SDK: uma dependência a menos para auditar). Só fala com UM host fixo
 // (api.mercadopago.com), com timeout, e nunca devolve o corpo de erro do provedor ao usuário.
 @Injectable()
-export class MercadoPagoClient {
+export class MercadoPagoClient implements OnModuleInit {
   private readonly logger = new Logger(MercadoPagoClient.name);
+
+  onModuleInit() {
+    const token = this.config.get<string>("MERCADOPAGO_ACCESS_TOKEN");
+    if (token) this.logger.log(`Mercado Pago ligado: ${describeAccessToken(token)}`);
+    else this.logger.log("Mercado Pago desligado (sem MERCADOPAGO_ACCESS_TOKEN): as rotas de cobrança respondem 503.");
+  }
 
   constructor(private readonly config: ConfigService) {}
 
