@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { MaskedInput } from "@/components/ui/MaskedInput";
 import { moneyToCents } from "@/lib/masks";
 import { createCouponAction } from "../actions";
+import { DatePicker } from "@/components/ui/date-picker";
 
 type Kind = "TRIAL_DAYS" | "PERCENT" | "FIXED_CENTS";
 
@@ -163,12 +164,12 @@ export function CouponForm() {
           onChange={(e) => setMaxRedemptions(e.target.value.replace(/\D/g, "").slice(0, 7))}
           hint="Em branco = sem limite."
         />
-        <Input
+        <DatePicker
           label="Vale até (opcional)"
           name="validUntil"
-          type="date"
           value={validUntil}
-          onChange={(e) => setValidUntil(e.target.value)}
+          onChange={setValidUntil}
+          clearable
           hint="Inclusive o dia escolhido."
         />
       </div>

@@ -6,6 +6,7 @@ import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatCentsBRL } from "@/lib/masks";
 import { brl } from "@/lib/money";
 import { registerPayoutAction } from "./actions";
+import { DatePicker } from "@/components/ui/date-picker";
 
 const TZ = "America/Sao_Paulo";
 // Mesmo teto do servidor (366 dias). O servidor revalida: isto só evita mandar o que ele recusaria.
@@ -102,21 +103,18 @@ export function PayoutButton({
           </span>
         </label>
 
-        <label className="mt-3 flex flex-col gap-1.5 text-sm font-medium text-zinc-700 dark:text-stone-200">
-          Data do pagamento
-          <input
-            type="date"
+        <div className="mt-3">
+          <DatePicker
+            label="Data do pagamento"
             value={paidOn}
-            onChange={(e) => setPaidOn(e.target.value)}
+            onChange={setPaidOn}
             max={DateTime.now().setZone(TZ).toISODate()!}
             min={DateTime.now().setZone(TZ).minus({ days: MAX_BACKDATE_DAYS }).toISODate()!}
             required
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-normal dark:border-white/15 dark:bg-zinc-900 dark:text-white"
+            className="px-3 py-2 text-sm"
+            hint="Já vem com a data de hoje. Mude só se o pagamento foi em outro dia (nunca no futuro)."
           />
-          <span className="text-xs font-normal text-zinc-400 dark:text-stone-500">
-            Já vem com a data de hoje. Mude só se o pagamento foi em outro dia (nunca no futuro).
-          </span>
-        </label>
+        </div>
 
         <label className="mt-3 flex flex-col gap-1.5 text-sm font-medium text-zinc-700 dark:text-stone-200">
           Observação (opcional)

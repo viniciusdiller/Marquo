@@ -8,6 +8,7 @@ import { PRESET_LABEL, type EarningsPeriod } from "@/lib/earnings-period";
 import { brl } from "@/lib/money";
 import { riseIn } from "@/lib/stagger";
 import { PayoutButton } from "./PayoutButton";
+import { DatePicker } from "@/components/ui/date-picker";
 
 const BASE = "/dashboard/comissoes";
 
@@ -34,21 +35,13 @@ function PeriodBar({ period }: { period: EarningsPeriod }) {
 
       {/* GET: o período fica na URL, a página segue Server Component e o link é compartilhável */}
       <form method="get" action={BASE} className="flex flex-wrap items-center gap-2 text-sm">
-        <input
-          type="date"
-          name="de"
-          defaultValue={period.fromDate}
-          aria-label="Data inicial"
-          className="rounded-lg border border-zinc-300 px-2 py-1.5 dark:border-white/15 dark:bg-zinc-900 dark:text-white"
-        />
+        <div className="w-40">
+          <DatePicker name="de" defaultValue={period.fromDate} aria-label="Data inicial" required className="px-3 py-1.5 text-sm" />
+        </div>
         <span className="text-zinc-400">até</span>
-        <input
-          type="date"
-          name="ate"
-          defaultValue={period.toDate}
-          aria-label="Data final"
-          className="rounded-lg border border-zinc-300 px-2 py-1.5 dark:border-white/15 dark:bg-zinc-900 dark:text-white"
-        />
+        <div className="w-40">
+          <DatePicker name="ate" defaultValue={period.toDate} aria-label="Data final" required className="px-3 py-1.5 text-sm" />
+        </div>
         <button
           type="submit"
           className="rounded-full border border-zinc-300 px-4 py-1.5 font-medium transition-colors hover:bg-zinc-900/5 dark:border-white/15 dark:text-stone-200 dark:hover:bg-white/5"

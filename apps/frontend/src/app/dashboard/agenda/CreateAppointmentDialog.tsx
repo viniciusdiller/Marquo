@@ -9,6 +9,7 @@ import type { CalendarProfessional } from "@marquo/shared-types";
 import { formatPhoneBR } from "@/lib/masks";
 import { createStaffAppointmentAction } from "./actions";
 import { getStatusDotClasses } from "@/lib/appointment-status";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 
 const FOCUS_RING =
   "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 focus-visible:border-accent-500";
@@ -155,19 +156,7 @@ export function CreateAppointmentDialog({
             </select>
           </label>
 
-          <label className="block text-sm font-medium text-zinc-700 dark:text-stone-200">
-            Início
-            <input
-              type="datetime-local"
-              value={startAt}
-              min={minDateTimeLocal}
-              onChange={(e) => setStartAt(e.target.value)}
-              className={clsx(
-                "mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-900 dark:text-white",
-                FOCUS_RING,
-              )}
-            />
-          </label>
+          <DateTimePicker label="Início" value={startAt} min={minDateTimeLocal} onChange={setStartAt} required />
 
           <div className="text-sm font-medium text-zinc-700 dark:text-stone-200">
             Serviços{" "}
