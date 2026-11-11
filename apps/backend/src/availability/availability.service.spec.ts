@@ -113,6 +113,51 @@ describe("AvailabilityService", () => {
     expect(slots[0].startAt).toContain("10:00:00");
   });
 
+  // "Todo dia" (ex.: almoço): o bloqueio foi criado em outro dia, mas vale na segunda consultada.
+  it("exclui slots cobertos por um bloqueio que se repete todo dia, criado em outra data", async () => {
+    (prisma.workingHours.findMany as jest.Mock).mockResolvedValue([
+      { startMinute: 540, endMinute: 660 }, // 09:00–11:00
+    ]);
+    (prisma.timeBlock.findMany as jest.Mock).mockResolvedValue([
+      {
+        startAt: new Date("2023-12-20T12:00:00.000Z"), // 09:00 local, criado dias antes
+        endAt: new Date("2023-12-20T13:00:00.000Z"), // 10:00 local
+        recurrence: "DAILY",
+        repeatUntil: null,
+      },
+    ]);
+
+    const slots = await service.getAvailableSlots("slug", "prof-1", "svc-1", MONDAY);
+
+    expect(slots).toHaveLength(1);
+    expect(slots[0].startAt).toContain("10:00:00");
+  });
+
+  it("bloqueio diário que já terminou (data final antes do dia) não bloqueia", async () => {
+    (prisma.workingHours.findMany as jest.Mock).mockResolvedValue([{ startMinute: 540, endMinute: 660 }]);
+    (prisma.timeBlock.findMany as jest.Mock).mockResolvedValue([
+      {
+        startAt: new Date("2023-12-20T12:00:00.000Z"),
+        endAt: new Date("2023-12-20T13:00:00.000Z"),
+        recurrence: "DAILY",
+        repeatUntil: new Date("2023-12-31T00:00:00.000Z"),
+      },
+    ]);
+
+    const slots = await service.getAvailableSlots("slug", "prof-1", "svc-1", MONDAY);
+
+    // Sem nenhum bloqueio vigente a janela 09:00–11:00 rende os 5 horários (de 15 em 15 min).
+    expect(slots).toHaveLength(5);
+  });
+
+  it("a consulta de bloqueios pede os únicos do dia e os diários ainda vigentes", async () => {
+    (prisma.workingHours.findMany as jest.Mock).mockResolvedValue([{ startMinute: 540, endMinute: 660 }]);
+    await service.getAvailableSlots("slug", "prof-1", "svc-1", MONDAY);
+    const where = (prisma.timeBlock.findMany as jest.Mock).mock.calls[0][0].where;
+    expect(where.professionalId).toBe("prof-1");
+    expect(where.OR.map((c: { recurrence: string }) => c.recurrence)).toEqual(["NONE", "DAILY"]);
+  });
+
   it("usa a duração override do ProfessionalService quando definida", async () => {
     (prisma.professionalService.findFirst as jest.Mock).mockResolvedValue({
       durationMinutes: 30,

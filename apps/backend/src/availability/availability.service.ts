@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { blocksTouchingWhere, occurrencesInRange } from "../time-blocks/time-block-occurrences";
 import { DateTime } from "luxon";
 import { Weekday } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
@@ -93,16 +94,14 @@ export class AvailabilityService {
         select: { startAt: true, endAt: true },
       }),
       this.prisma.timeBlock.findMany({
-        where: {
-          professionalId,
-          startAt: { lt: dayEnd.toJSDate() },
-          endAt: { gt: dayStart.toJSDate() },
-        },
-        select: { startAt: true, endAt: true },
+        where: { professionalId, ...blocksTouchingWhere(dayStart.toJSDate(), dayEnd.toJSDate()) },
+        select: { startAt: true, endAt: true, recurrence: true, repeatUntil: true },
       }),
     ]);
 
-    const busyRanges = [...bookings, ...timeBlocks].map((item) => ({
+    // Bloqueio diário vira a janela daquele dia; único segue como está.
+    const blockOccurrences = timeBlocks.flatMap((block) => occurrencesInRange(block, dayStart.toJSDate(), dayEnd.toJSDate()));
+    const busyRanges = [...bookings, ...blockOccurrences].map((item) => ({
       startMinute: Math.floor(DateTime.fromJSDate(item.startAt).diff(dayStart, "minutes").minutes),
       endMinute: Math.ceil(DateTime.fromJSDate(item.endAt).diff(dayStart, "minutes").minutes),
     }));

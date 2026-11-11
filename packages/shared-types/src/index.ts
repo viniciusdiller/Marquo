@@ -131,6 +131,8 @@ export interface CalendarTimeBlock {
   startAt: string;
   endAt: string;
   reason: string | null;
+  // true quando é uma ocorrência de um bloqueio que se repete todo dia.
+  recurring?: boolean;
 }
 
 export interface CalendarResponse {
