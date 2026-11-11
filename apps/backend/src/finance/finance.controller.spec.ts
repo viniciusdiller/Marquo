@@ -1,27 +1,25 @@
 import "reflect-metadata";
-import { Role } from "@marquo/database";
 import { FinanceController } from "./finance.controller";
-import { ROLES_KEY } from "../common/decorators/roles.decorator";
+import { areaOf, rolesOf } from "../access/area-metadata";
 
 const proto = FinanceController.prototype;
-const methodRoles = (handler: keyof FinanceController) => Reflect.getMetadata(ROLES_KEY, proto[handler]);
 
+// Financeiro tem DUAS áreas nos perfis: "financeiro" (lançamentos, contas e fluxo de caixa) e "financeiro_avancado" (DRE, categorias e
+// repasse de comissões, que antes eram só do dono). Assim a recepção continua como era, e o dono pode liberar o avançado a quem quiser.
 describe("FinanceController: quem pode chamar o quê", () => {
-  it("a classe toda exige OWNER ou RECEPTIONIST (PROFESSIONAL não acessa financeiro)", () => {
-    expect(Reflect.getMetadata(ROLES_KEY, FinanceController)).toEqual([Role.OWNER, Role.RECEPTIONIST]);
-  });
-
   it.each(["createCategory", "updateCategory", "registerPayout", "listPayouts", "dre"] as const)(
-    "%s restringe além da classe: só OWNER",
+    "%s pertence à área financeiro_avancado",
     (handler) => {
-      expect(methodRoles(handler)).toEqual([Role.OWNER]);
+      expect(areaOf(FinanceController, handler)).toMatchObject({ area: "financeiro_avancado" });
+      expect(rolesOf(FinanceController, handler)).toBeUndefined();
     },
   );
 
   it.each(["overview", "listCategories", "listEntries", "createEntry", "updateEntry", "settleEntry", "cancelEntry", "cashFlow", "payables", "receivables"] as const)(
-    "%s não restringe no handler — herda OWNER+RECEPTIONIST da classe",
+    "%s pertence à área financeiro (herda da classe)",
     (handler) => {
-      expect(methodRoles(handler)).toBeUndefined();
+      expect(areaOf(FinanceController, handler)).toMatchObject({ area: "financeiro" });
+      expect(rolesOf(FinanceController, handler)).toBeUndefined();
     },
   );
 

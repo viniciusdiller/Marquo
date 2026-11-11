@@ -1,13 +1,12 @@
 import { Body, Controller, Get, Post } from "@nestjs/common";
-import { Role } from "@marquo/database";
 import { CashRegisterService } from "./cash-register.service";
 import { OpenCashRegisterDto } from "./dto/open-cash-register.dto";
 import { CashMovementDto, CloseCashRegisterDto } from "./dto/cash-movement.dto";
-import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 
-@Roles(Role.OWNER, Role.RECEPTIONIST)
+import { Area } from "../access/area.decorator";
+@Area("caixa")
 @Controller("cash-register")
 export class CashRegisterController {
   constructor(private readonly cashRegister: CashRegisterService) {}

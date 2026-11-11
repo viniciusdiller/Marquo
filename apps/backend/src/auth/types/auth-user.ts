@@ -1,4 +1,5 @@
 import { Role } from "@marquo/database";
+import type { AccessPermissions } from "@marquo/shared-types";
 
 export interface JwtPayload {
   sub: string; // userId
@@ -23,4 +24,8 @@ export interface AuthenticatedUser {
   tenantId: string;
   role: Role;
   professionalId?: string;
+  // Nível de acesso por área, lido do PERFIL no banco a cada requisição (nunca das claims do token). O dono é sempre total.
+  // O JwtStrategy sempre preenche; ausente (ex.: usuário montado à mão num teste) vale como SEM ACESSO: o AreaGuard nega por padrão.
+  permissions?: AccessPermissions;
+  profileName?: string | null;
 }

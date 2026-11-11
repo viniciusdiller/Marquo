@@ -1,19 +1,21 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { Role } from "@marquo/database";
 import { ClientsService } from "./clients.service";
 import { CreateClientDto } from "./dto/create-client.dto";
 import { UpdateClientDto } from "./dto/update-client.dto";
 import { ClientSearchQueryDto } from "../common/dto/query-dtos";
-import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 
-// Painel do dono/recepção. PROFESSIONAL não gerencia a base de clientes.
-@Roles(Role.OWNER, Role.RECEPTIONIST)
+import { Area } from "../access/area.decorator";
+// Base de clientes: área "clientes". A BUSCA (GET /clients) também serve de seletor em Comandas e no Clube, então quem tem uma dessas
+// áreas consegue buscar (só ver). Agenda NÃO entra: o profissional tem agenda e não pode listar a base de clientes. A ficha completa e
+// as alterações exigem a área "clientes".
+@Area("clientes")
 @Controller("clients")
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
+  @Area(["clientes", "comandas", "clube"], "VIEW")
   @Get()
   list(@CurrentUser() user: AuthenticatedUser, @Query() query: ClientSearchQueryDto) {
     return this.clientsService.list(user.tenantId, query);

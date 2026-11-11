@@ -14,6 +14,7 @@ import { SetWorkingHoursDto } from "./dto/set-working-hours.dto";
 import { UPLOADS_DIR, UPLOADS_URL_PREFIX } from "../common/constants/uploads";
 import { convertToWebp } from "../common/utils/image.util";
 
+import { defaultProfileIdForRole } from "../access/default-profiles";
 const BCRYPT_ROUNDS = 12;
 const PHOTO_SIZE = 512;
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -48,6 +49,8 @@ export class ProfessionalsService {
           passwordHash,
           name: dto.name,
           role: Role.PROFESSIONAL,
+          // Perfil padrão de profissional (o dono pode trocar em Acessos). Dentro da transação: se algo falhar, nada fica pela metade.
+          accessProfileId: await defaultProfileIdForRole(tx, tenantId, Role.PROFESSIONAL),
           // Criado por um dono autenticado (que define a senha inicial): não passa pela confirmação do cadastro público.
           emailVerifiedAt: new Date(),
         },

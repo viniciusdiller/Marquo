@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { Role } from "@marquo/database";
 import { AppointmentsService } from "./appointments.service";
 import { CreateAppointmentDto } from "./dto/create-appointment.dto";
 import { CreateStaffAppointmentDto } from "./dto/create-staff-appointment.dto";
@@ -8,7 +7,6 @@ import { ListConsumerBookingsQueryDto } from "./dto/list-consumer-bookings-query
 import { RescheduleAppointmentDto } from "./dto/reschedule-appointment.dto";
 import { UpdateAppointmentStatusDto } from "./dto/update-appointment-status.dto";
 import { Public } from "../common/decorators/public.decorator";
-import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 import { AppointmentsFilterQueryDto, RangeByProfessionalQueryDto } from "../common/dto/query-dtos";
@@ -16,6 +14,7 @@ import { ConsumerJwtAuthGuard } from "../consumer-auth/guards/consumer-jwt-auth.
 import { CurrentConsumer } from "../consumer-auth/decorators/current-consumer.decorator";
 import { AuthenticatedConsumer } from "../consumer-auth/types/consumer-auth-user";
 
+import { Area } from "../access/area.decorator";
 // Agendamento pelo link público do tenant. Caminho mantido em /bookings por
 // compatibilidade com o wizard público do frontend.
 @Controller("public/tenants/:slug/bookings")
@@ -37,6 +36,7 @@ export class PublicAppointmentsController {
 
 // Painel do dono/recepção. OWNER e RECEPTIONIST enxergam a agenda inteira;
 // PROFESSIONAL só a própria (filtro aplicado no service).
+@Area("agenda")
 @Controller("appointments")
 export class AppointmentsController {
   constructor(private readonly appointments: AppointmentsService) {}
@@ -57,13 +57,11 @@ export class AppointmentsController {
     return this.appointments.getCalendar(user, query.from, query.to, query.professionalId);
   }
 
-  @Roles(Role.OWNER, Role.RECEPTIONIST, Role.PROFESSIONAL)
   @Post()
   createByStaff(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateStaffAppointmentDto) {
     return this.appointments.createByStaff(user, dto);
   }
 
-  @Roles(Role.OWNER, Role.RECEPTIONIST, Role.PROFESSIONAL)
   @Patch(":id/status")
   updateStatus(
     @CurrentUser() user: AuthenticatedUser,
@@ -73,13 +71,11 @@ export class AppointmentsController {
     return this.appointments.updateStatus(user, id, dto);
   }
 
-  @Roles(Role.OWNER, Role.RECEPTIONIST, Role.PROFESSIONAL)
   @Patch(":id/cancel")
   cancel(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
     return this.appointments.cancelByStaff(user, id);
   }
 
-  @Roles(Role.OWNER, Role.RECEPTIONIST, Role.PROFESSIONAL)
   @Patch(":id/reschedule")
   reschedule(
     @CurrentUser() user: AuthenticatedUser,

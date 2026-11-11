@@ -31,6 +31,8 @@ import { CommissionsModule } from "./commissions/commissions.module";
 import { CashRegisterModule } from "./cash-register/cash-register.module";
 import { FinanceModule } from "./finance/finance.module";
 import { ClubModule } from "./club/club.module";
+import { AccessModule } from "./access/access.module";
+import { AreaGuard } from "./access/area.guard";
 import { ConsumerAuthModule } from "./consumer-auth/consumer-auth.module";
 import { MarketplaceModule } from "./marketplace/marketplace.module";
 import { ReviewsModule } from "./reviews/reviews.module";
@@ -72,6 +74,7 @@ import { ReportsModule } from './reports/reports.module';
     CashRegisterModule,
     FinanceModule,
     ClubModule,
+    AccessModule,
     ConsumerAuthModule,
     MarketplaceModule,
     ReviewsModule,
@@ -85,6 +88,8 @@ import { ReportsModule } from './reports/reports.module';
     { provide: APP_GUARD, useClass: ClientIpThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Perfil de acesso por área: depois do papel e antes da cobrança.
+    { provide: APP_GUARD, useClass: AreaGuard },
     { provide: APP_GUARD, useClass: TenantBillingGuard },
   ],
 })

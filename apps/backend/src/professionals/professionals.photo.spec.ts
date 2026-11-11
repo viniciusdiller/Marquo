@@ -136,8 +136,17 @@ describe("ProfessionalsController: quem pode trocar a foto", () => {
     expect(() => controller.removePhoto(user(Role.PROFESSIONAL, "outro"), PROF)).toThrow(ForbiddenException);
   });
 
-  it("recepção não troca foto (a rota só aceita dono e profissional)", () => {
-    const roles = Reflect.getMetadata("roles", ProfessionalsController.prototype.uploadPhoto);
-    expect(roles).toEqual([Role.OWNER, Role.PROFESSIONAL]);
+  // Quem não é o próprio profissional precisa de "editar" em Profissionais (a recepção padrão tem só "ver", então não troca foto).
+  it("a rota de foto pede a área profissionais (editar) ou ser o próprio profissional", () => {
+    const area = Reflect.getMetadata("access-area", ProfessionalsController.prototype.uploadPhoto);
+    expect(area).toEqual({ area: "profissionais", level: "EDIT", selfParam: "id" });
+    expect(Reflect.getMetadata("roles", ProfessionalsController.prototype.uploadPhoto)).toBeUndefined();
+  });
+
+  it("um profissional com 'editar' em Profissionais pode trocar a foto de outro (o perfil concedeu)", () => {
+    const service = { updatePhoto: jest.fn().mockResolvedValue({}) } as never;
+    const controller = new ProfessionalsController(service);
+    const granted = { ...user(Role.PROFESSIONAL, "outro"), permissions: { profissionais: "EDIT" } } as never;
+    expect(() => controller.uploadPhoto(granted, PROF, { buffer: Buffer.alloc(1) } as never)).not.toThrow();
   });
 });

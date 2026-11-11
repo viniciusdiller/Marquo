@@ -1,24 +1,16 @@
 import "reflect-metadata";
-import { Role } from "@marquo/database";
 import { ProductsController } from "./products.controller";
-import { ROLES_KEY } from "../common/decorators/roles.decorator";
+import { areaOf, rolesOf } from "../access/area-metadata";
 
-const proto = ProductsController.prototype;
-const methodRoles = (handler: keyof ProductsController) => Reflect.getMetadata(ROLES_KEY, proto[handler]);
-
+// Produtos é uma área dos perfis de acesso: ver o catálogo e o estoque pede "ver"; criar, editar e ajustar estoque pede "editar"
+// (o nível sai do método HTTP). Não há mais papel fixo na rota: quem decide é o perfil.
 describe("ProductsController: quem pode chamar o quê", () => {
-  it("a classe toda exige OWNER ou RECEPTIONIST (PROFESSIONAL não mexe em catálogo/estoque)", () => {
-    expect(Reflect.getMetadata(ROLES_KEY, ProductsController)).toEqual([Role.OWNER, Role.RECEPTIONIST]);
+  it.each(["list", "detail", "movements", "create", "update", "adjustStock"] as const)("%s pertence à área produtos", (handler) => {
+    expect(areaOf(ProductsController, handler)).toMatchObject({ area: "produtos" });
+    expect(areaOf(ProductsController, handler)?.level).toBeUndefined(); // nível pelo método HTTP: GET ver, demais editar
   });
 
-  it.each(["create", "update"] as const)("%s restringe além da classe: só OWNER (catálogo é decisão do dono)", (handler) => {
-    expect(methodRoles(handler)).toEqual([Role.OWNER]);
+  it.each(["list", "detail", "movements", "create", "update", "adjustStock"] as const)("%s não tem papel fixo", (handler) => {
+    expect(rolesOf(ProductsController, handler)).toBeUndefined();
   });
-
-  it.each(["list", "detail", "movements", "adjustStock"] as const)(
-    "%s não restringe no handler — herda OWNER+RECEPTIONIST da classe",
-    (handler) => {
-      expect(methodRoles(handler)).toBeUndefined();
-    },
-  );
 });

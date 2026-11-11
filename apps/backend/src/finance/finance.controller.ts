@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { Role } from "@marquo/database";
 import { FinanceService } from "./finance.service";
 import {
   CreateCategoryDto,
@@ -11,13 +10,13 @@ import {
   UpdateEntryDto,
 } from "./dto/finance-dtos";
 import { PayoutsQueryDto } from "./dto/payouts-query.dto";
-import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { CashFlowQueryDto, ListEntriesQueryDto, RequiredDateRangeQueryDto } from "../common/dto/query-dtos";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 
+import { Area } from "../access/area.decorator";
 // PROFESSIONAL não acessa o financeiro; RECEPTIONIST lança e dá baixa; OWNER tudo.
-@Roles(Role.OWNER, Role.RECEPTIONIST)
+@Area("financeiro")
 @Controller("finance")
 export class FinanceController {
   constructor(private readonly finance: FinanceService) {}
@@ -32,13 +31,13 @@ export class FinanceController {
     return this.finance.listCategories(user.tenantId);
   }
 
-  @Roles(Role.OWNER)
+  @Area("financeiro_avancado")
   @Post("categories")
   createCategory(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateCategoryDto) {
     return this.finance.createCategory(user.tenantId, dto);
   }
 
-  @Roles(Role.OWNER)
+  @Area("financeiro_avancado")
   @Patch("categories/:id")
   updateCategory(
     @CurrentUser() user: AuthenticatedUser,
@@ -83,13 +82,13 @@ export class FinanceController {
 
   // Dinheiro saindo: teto de requisições por minuto, além do limite global de 100/min.
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
-  @Roles(Role.OWNER)
+  @Area("financeiro_avancado")
   @Post("commissions/payouts")
   registerPayout(@CurrentUser() user: AuthenticatedUser, @Body() dto: RegisterPayoutDto) {
     return this.finance.registerCommissionPayout(user.tenantId, user.userId, dto);
   }
 
-  @Roles(Role.OWNER)
+  @Area("financeiro_avancado")
   @Get("commissions/payouts")
   listPayouts(@CurrentUser() user: AuthenticatedUser, @Query() query: PayoutsQueryDto) {
     return this.finance.listCommissionPayouts(user.tenantId, query);
@@ -100,7 +99,7 @@ export class FinanceController {
     return this.finance.cashFlow(user.tenantId, query.from, query.to, query.basis === "due" ? "due" : "paid");
   }
 
-  @Roles(Role.OWNER)
+  @Area("financeiro_avancado")
   @Get("dre")
   dre(@CurrentUser() user: AuthenticatedUser, @Query() query: RequiredDateRangeQueryDto) {
     return this.finance.dre(user.tenantId, query.from, query.to);

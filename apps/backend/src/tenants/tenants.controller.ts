@@ -20,6 +20,7 @@ import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 
+import { Area } from "../access/area.decorator";
 const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 @Controller()
@@ -52,7 +53,7 @@ export class TenantsController {
     return this.tenantsService.getMarketplaceSettings(user.tenantId);
   }
 
-  @Roles(Role.OWNER)
+  @Area("marketplace", "EDIT")
   @SkipBillingCheck()
   @Patch("tenants/me/marketplace")
   updateMarketplace(

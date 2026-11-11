@@ -2,12 +2,9 @@ import "reflect-metadata";
 import { ForbiddenException } from "@nestjs/common";
 import { Role } from "@marquo/database";
 import { ProfessionalServicesController, ServicesController } from "./services.controller";
-import { ROLES_KEY } from "../common/decorators/roles.decorator";
+import { areaOf, rolesOf } from "../access/area-metadata";
 import type { AuthenticatedUser } from "../auth/types/auth-user";
 
-const servicesProto = ServicesController.prototype;
-const professionalServicesProto = ProfessionalServicesController.prototype;
-const meta = (proto: object, handler: string) => Reflect.getMetadata(ROLES_KEY, (proto as never)[handler]);
 
 const user = (over: Partial<AuthenticatedUser> = {}): AuthenticatedUser => ({
   userId: "u-1",
@@ -17,17 +14,22 @@ const user = (over: Partial<AuthenticatedUser> = {}): AuthenticatedUser => ({
 });
 
 describe("ServicesController / ProfessionalServicesController: quem pode chamar o quê", () => {
-  it.each(["create", "update"] as const)("ServicesController.%s exige OWNER", (handler) => {
-    expect(meta(servicesProto, handler)).toEqual([Role.OWNER]);
+  // Criar e editar serviço é "editar" na área servicos (antes só o dono); a lista segue visível a todo staff (os seletores de agenda e
+  // comanda dependem dela, e o catálogo é público na página do negócio).
+  it.each(["create", "update"] as const)("ServicesController.%s pede 'editar' na área servicos, sem papel fixo", (handler) => {
+    expect(areaOf(ServicesController, handler)).toMatchObject({ area: "servicos", level: "EDIT" });
+    expect(rolesOf(ServicesController, handler)).toBeUndefined();
   });
 
-  it("ServicesController.findAll não exige role fixo (visível a todo staff)", () => {
-    expect(meta(servicesProto, "findAll")).toBeUndefined();
+  it("ServicesController.findAll não tem área nem papel fixo (visível a todo staff)", () => {
+    expect(areaOf(ServicesController, "findAll")).toBeUndefined();
+    expect(rolesOf(ServicesController, "findAll")).toBeUndefined();
   });
 
-  it("ProfessionalServicesController.link exige OWNER; list não (restrição é imperativa)", () => {
-    expect(meta(professionalServicesProto, "link")).toEqual([Role.OWNER]);
-    expect(meta(professionalServicesProto, "list")).toBeUndefined();
+  it("ProfessionalServicesController.link pede 'editar' em profissionais; list não (restrição é imperativa)", () => {
+    expect(areaOf(ProfessionalServicesController, "link")).toMatchObject({ area: "profissionais", level: "EDIT" });
+    expect(rolesOf(ProfessionalServicesController, "link")).toBeUndefined();
+    expect(areaOf(ProfessionalServicesController, "list")).toBeUndefined();
   });
 });
 

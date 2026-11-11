@@ -1,16 +1,15 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { Role } from "@marquo/database";
 import { ReviewsService } from "./reviews.service";
 import { CreateReviewDto, ReportReviewDto } from "./dto/review-dtos";
 import { Public } from "../common/decorators/public.decorator";
-import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 import { ConsumerJwtAuthGuard } from "../consumer-auth/guards/consumer-jwt-auth.guard";
 import { CurrentConsumer } from "../consumer-auth/decorators/current-consumer.decorator";
 import { AuthenticatedConsumer } from "../consumer-auth/types/consumer-auth-user";
 
+import { Area } from "../access/area.decorator";
 // Consumidor global (login próprio) — protegido pelo ConsumerJwtAuthGuard local.
 @Controller("public/consumer/reviews")
 export class ConsumerReviewsController {
@@ -35,7 +34,7 @@ export class ConsumerReviewsController {
 }
 
 // Painel do dono — moderação das avaliações do próprio estabelecimento.
-@Roles(Role.OWNER)
+@Area("marketplace")
 @Controller("reviews")
 export class OwnerReviewsController {
   constructor(private readonly reviews: ReviewsService) {}

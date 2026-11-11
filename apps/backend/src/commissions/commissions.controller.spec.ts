@@ -1,19 +1,15 @@
 import "reflect-metadata";
-import { Role } from "@marquo/database";
 import { CommissionsController } from "./commissions.controller";
-import { ROLES_KEY } from "../common/decorators/roles.decorator";
+import { areaOf, rolesOf } from "../access/area-metadata";
 
-const proto = CommissionsController.prototype;
-const meta = (handler: keyof CommissionsController) => Reflect.getMetadata(ROLES_KEY, proto[handler]);
 
 describe("CommissionsController: quem pode chamar o quê", () => {
-  it.each(["listRules", "createRule", "updateRule", "deleteRule"] as const)("%s exige OWNER (regra de comissão é decisão do dono)", (handler) => {
-    expect(meta(handler)).toEqual([Role.OWNER]);
+  // Comissões é uma área dos perfis: ver ganhos e regras pede "ver"; criar, editar e excluir regras pede "editar".
+  it.each(["listRules", "createRule", "updateRule", "deleteRule", "report", "earnings"] as const)("%s pertence à área comissoes", (handler) => {
+    expect(areaOf(CommissionsController, handler)).toMatchObject({ area: "comissoes" });
+    expect(rolesOf(CommissionsController, handler)).toBeUndefined();
   });
 
-  // Aberto a todo staff porque o próprio escopo (PROFESSIONAL só vê o seu) é forçado
-  // dentro de CommissionsService.report, não por role fixo aqui — ver commissions.service.spec.ts.
-  it("report não tem role fixo — o escopo é aplicado no service", () => {
-    expect(meta("report")).toBeUndefined();
-  });
+  // O escopo (PROFESSIONAL só vê o seu) segue sendo forçado dentro de CommissionsService, não pela área: quem tem
+  // acesso à área como profissional continua vendo só os próprios ganhos — ver commissions.service.spec.ts.
 });

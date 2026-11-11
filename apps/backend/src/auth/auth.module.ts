@@ -27,6 +27,6 @@ import { EmailModule } from "../email/email.module";
   providers: [AuthService, RefreshTokenService, PasswordResetService, EmailVerificationService, JwtStrategy],
   // JwtModule exportado para o consumer-auth reaproveitar o mesmo JwtService (mesmo
   // JWT_SECRET) sem reconfigurar — ver consumer-auth/consumer-auth.module.ts.
-  exports: [AuthService, EmailVerificationService, JwtModule],
+  exports: [AuthService, EmailVerificationService, RefreshTokenService, JwtModule],
 })
 export class AuthModule {}

@@ -17,7 +17,8 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 import { Throttle } from "@nestjs/throttler";
 
-@Roles(Role.OWNER, Role.RECEPTIONIST)
+import { Area } from "../access/area.decorator";
+@Area("comandas")
 @Controller("tickets")
 export class TicketsController {
   constructor(private readonly tickets: TicketsService) {}

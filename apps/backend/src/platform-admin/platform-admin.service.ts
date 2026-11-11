@@ -14,6 +14,7 @@ import { generateUniqueSlug } from "../common/utils/slug.util";
 import { normalizePhone } from "../common/utils/phone.util";
 import { hashPasswordSetToken } from "../common/utils/password-set-token.util";
 import { EMAIL_TAKEN_MESSAGE } from "../signup/signup.service";
+import { ensureDefaultProfiles } from "../access/default-profiles";
 import {
   CreatePlatformTenantDto,
   ExtendTrialDto,
@@ -523,6 +524,8 @@ export class PlatformAdminService {
             data: { name: dto.businessName, slug, trialEndsAt },
             select: { id: true, name: true, slug: true },
           });
+          // Todo negócio nasce com os perfis padrão ("Recepção" e "Profissional"), na mesma transação.
+          await ensureDefaultProfiles(tx, tenant.id);
           const owner = await tx.user.create({
             data: {
               tenantId: tenant.id,

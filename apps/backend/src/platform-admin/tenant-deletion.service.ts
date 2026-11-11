@@ -64,6 +64,8 @@ export const PURGE_STEPS: { model: string; run: (tx: Tx, tenantId: string) => Pr
   { model: "Product", run: (tx, tenantId) => tx.product.deleteMany({ where: { tenantId } }) },
   { model: "Professional", run: (tx, tenantId) => tx.professional.deleteMany({ where: { tenantId } }) },
   { model: "User", run: (tx, tenantId) => tx.user.deleteMany({ where: { tenantId } }) },
+  // Perfis de acesso: o usuário aponta para o perfil com RESTRICT, então só saem DEPOIS dos usuários.
+  { model: "AccessProfile", run: (tx, tenantId) => tx.accessProfile.deleteMany({ where: { tenantId } }) },
   { model: "TenantGalleryImage", run: (tx, tenantId) => tx.tenantGalleryImage.deleteMany({ where: { tenantId } }) },
   { model: "TenantCategory", run: (tx, tenantId) => tx.tenantCategory.deleteMany({ where: { tenantId } }) },
 ];
