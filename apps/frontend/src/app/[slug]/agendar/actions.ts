@@ -12,7 +12,8 @@ export type BookingActionResult =
   | { booking: PublicBooking }
   | { error: string; unauthorized?: boolean };
 
-export type WaitlistActionResult = { ok: true } | { error: string; unauthorized?: boolean };
+// alreadyWaiting: a pessoa já estava na lista para esse serviço/dia (nada foi duplicado).
+export type WaitlistActionResult = { ok: true; alreadyWaiting?: boolean } | { error: string; unauthorized?: boolean };
 
 function toError(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
@@ -41,11 +42,11 @@ export async function joinWaitlistAction(
   input: CreateWaitlistInput,
 ): Promise<WaitlistActionResult> {
   try {
-    await consumerAuthedFetch(`/public/tenants/${encodeURIComponent(slug)}/waitlist`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-    return { ok: true };
+    const entry = await consumerAuthedFetch<{ alreadyWaiting?: boolean } | undefined>(
+      `/public/tenants/${encodeURIComponent(slug)}/waitlist`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+    return { ok: true, alreadyWaiting: entry?.alreadyWaiting === true };
   } catch (error) {
     return toError(error, "Não foi possível entrar na lista agora. Tente novamente.");
   }

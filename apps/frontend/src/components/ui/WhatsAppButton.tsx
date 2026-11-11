@@ -9,15 +9,18 @@ export function WhatsAppButton({
   phone,
   name,
   label,
+  text,
   className,
 }: {
   phone: string | null | undefined;
   name: string;
   // Com `label` mostra o texto ao lado do ícone; sem, só o ícone (listas).
   label?: string;
+  // Mensagem já escrita (o dono só revisa e envia).
+  text?: string;
   className?: string;
 }) {
-  const href = whatsappLink(phone);
+  const href = whatsappLink(phone, text);
   if (!href) return null;
 
   return (

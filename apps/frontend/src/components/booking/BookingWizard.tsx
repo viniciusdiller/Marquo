@@ -171,12 +171,13 @@ export function BookingWizard({
     }
   }
 
-  async function handleJoinWaitlist() {
+  async function handleJoinWaitlist(notes?: string) {
     if (!selectedService) return { error: "Selecione um serviço primeiro." };
     return joinWaitlistAction(slug, {
       serviceId: selectedService.id,
       professionalId: selectedProfessional?.id,
       preferredDate: selectedDate,
+      notes,
     });
   }
 
