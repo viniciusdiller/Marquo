@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
 import { auth } from "@/lib/auth";
+import { getAccess } from "@/lib/access-server";
+import { canAccess } from "@/lib/access";
 import { authedFetch } from "@/lib/api-server";
 import { WorkingHoursEditor } from "./WorkingHoursEditor";
 import { ServiceLinks } from "./ServiceLinks";
@@ -45,7 +47,8 @@ export default async function ProfessionalDetailPage({
   const { id } = await params;
   const session = await auth();
 
-  const canManage = session?.user.role === "OWNER";
+  const access = await getAccess();
+  const canManage = canAccess(access, "profissionais", "EDIT");
   const canViewOwnSchedule = session?.user.professionalId === id;
 
   if (!canManage && !canViewOwnSchedule) {

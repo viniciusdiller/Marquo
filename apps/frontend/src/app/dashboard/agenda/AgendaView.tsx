@@ -10,7 +10,6 @@ import type {
   CalendarResponse,
   TenantSetupStatus,
   PublicBooking,
-  StaffRole,
 } from "@marquo/shared-types";
 import { fetchCalendarAction } from "./actions";
 import { AppointmentPanel } from "./AppointmentPanel";
@@ -74,14 +73,14 @@ export function AgendaView({
   initialCalendar,
   initialLoadError = false,
   services,
-  role,
+  canEdit,
   setupStatus,
 }: {
   initialDate: string;
   initialCalendar: CalendarResponse;
   initialLoadError?: boolean;
   services: AgendaService[];
-  role: StaffRole;
+  canEdit: boolean;
   setupStatus?: TenantSetupStatus | null;
 }) {
   const [date, setDate] = useState(initialDate);
@@ -102,7 +101,8 @@ export function AgendaView({
   const scrollPending = useRef(true);
   const minuteKey = useSyncExternalStore(subscribeMinute, currentMinuteKey, serverMinuteKey);
 
-  const canManage = role === "OWNER" || role === "RECEPTIONIST" || role === "PROFESSIONAL";
+  // Quem pode mexer vem do perfil de acesso ("Ver e editar" na Agenda); o servidor confere de novo.
+  const canManage = canEdit;
 
   const reload = useCallback(
     (nextDate: string, nextFilter: string) => {

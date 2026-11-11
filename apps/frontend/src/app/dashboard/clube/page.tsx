@@ -1,8 +1,8 @@
 import Link from "next/link";
 import clsx from "clsx";
-import { Crown, LockSimple } from "@phosphor-icons/react/dist/ssr";
+import { Crown } from "@phosphor-icons/react/dist/ssr";
 import type { ClubMemberSummary, ClubOverview, ClubPlanSummary, ClubMembershipState, Paginated } from "@marquo/shared-types";
-import { auth } from "@/lib/auth";
+import { requireArea } from "@/lib/access-server";
 import { authedFetch } from "@/lib/api-server";
 import { formatBRL, formatDate } from "@/lib/billing";
 import { isRedirectError } from "@/lib/redirect";
@@ -46,15 +46,7 @@ export default async function ClubPage({
 }: {
   searchParams: Promise<{ estado?: string; pagina?: string }>;
 }) {
-  const session = await auth();
-  if (session?.user.role !== "OWNER") {
-    return (
-      <div className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600 dark:border-white/10 dark:bg-white/[0.03] dark:text-stone-300">
-        <LockSimple size={18} />
-        Só o dono do negócio gerencia o clube de assinaturas.
-      </div>
-    );
-  }
+  await requireArea("clube");
 
   const sp = await searchParams;
   const state = STATE_FILTERS.some((f) => f.value === sp.estado) ? (sp.estado ?? "") : "";

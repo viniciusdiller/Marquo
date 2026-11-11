@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ComponentProps, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -11,11 +11,12 @@ import { SidebarNav } from "./SidebarNav";
 
 interface MobileSidebarProps {
   tenant: { name: string; slug: string } | null;
+  access?: ComponentProps<typeof SidebarNav>["access"];
 }
 
 // Abaixo de md o <aside> do layout some (hidden md:block) e, sem isto, o dono ficava sem
 // NENHUM jeito de navegar fora da Agenda — tinha que digitar a URL de cada tela na mão.
-export function MobileSidebar({ tenant }: MobileSidebarProps) {
+export function MobileSidebar({ tenant, access }: MobileSidebarProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
@@ -97,7 +98,7 @@ export function MobileSidebar({ tenant }: MobileSidebarProps) {
             ) : null}
 
             <div className="mt-6">
-              <SidebarNav scope="mobile" onNavigate={() => setOpen(false)} />
+              <SidebarNav scope="mobile" access={access} onNavigate={() => setOpen(false)} />
             </div>
           </motion.aside>
         </div>

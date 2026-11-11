@@ -2,9 +2,8 @@ import Link from "next/link";
 import clsx from "clsx";
 import { Receipt } from "@phosphor-icons/react/dist/ssr";
 import type { Paginated, Ticket } from "@marquo/shared-types";
-import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
-import { requireRole } from "@/lib/guards";
+import { requireArea } from "@/lib/access-server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { HowItWorks } from "@/components/ui/HowItWorks";
 import { OpenTicketButton } from "./OpenTicketButton";
@@ -24,8 +23,7 @@ export default async function ComandasPage({
 }: {
   searchParams: Promise<{ aba?: string; pagina?: string }>;
 }) {
-  const session = await auth();
-  requireRole(session, ["OWNER", "RECEPTIONIST"]);
+  await requireArea("comandas");
 
   const sp = await searchParams;
   const tab = parseTicketTab(sp.aba);

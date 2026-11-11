@@ -1,7 +1,7 @@
 import type { AdminProduct, CommissionRule, EarningsReport } from "@marquo/shared-types";
-import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
-import { requireRole } from "@/lib/guards";
+import { requireArea } from "@/lib/access-server";
+import { canAccess } from "@/lib/access";
 import { resolvePeriod } from "@/lib/earnings-period";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { HowItWorks } from "@/components/ui/HowItWorks";
@@ -25,8 +25,8 @@ export default async function ComissoesPage({
 }: {
   searchParams: Promise<{ periodo?: string | string[]; de?: string | string[]; ate?: string | string[] }>;
 }) {
-  const session = await auth();
-  requireRole(session, ["OWNER"]);
+  const access = await requireArea("comissoes");
+  const canEditRules = canAccess(access, "comissoes", "EDIT");
 
   const query = await searchParams;
   const period = resolvePeriod({ periodo: first(query.periodo), de: first(query.de), ate: first(query.ate) });
@@ -65,6 +65,7 @@ export default async function ComissoesPage({
             </ul>
           </HowItWorks>
 
+          {canEditRules ? (
           <div className="min-w-0">
             <ComissoesView
               rules={rules}
@@ -73,10 +74,11 @@ export default async function ComissoesPage({
               products={products.map((p) => ({ id: p.id, name: p.name }))}
             />
           </div>
+          ) : null}
         </div>
         
         <div className="flex min-w-0 flex-col">
-          <EarningsSection report={report} period={period} />
+          <EarningsSection report={report} period={period} canPayout={canAccess(access, "financeiro_avancado", "EDIT")} />
         </div>
       </div>
     </div>

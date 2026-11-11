@@ -1,5 +1,7 @@
 import { Users } from "@phosphor-icons/react/dist/ssr";
 import { auth } from "@/lib/auth";
+import { requireArea } from "@/lib/access-server";
+import { canAccess } from "@/lib/access";
 import { authedFetch } from "@/lib/api-server";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -24,7 +26,8 @@ interface ServiceOption {
 
 export default async function ProfessionalsPage() {
   const session = await auth();
-  const isOwner = session?.user.role === "OWNER";
+  const access = await requireArea("profissionais");
+  const isOwner = canAccess(access, "profissionais", "EDIT");
 
   const [professionals, services] = await Promise.all([
     authedFetch<AdminProfessional[]>("/professionals").catch(() => []),

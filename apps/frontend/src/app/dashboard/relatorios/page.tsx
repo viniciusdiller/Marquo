@@ -1,4 +1,5 @@
 import Form from "next/form";
+import { requireArea } from "@/lib/access-server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -12,6 +13,7 @@ type PageProps = {
 };
 
 export default async function ReportsPage(props: PageProps) {
+  await requireArea("relatorios");
   const searchParams = await props.searchParams;
 
   const today = DateTime.local().setZone("America/Sao_Paulo");
