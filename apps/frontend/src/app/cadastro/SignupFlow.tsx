@@ -208,8 +208,10 @@ function PlanStep({
                     <span>
                       {item.label}
                       {item.afterTrialOnly ? (
-                        <span className="mt-1.5 block w-fit rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-500/20 dark:text-amber-200">
-                          {CLUB_TRIAL_BADGE} · não entra nos {TRIAL_DAYS_LABEL} grátis
+                        // Aviso discreto (texto, sem selo): a explicação completa já está no destaque no topo da tela.
+                        <span className="mt-0.5 block text-xs font-medium text-amber-700 dark:text-amber-300">
+                          {CLUB_TRIAL_BADGE}
+                          <span className="sr-only"> · não entra nos {TRIAL_DAYS_LABEL} grátis</span>
                         </span>
                       ) : null}
                     </span>
