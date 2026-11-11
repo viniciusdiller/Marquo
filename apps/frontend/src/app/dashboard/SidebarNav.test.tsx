@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { normalizePermissions } from "@marquo/shared-types";
 import { SidebarNav } from "./SidebarNav";
 
 let mockPathname = "/dashboard/agenda";
@@ -61,5 +62,30 @@ describe("SidebarNav", () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     await userEvent.setup().click(screen.getByRole("link", { name: /comandas/i }));
     expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("SidebarNav com perfil de acesso", () => {
+  const perms = (p: Record<string, string>) => normalizePermissions(p);
+
+  it("perfil de caixa só vê as telas liberadas e nenhuma área do dono", () => {
+    render(<SidebarNav access={{ isOwner: false, permissions: perms({ caixa: "EDIT", comandas: "VIEW" }) }} />);
+    expect(screen.getByRole("link", { name: /caixa/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /comandas/i })).toBeInTheDocument();
+    for (const name of [/agenda/i, /financeiro/i, /plano e cobrança/i, /configurações/i, /perfis e acessos/i]) {
+      expect(screen.queryByRole("link", { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it("seções sem nenhum item liberado somem", () => {
+    render(<SidebarNav access={{ isOwner: false, permissions: perms({ caixa: "VIEW" }) }} />);
+    expect(screen.queryByText("Catálogo")).not.toBeInTheDocument();
+    expect(screen.getByText("Operação do dia")).toBeInTheDocument();
+  });
+
+  it("dono vê tudo, inclusive Perfis e acessos", () => {
+    render(<SidebarNav access={{ isOwner: true, permissions: perms({}) }} />);
+    expect(screen.getByRole("link", { name: /perfis e acessos/i })).toHaveAttribute("href", "/dashboard/acessos");
+    expect(screen.getByRole("link", { name: /plano e cobrança/i })).toBeInTheDocument();
   });
 });

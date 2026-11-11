@@ -1,5 +1,6 @@
 import { Scissors } from "@phosphor-icons/react/dist/ssr";
-import { auth } from "@/lib/auth";
+import { requireArea } from "@/lib/access-server";
+import { canAccess } from "@/lib/access";
 import { authedFetch } from "@/lib/api-server";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -17,8 +18,8 @@ interface AdminService {
 }
 
 export default async function ServicesPage() {
-  const session = await auth();
-  const isOwner = session?.user.role === "OWNER";
+  const access = await requireArea("servicos");
+  const isOwner = canAccess(access, "servicos", "EDIT");
 
   const services = await authedFetch<AdminService[]>("/services").catch(() => []);
 

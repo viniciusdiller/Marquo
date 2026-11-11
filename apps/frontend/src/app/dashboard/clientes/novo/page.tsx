@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { CaretLeft } from "@phosphor-icons/react/dist/ssr";
-import { auth } from "@/lib/auth";
-import { requireRole } from "@/lib/guards";
+import { requireArea } from "@/lib/access-server";
 import { ClientForm } from "../ClientForm";
 import { createClientAction } from "../actions";
 
 export default async function NewClientPage() {
-  const session = await auth();
-  requireRole(session, ["OWNER", "RECEPTIONIST"], "/dashboard/clientes");
+  await requireArea("clientes", "EDIT");
 
   return (
     <div className="max-w-2xl">

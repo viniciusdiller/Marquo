@@ -1,14 +1,18 @@
 import "reflect-metadata";
 import { Role } from "@marquo/database";
 import { ClubController } from "./club.controller";
-import { ROLES_KEY } from "../common/decorators/roles.decorator";
+import { areaOf, rolesOf } from "../access/area-metadata";
 import type { AuthenticatedUser } from "../auth/types/auth-user";
 
 const user: AuthenticatedUser = { userId: "u-1", tenantId: "t-1", role: Role.OWNER };
 
 describe("ClubController", () => {
-  it("só o DONO gerencia o clube (a classe inteira exige OWNER)", () => {
-    expect(Reflect.getMetadata(ROLES_KEY, ClubController)).toEqual([Role.OWNER]);
+  // O clube é uma área dos perfis (antes só do dono): o dono libera a quem quiser, no nível "ver" ou "editar".
+  it("todas as rotas pertencem à área clube e não têm papel fixo", () => {
+    for (const handler of ["overview", "setEnabled", "listPlans", "createPlan", "updatePlan", "listMembers", "enroll", "renew", "cancel"]) {
+      expect(areaOf(ClubController as never, handler)).toMatchObject({ area: "clube" });
+      expect(rolesOf(ClubController as never, handler)).toBeUndefined();
+    }
   });
 
   it("usa o tenantId e o userId do TOKEN em todas as operações", () => {

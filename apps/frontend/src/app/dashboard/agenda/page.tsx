@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import type { CalendarResponse, TenantSetupStatus } from "@marquo/shared-types";
-import { auth } from "@/lib/auth";
+import { requireArea } from "@/lib/access-server";
+import { canAccess } from "@/lib/access";
 import { authedFetch } from "@/lib/api-server";
 import { isRedirectError } from "@/lib/redirect";
 import { AgendaView } from "./AgendaView";
@@ -17,12 +18,12 @@ interface AgendaService {
 }
 
 export default async function AgendaPage() {
-  const session = await auth();
+  const access = await requireArea("agenda");
   const today = DateTime.now().setZone(TIMEZONE).toISODate()!;
   const from = DateTime.fromISO(today, { zone: TIMEZONE }).startOf("day").toISO()!;
   const to = DateTime.fromISO(today, { zone: TIMEZONE }).endOf("day").toISO()!;
 
-  const isOwner = session?.user.role === "OWNER";
+  const isOwner = access.isOwner;
   const emptyCalendar: CalendarResponse = { professionals: [], appointments: [], timeBlocks: [] };
   const [calendarResult, services, setupStatus] = await Promise.all([
     fetchCalendarAction(from, to)
@@ -51,7 +52,7 @@ export default async function AgendaPage() {
       initialCalendar={calendarResult.data}
       initialLoadError={calendarResult.error}
       services={services.filter((s) => s.isActive)}
-      role={session?.user.role ?? "PROFESSIONAL"}
+      canEdit={canAccess(access, "agenda", "EDIT")}
       setupStatus={setupStatus}
     />
   );

@@ -62,7 +62,7 @@ function PeriodBar({ period }: { period: EarningsPeriod }) {
 
 const money = "text-right tabular-nums";
 
-function Row({ row, index }: { row: ProfessionalEarnings; index: number }) {
+function Row({ row, index, canPayout }: { row: ProfessionalEarnings; index: number; canPayout: boolean }) {
   return (
     <tr style={riseIn(index)} className="animate-rise-in border-b border-zinc-100 last:border-0 dark:border-white/5">
       <td className="py-3 pr-3">
@@ -87,14 +87,14 @@ function Row({ row, index }: { row: ProfessionalEarnings; index: number }) {
         {brl(row.payableBalanceCents)}
       </td>
       <td className="py-3 pl-2 text-right">
-        <PayoutButton professionalId={row.professionalId} name={row.name} balanceCents={row.payableBalanceCents} />
+        {canPayout ? <PayoutButton professionalId={row.professionalId} name={row.name} balanceCents={row.payableBalanceCents} /> : null}
       </td>
     </tr>
   );
 }
 
 // Cartão (mobile): a tabela com 8 colunas não cabe em tela de celular.
-function MobileCard({ row, index }: { row: ProfessionalEarnings; index: number }) {
+function MobileCard({ row, index, canPayout }: { row: ProfessionalEarnings; index: number; canPayout: boolean }) {
   const lines: Array<[string, string, boolean?]> = [
     ["Bruto", brl(row.grossCents)],
     ["Descontos", row.discountCents > 0 ? `− ${brl(row.discountCents)}` : "—"],
@@ -114,7 +114,7 @@ function MobileCard({ row, index }: { row: ProfessionalEarnings; index: number }
             {row.ticketCount} {row.ticketCount === 1 ? "comanda" : "comandas"}
           </p>
         </div>
-        <PayoutButton professionalId={row.professionalId} name={row.name} balanceCents={row.payableBalanceCents} />
+        {canPayout ? <PayoutButton professionalId={row.professionalId} name={row.name} balanceCents={row.payableBalanceCents} /> : null}
       </div>
       <dl className="mt-3 space-y-1 text-sm">
         {lines.map(([label, value, bold]) => (
@@ -139,9 +139,11 @@ function MobileCard({ row, index }: { row: ProfessionalEarnings; index: number }
 export function EarningsSection({
   report,
   period,
+  canPayout,
 }: {
   report: EarningsReport | null;
   period: EarningsPeriod;
+  canPayout: boolean;
 }) {
   return (
     <section aria-labelledby="equipe-heading">
@@ -189,7 +191,7 @@ export function EarningsSection({
               </thead>
               <tbody>
                 {report.professionals.map((row, i) => (
-                  <Row key={row.professionalId} row={row} index={i} />
+                  <Row canPayout={canPayout} key={row.professionalId} row={row} index={i} />
                 ))}
               </tbody>
               <tfoot>
@@ -211,7 +213,7 @@ export function EarningsSection({
 
           <ul className="mt-6 flex flex-col gap-3 md:hidden">
             {report.professionals.map((row, i) => (
-              <MobileCard key={row.professionalId} row={row} index={i} />
+              <MobileCard canPayout={canPayout} key={row.professionalId} row={row} index={i} />
             ))}
           </ul>
         </>

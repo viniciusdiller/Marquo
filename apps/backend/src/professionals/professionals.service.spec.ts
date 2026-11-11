@@ -209,6 +209,7 @@ describe("ProfessionalsService.create — serviços desde o cadastro", () => {
 
   function buildCreateMocks(ownedServiceIds: string[]) {
     const tx = {
+  accessProfile: { upsert: jest.fn().mockImplementation(async ({ where }: { where: { tenantId_name: { name: string } } }) => ({ id: `perfil-${where.tenantId_name.name}` })) },
       service: { findMany: jest.fn().mockResolvedValue(ownedServiceIds.map((id) => ({ id }))) },
       user: { create: jest.fn().mockResolvedValue({ id: "user-1" }) },
       professional: {
@@ -250,6 +251,16 @@ describe("ProfessionalsService.create — serviços desde o cadastro", () => {
   });
 
   // Segurança (IDOR): id de serviço de OUTRO negócio não pode ser vinculado, e não pode sobrar usuário/profissional criado.
+  // O profissional nasce com o perfil padrão "Profissional" (o dono pode trocar em Acessos); sem isso ele só valeria pelo fallback do papel.
+  it("o usuário do profissional nasce ligado ao perfil padrão Profissional do negócio", async () => {
+    const { prisma, tx } = buildCreateMocks([]);
+    const service = new ProfessionalsService(prisma, buildPlanLimitServiceMock());
+    await service.create("tenant-1", baseDto);
+    expect(tx.accessProfile.upsert.mock.calls.map((c: [{ where: { tenantId_name: { name: string } } }]) => c[0].where.tenantId_name.name)).toContain("Profissional");
+    expect(tx.user.create.mock.calls[0][0].data.accessProfileId).toBe("perfil-Profissional");
+    expect(tx.user.create.mock.calls[0][0].data.role).toBe("PROFESSIONAL");
+  });
+
   it("recusa serviço de outro negócio (ou inexistente) com 404 e não cria nada", async () => {
     const { prisma, tx } = buildCreateMocks([SERVICE_A]); // só A é deste tenant; B não
     const service = new ProfessionalsService(prisma, buildPlanLimitServiceMock());

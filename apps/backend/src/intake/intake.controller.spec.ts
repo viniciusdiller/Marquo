@@ -1,26 +1,23 @@
 import "reflect-metadata";
-import { Role } from "@marquo/database";
 import { IntakeFormsController, IntakeResponsesController } from "./intake.controller";
-import { ROLES_KEY } from "../common/decorators/roles.decorator";
-
-const formsProto = IntakeFormsController.prototype;
+import { areaOf, rolesOf } from "../access/area-metadata";
 
 describe("IntakeFormsController: quem pode chamar o quê", () => {
-  it("list não exige role fixo (qualquer staff lê os modelos)", () => {
-    expect(Reflect.getMetadata(ROLES_KEY, formsProto.list)).toBeUndefined();
+  it("list não tem área nem papel fixo (qualquer staff lê os modelos, que o atendimento usa)", () => {
+    expect(areaOf(IntakeFormsController, "list")).toBeUndefined();
+    expect(rolesOf(IntakeFormsController, "list")).toBeUndefined();
   });
 
-  it.each(["create", "update"] as const)("%s exige OWNER (criar/editar modelo de ficha é decisão do dono)", (handler) => {
-    expect(Reflect.getMetadata(ROLES_KEY, formsProto[handler])).toEqual([Role.OWNER]);
+  it.each(["create", "update"] as const)("%s pede 'editar' na área fichas (criar/editar modelo)", (handler) => {
+    expect(areaOf(IntakeFormsController, handler)).toEqual({ area: "fichas", level: "EDIT", selfParam: undefined });
+    expect(rolesOf(IntakeFormsController, handler)).toBeUndefined();
   });
 });
 
 describe("IntakeResponsesController: quem pode chamar o quê", () => {
-  it("a classe exige OWNER, RECEPTIONIST ou PROFESSIONAL (quem atende preenche a resposta)", () => {
-    expect(Reflect.getMetadata(ROLES_KEY, IntakeResponsesController)).toEqual([
-      Role.OWNER,
-      Role.RECEPTIONIST,
-      Role.PROFESSIONAL,
-    ]);
+  // Preencher a ficha do cliente no atendimento pede só "ver" a área Fichas (quem atende precisa preencher sem poder editar os modelos).
+  it("submit pede 'ver' na área fichas, mesmo sendo um POST", () => {
+    expect(areaOf(IntakeResponsesController, "submit")).toEqual({ area: "fichas", level: "VIEW", selfParam: undefined });
+    expect(rolesOf(IntakeResponsesController, "submit")).toBeUndefined();
   });
 });

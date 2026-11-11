@@ -11,6 +11,7 @@ const ACTOR = "admin@marquo.com.br";
 
 function build(over: { updateCount?: number; tenant?: unknown; existingSlugs?: string[]; professionals?: number } = {}) {
   const tx = {
+    accessProfile: { upsert: jest.fn().mockImplementation(async ({ where }: { where: { tenantId_name: { name: string } } }) => ({ id: `perfil-${where.tenantId_name.name}` })) },
     tenant: {
       updateMany: jest.fn().mockResolvedValue({ count: over.updateCount ?? 1 }),
       findUnique: jest
@@ -255,6 +256,18 @@ describe("PlatformAdminService.createTenant", () => {
       new Prisma.PrismaClientKnownRequestError("dup", { code: "P2002", clientVersion: "x", meta: { target: ["email"] } }),
     );
     await expect(service.createTenant(DTO, ACTOR)).rejects.toThrow(ConflictException);
+  });
+});
+
+describe("PlatformAdminService.createTenant: perfis de acesso", () => {
+  it("o negócio criado pela plataforma já nasce com os perfis padrão, na mesma transação", async () => {
+    const { service, tx } = build();
+    await service.createTenant(
+      { businessName: "Barbearia Nova", ownerName: "Zé", ownerEmail: "ze@x.com", ownerPhone: "11912345678" } as never,
+      ACTOR,
+    );
+    const names = tx.accessProfile.upsert.mock.calls.map((c: [{ where: { tenantId_name: { name: string } } }]) => c[0].where.tenantId_name.name);
+    expect(names).toEqual(["Recepção", "Profissional"]);
   });
 });
 

@@ -82,11 +82,12 @@ export function AppointmentTicket({ booking }: { booking: PublicBooking }) {
     loadSlots(date);
   }
 
-  async function handleJoinWaitlist() {
+  async function handleJoinWaitlist(notes?: string) {
     return joinWaitlistAction(slug, {
       serviceId: booking.serviceId,
       professionalId: booking.professionalId,
       preferredDate: selectedDate,
+      notes,
     });
   }
 

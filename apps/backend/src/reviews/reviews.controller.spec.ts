@@ -1,12 +1,14 @@
 import "reflect-metadata";
-import { Role } from "@marquo/database";
 import { ConsumerReviewsController, OwnerReviewsController } from "./reviews.controller";
-import { ROLES_KEY } from "../common/decorators/roles.decorator";
+import { areaOf, rolesOf } from "../access/area-metadata";
 import { IS_PUBLIC_KEY } from "../common/decorators/public.decorator";
 
-describe("OwnerReviewsController: moderação exige OWNER", () => {
-  it("a classe toda (list/hide/report) exige OWNER", () => {
-    expect(Reflect.getMetadata(ROLES_KEY, OwnerReviewsController)).toEqual([Role.OWNER]);
+describe("OwnerReviewsController: moderação é da área marketplace", () => {
+  it("list/hide/report pertencem à área marketplace (ver lista, editar para ocultar/denunciar), sem papel fixo", () => {
+    for (const handler of ["list", "hide", "report"]) {
+      expect(areaOf(OwnerReviewsController as never, handler)).toMatchObject({ area: "marketplace" });
+      expect(rolesOf(OwnerReviewsController as never, handler)).toBeUndefined();
+    }
   });
 });
 

@@ -331,13 +331,15 @@ describe("TicketsController: quem pode o quê", () => {
   const proto = TicketsController.prototype;
   const handlerRoles = (name: keyof TicketsController) => Reflect.getMetadata(ROLES_KEY, proto[name]);
 
-  it("a classe é de dono e recepção; reabrir e ver o histórico são SÓ do dono", () => {
-    expect(Reflect.getMetadata(ROLES_KEY, TicketsController)).toEqual([Role.OWNER, Role.RECEPTIONIST]);
+  // Comandas é uma área dos perfis; reabrir comanda fechada e ver o histórico seguem SÓ do dono (mexem em dinheiro já fechado).
+  it("a classe é da área comandas; reabrir e ver o histórico são SÓ do dono", () => {
+    expect(Reflect.getMetadata("access-area", TicketsController)).toMatchObject({ area: "comandas" });
+    expect(Reflect.getMetadata(ROLES_KEY, TicketsController)).toBeUndefined();
     expect(handlerRoles("reopen")).toEqual([Role.OWNER]);
     expect(handlerRoles("history")).toEqual([Role.OWNER]);
   });
 
-  it("editar item, observação e estornar pagamento seguem a regra da classe (dono e recepção)", () => {
+  it("editar item, observação e estornar pagamento seguem a área da classe (sem papel fixo)", () => {
     for (const name of ["updateItem", "setNote", "removePayment"] as const) expect(handlerRoles(name)).toBeUndefined();
   });
 

@@ -2,11 +2,10 @@ import "reflect-metadata";
 import { Role } from "@marquo/database";
 import { ForbiddenException } from "@nestjs/common";
 import { ProfessionalsController } from "./professionals.controller";
-import { ROLES_KEY } from "../common/decorators/roles.decorator";
+import { areaOf, rolesOf } from "../access/area-metadata";
 import type { AuthenticatedUser } from "../auth/types/auth-user";
 
-const proto = ProfessionalsController.prototype;
-const meta = (handler: keyof ProfessionalsController) => Reflect.getMetadata(ROLES_KEY, proto[handler]);
+const meta = (handler: keyof ProfessionalsController) => rolesOf(ProfessionalsController, handler);
 
 const user = (over: Partial<AuthenticatedUser> = {}): AuthenticatedUser => ({
   userId: "u-1",
@@ -16,14 +15,23 @@ const user = (over: Partial<AuthenticatedUser> = {}): AuthenticatedUser => ({
 });
 
 describe("ProfessionalsController: quem pode chamar o quê", () => {
-  it.each(["create", "createSelf", "update", "remove"] as const)("%s exige OWNER", (handler) => {
-    expect(meta(handler)).toEqual([Role.OWNER]);
+  // Cadastrar, editar e excluir profissionais é a área "profissionais" com nível "editar" (antes: só o dono).
+  it.each(["create", "createSelf", "update", "remove"] as const)("%s pertence à área profissionais (editar), sem papel fixo", (handler) => {
+    expect(areaOf(ProfessionalsController, handler)).toMatchObject({ area: "profissionais", level: "EDIT" });
+    expect(meta(handler)).toBeUndefined();
   });
 
-  it("findAll/findOne/setWorkingHours não têm role fixo — a restrição é imperativa (ver spec de findOne/setWorkingHours abaixo e o includeEmail de findAll)", () => {
-    expect(meta("findAll")).toBeUndefined();
-    expect(meta("findOne")).toBeUndefined();
-    expect(meta("setWorkingHours")).toBeUndefined();
+  // Foto e horários: quem tem "editar" mexe em qualquer um; cada profissional mexe nos PRÓPRIOS com qualquer perfil (selfParam).
+  it.each(["uploadPhoto", "removePhoto", "setWorkingHours"] as const)("%s: área profissionais (editar) OU o próprio profissional", (handler) => {
+    expect(areaOf(ProfessionalsController, handler)).toEqual({ area: "profissionais", level: "EDIT", selfParam: "id" });
+    expect(meta(handler)).toBeUndefined();
+  });
+
+  it("findAll/findOne não têm área nem papel fixo — a restrição é imperativa (ver specs abaixo e o includeEmail de findAll)", () => {
+    for (const handler of ["findAll", "findOne"] as const) {
+      expect(areaOf(ProfessionalsController, handler)).toBeUndefined();
+      expect(meta(handler)).toBeUndefined();
+    }
   });
 });
 

@@ -45,6 +45,7 @@ function uniqueViolation(target: string[] | string) {
 function buildPrisma(overrides: { tenantSlugsTaken?: string[]; userCreate?: jest.Mock } = {}) {
   const taken = new Set(overrides.tenantSlugsTaken ?? []);
   const tx = {
+    accessProfile: { upsert: jest.fn().mockImplementation(async ({ where }: { where: { tenantId_name: { name: string } } }) => ({ id: `perfil-${where.tenantId_name.name}` })) },
     coupon: { findUnique: jest.fn().mockResolvedValue(null) },
     couponRedemption: { create: jest.fn().mockResolvedValue({}) },
     $executeRaw: jest.fn().mockResolvedValue(1),
@@ -87,6 +88,18 @@ describe("SignupService", () => {
     expect(trialMs).toBeLessThanOrEqual(TRIAL_DAYS * DAY_MS + 5000);
     // Nenhum vínculo de billing é criado no cadastro: o status vem do trial.
     expect(tenantData).not.toHaveProperty("subscription");
+  });
+
+  // Todo negócio nasce com os perfis padrão, na mesma transação do cadastro (se o cadastro falhar, nada fica pela metade).
+  it("cria os perfis padrão (Recepção e Profissional) no negócio novo, na mesma transação", async () => {
+    const { prisma, tx } = buildPrisma();
+    await new SignupService(prisma, new CouponsService(), verifier()).signup(DTO);
+
+    const calls = tx.accessProfile.upsert.mock.calls.map((c: [{ where: { tenantId_name: { tenantId: string; name: string } } }]) => c[0].where.tenantId_name);
+    expect(calls).toEqual([
+      { tenantId: "t-1", name: "Recepção" },
+      { tenantId: "t-1", name: "Profissional" },
+    ]);
   });
 
   it("papel OWNER e tenantId são definidos pelo servidor, e a senha é guardada em bcrypt", async () => {

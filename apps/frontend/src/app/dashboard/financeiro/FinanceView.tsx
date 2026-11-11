@@ -15,7 +15,6 @@ import type {
   FinanceOverview,
   FinancialCategory,
   FinancialEntry,
-  StaffRole,
 } from "@marquo/shared-types";
 import {
   cancelEntryAction,
@@ -35,12 +34,14 @@ export function FinanceView({
   overview,
   entries,
   categories,
-  role,
+  showDre,
+  canEdit,
 }: {
   overview: FinanceOverview;
   entries: FinancialEntry[];
   categories: FinancialCategory[];
-  role: StaffRole;
+  showDre: boolean;
+  canEdit: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("Lançamentos");
   const [state, formAction, pending] = useActionState(createEntryAction, initial);
@@ -57,7 +58,6 @@ export function FinanceView({
     kind: "settle" | "cancel";
   } | null>(null);
 
-  const isOwner = role === "OWNER";
   const payables = entries.filter((e) => e.direction === "EXPENSE" && e.status === "PENDING");
   const receivables = entries.filter((e) => e.direction === "INCOME" && e.status === "PENDING");
 
@@ -66,7 +66,7 @@ export function FinanceView({
     const t = DateTime.fromISO(to).endOf("day").toISO()!;
     startReport(async () => {
       setCf(await fetchCashFlowAction(f, t));
-      if (isOwner) setDre(await fetchDreAction(f, t));
+      if (showDre) setDre(await fetchDreAction(f, t));
     });
   }
 
@@ -88,6 +88,7 @@ export function FinanceView({
           <Card label="Resultado do mês" value={brl(overview.monthNetCents)} />
         </div>
 
+        {canEdit ? (
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900/30">
           <h2 className="mb-4 font-semibold text-zinc-900 dark:text-white">Novo Lançamento</h2>
           <form action={formAction} className="grid gap-2 sm:grid-cols-2">
@@ -129,11 +130,12 @@ export function FinanceView({
             </button>
           </form>
         </div>
+        ) : null}
       </div>
 
       <div className="flex min-w-0 flex-col lg:col-span-7 xl:col-span-8">
         <div className="flex flex-wrap gap-1 border-b border-zinc-200 dark:border-white/10">
-          {TABS.filter((t) => t !== "DRE" || isOwner).map((t) => (
+          {TABS.filter((t) => t !== "DRE" || showDre).map((t) => (
             <button
               key={t}
               type="button"
@@ -153,14 +155,14 @@ export function FinanceView({
         </div>
 
       {tab === "Lançamentos" ? (
-        <EntryList items={entries} onConfirmAction={setConfirmingAction} />
+        <EntryList items={entries} onConfirmAction={canEdit ? setConfirmingAction : undefined} />
       ) : null}
 
       {tab === "A pagar" ? (
-        <EntryList items={payables} onConfirmAction={setConfirmingAction} />
+        <EntryList items={payables} onConfirmAction={canEdit ? setConfirmingAction : undefined} />
       ) : null}
       {tab === "A receber" ? (
-        <EntryList items={receivables} onConfirmAction={setConfirmingAction} />
+        <EntryList items={receivables} onConfirmAction={canEdit ? setConfirmingAction : undefined} />
       ) : null}
 
       {tab === "Fluxo de caixa" || tab === "DRE" ? (
@@ -250,7 +252,8 @@ function EntryList({
   onConfirmAction,
 }: {
   items: FinancialEntry[];
-  onConfirmAction: (action: { entry: FinancialEntry; kind: "settle" | "cancel" }) => void;
+  // Sem a função (perfil "só ver") os botões de baixa/cancelamento não aparecem.
+  onConfirmAction?: (action: { entry: FinancialEntry; kind: "settle" | "cancel" }) => void;
 }) {
   const [page, setPage] = useState(1);
   const pageSize = 15;
@@ -298,7 +301,7 @@ function EntryList({
                   <span className="text-xs text-zinc-400">quitado</span>
                 ) : e.status === "CANCELED" ? (
                   <span className="text-xs text-zinc-400">cancelado</span>
-                ) : (
+                ) : !onConfirmAction ? null : (
                   <>
                     <button
                       type="button"

@@ -11,6 +11,7 @@ import { TRIAL_DAYS } from "../billing/trial.constants";
 import { SignupDto } from "./dto/signup.dto";
 import { EmailVerificationService, newVerificationToken } from "../auth/email-verification.service";
 
+import { ensureDefaultProfiles } from "../access/default-profiles";
 const BCRYPT_ROUNDS = 12;
 const MAX_SLUG_ATTEMPTS = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -85,6 +86,8 @@ export class SignupService {
           const tenant = await tx.tenant.create({
             data: { name: dto.businessName, slug, trialEndsAt },
           });
+          // Todo negócio nasce com os perfis padrão ("Recepção" e "Profissional"), na mesma transação do cadastro.
+          await ensureDefaultProfiles(tx, tenant.id);
 
           // Papel e tenant são fixados aqui; nada disso vem do body.
           await tx.user.create({

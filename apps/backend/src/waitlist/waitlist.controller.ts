@@ -1,18 +1,17 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { Role } from "@marquo/database";
 import { WaitlistService } from "./waitlist.service";
 import { CreateWaitlistEntryDto } from "./dto/create-waitlist-entry.dto";
 import { UpdateWaitlistStatusDto } from "./dto/update-waitlist-status.dto";
 import { FindWaitlistQueryDto } from "./dto/find-waitlist-query.dto";
 import { Public } from "../common/decorators/public.decorator";
-import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 import { ConsumerJwtAuthGuard } from "../consumer-auth/guards/consumer-jwt-auth.guard";
 import { CurrentConsumer } from "../consumer-auth/decorators/current-consumer.decorator";
 import { AuthenticatedConsumer } from "../consumer-auth/types/consumer-auth-user";
 
+import { Area } from "../access/area.decorator";
 @Controller("public/tenants/:slug/waitlist")
 export class PublicWaitlistController {
   constructor(private readonly waitlistService: WaitlistService) {}
@@ -33,21 +32,26 @@ export class PublicWaitlistController {
   }
 }
 
+@Area("lista_espera")
 @Controller("waitlist")
 export class WaitlistController {
   constructor(private readonly waitlistService: WaitlistService) {}
 
-  @Roles(Role.OWNER)
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: FindWaitlistQueryDto) {
     return this.waitlistService.findAllByTenant(user.tenantId, query.status);
   }
 
-  @Roles(Role.OWNER)
+  // Contagens das abas (aguardando, contatados, encerrados).
+  @Get("counts")
+  counts(@CurrentUser() user: AuthenticatedUser) {
+    return this.waitlistService.counts(user.tenantId);
+  }
+
   @Patch(":id/status")
   updateStatus(
     @CurrentUser() user: AuthenticatedUser,
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateWaitlistStatusDto,
   ) {
     return this.waitlistService.updateStatus(user.tenantId, id, dto.status);

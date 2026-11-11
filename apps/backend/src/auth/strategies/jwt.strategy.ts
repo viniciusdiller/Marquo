@@ -6,6 +6,7 @@ import { Role } from "@marquo/database";
 import { PrismaService } from "../../prisma/prisma.service";
 import { JwtPayload, AuthenticatedUser } from "../types/auth-user";
 import { isSessionRevoked } from "../../common/utils/session.util";
+import { defaultPermissionsForRole, FULL_ACCESS, normalizePermissions } from "@marquo/shared-types";
 
 const STAFF_ROLES = new Set<string>(Object.values(Role));
 
@@ -43,6 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         emailVerifiedAt: true,
         passwordChangedAt: true,
         professional: { select: { id: true } },
+        accessProfile: { select: { name: true, permissions: true } },
       },
     });
     if (!user || !user.isActive) {
@@ -58,11 +60,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
+    // Permissões: o dono é sempre total; os demais valem o PERFIL (normalizado: área desconhecida some, nível inválido vira NONE, então
+    // um JSON estranho só pode TIRAR acesso). Sem perfil atribuído, vale o perfil padrão do papel.
+    const permissions =
+      user.role === Role.OWNER
+        ? FULL_ACCESS
+        : user.accessProfile
+          ? normalizePermissions(user.accessProfile.permissions)
+          : defaultPermissionsForRole(user.role);
+
     return {
       userId: payload.sub,
       tenantId: user.tenantId,
       role: user.role,
       professionalId: user.professional?.id,
+      permissions,
+      profileName: user.accessProfile?.name ?? null,
     };
   }
 }

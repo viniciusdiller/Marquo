@@ -3,16 +3,15 @@ import type {
   FinancialCategory,
   FinancialEntry,
 } from "@marquo/shared-types";
-import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
-import { requireRole } from "@/lib/guards";
+import { requireArea } from "@/lib/access-server";
+import { canAccess } from "@/lib/access";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { HowItWorks } from "@/components/ui/HowItWorks";
 import { FinanceView } from "./FinanceView";
 
 export default async function FinanceiroPage() {
-  const session = await auth();
-  requireRole(session, ["OWNER", "RECEPTIONIST"]);
+  const access = await requireArea("financeiro");
 
   const [overview, entries, categories] = await Promise.all([
     authedFetch<FinanceOverview>("/finance/overview").catch(
@@ -54,7 +53,8 @@ export default async function FinanceiroPage() {
         overview={overview}
         entries={entries}
         categories={categories}
-        role={session.user.role}
+        showDre={canAccess(access, "financeiro_avancado")}
+        canEdit={canAccess(access, "financeiro", "EDIT")}
       />
     </div>
   );

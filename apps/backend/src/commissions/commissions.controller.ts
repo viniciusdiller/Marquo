@@ -1,29 +1,26 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from "@nestjs/common";
-import { Role } from "@marquo/database";
 import { CommissionsService } from "./commissions.service";
 import { UpsertCommissionRuleDto } from "./dto/upsert-commission-rule.dto";
 import { RangeByProfessionalQueryDto } from "../common/dto/query-dtos";
-import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 
+import { Area } from "../access/area.decorator";
+@Area("comissoes")
 @Controller("commissions")
 export class CommissionsController {
   constructor(private readonly commissions: CommissionsService) {}
 
-  @Roles(Role.OWNER)
   @Get("rules")
   listRules(@CurrentUser() user: AuthenticatedUser) {
     return this.commissions.listRules(user.tenantId);
   }
 
-  @Roles(Role.OWNER)
   @Post("rules")
   createRule(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpsertCommissionRuleDto) {
     return this.commissions.createRule(user.tenantId, dto);
   }
 
-  @Roles(Role.OWNER)
   @Patch("rules/:id")
   updateRule(
     @CurrentUser() user: AuthenticatedUser,
@@ -33,7 +30,6 @@ export class CommissionsController {
     return this.commissions.updateRule(user.tenantId, id, dto);
   }
 
-  @Roles(Role.OWNER)
   @Delete("rules/:id")
   deleteRule(
     @CurrentUser() user: AuthenticatedUser,

@@ -1,14 +1,12 @@
 import type { IntakeFormSummary } from "@marquo/shared-types";
-import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
-import { requireRole } from "@/lib/guards";
+import { requireArea } from "@/lib/access-server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { HowItWorks } from "@/components/ui/HowItWorks";
 import { FormsManager } from "./FormsManager";
 
 export default async function FichasPage() {
-  const session = await auth();
-  requireRole(session, ["OWNER"]);
+  await requireArea("fichas");
 
   const forms = await authedFetch<IntakeFormSummary[]>("/intake/forms").catch(() => []);
 

@@ -15,6 +15,8 @@ import { TimeBlocksQueryDto } from "../common/dto/query-dtos";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 
+import { Area } from "../access/area.decorator";
+@Area("agenda")
 @Controller("time-blocks")
 export class TimeBlocksController {
   constructor(private readonly timeBlocksService: TimeBlocksService) {}

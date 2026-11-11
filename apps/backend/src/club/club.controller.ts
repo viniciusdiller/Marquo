@@ -1,10 +1,9 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
-import { Role } from "@marquo/database";
-import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 import { ClubService } from "./club.service";
+import { Area } from "../access/area.decorator";
 import {
   CreateClubPlanDto,
   EnrollClubMemberDto,
@@ -15,7 +14,7 @@ import {
 
 // Clube de assinaturas: só o DONO gerencia (valores, adesões e receita). O tenantId vem sempre do token. A baixa dos usos
 // não passa por aqui: acontece sozinha no fechamento da comanda (TicketsService), para qualquer papel que feche a comanda.
-@Roles(Role.OWNER)
+@Area("clube")
 @Controller("club")
 export class ClubController {
   constructor(private readonly club: ClubService) {}

@@ -4,16 +4,16 @@ import { ServicesService } from "./services.service";
 import { CreateServiceDto } from "./dto/create-service.dto";
 import { UpdateServiceDto } from "./dto/update-service.dto";
 import { LinkProfessionalServiceDto } from "./dto/link-professional-service.dto";
-import { Roles } from "../common/decorators/roles.decorator";
 import { Public } from "../common/decorators/public.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 
+import { Area } from "../access/area.decorator";
 @Controller("services")
 export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
-  @Roles(Role.OWNER)
+  @Area("servicos", "EDIT")
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateServiceDto) {
     return this.servicesService.create(user.tenantId, dto);
@@ -24,7 +24,7 @@ export class ServicesController {
     return this.servicesService.findAllByTenant(user.tenantId);
   }
 
-  @Roles(Role.OWNER)
+  @Area("servicos", "EDIT")
   @Patch(":id")
   update(
     @CurrentUser() user: AuthenticatedUser,
@@ -39,7 +39,7 @@ export class ServicesController {
 export class ProfessionalServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
-  @Roles(Role.OWNER)
+  @Area("profissionais", "EDIT")
   @Post()
   link(
     @CurrentUser() user: AuthenticatedUser,

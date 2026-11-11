@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowSquareOut, SignOut } from "@phosphor-icons/react/dist/ssr";
 import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
+import { getAccess } from "@/lib/access-server";
 import { SidebarNav } from "./SidebarNav";
 import { MobileSidebar } from "./MobileSidebar";
 import { signOutAction } from "./actions";
@@ -30,7 +31,8 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
     redirect("/entrar");
   }
 
-  const [tenant, billing] = await Promise.all([
+  const [access, tenant, billing] = await Promise.all([
+    getAccess(),
     authedFetch<TenantMe>("/tenants/me").catch(() => null),
     authedFetch<BillingStatusResponse>("/billing/status").catch(() => null),
   ]);
@@ -68,7 +70,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
         ) : null}
 
         <div className="mt-8">
-          <SidebarNav />
+          <SidebarNav access={access} />
         </div>
       </aside>
 
@@ -76,7 +78,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
         <BrandPattern mask="radial-gradient(ellipse 60% 320px at 100% 0%, black 0%, transparent 100%)" />
         <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-zinc-200 bg-stone-50/85 px-4 py-3 backdrop-blur-md md:px-6 md:py-4 dark:border-white/10 dark:bg-zinc-950/85">
           <div className="flex min-w-0 items-center gap-1 md:gap-3">
-            <MobileSidebar tenant={tenant} />
+            <MobileSidebar tenant={tenant} access={access} />
             <div className="flex min-w-0 items-center gap-2.5 md:gap-3">
               <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-100 text-xs font-semibold text-accent-700 md:size-9 dark:bg-accent-500/15 dark:text-accent-300">
                 {initials}
@@ -84,7 +86,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-zinc-900 dark:text-white">{userName}</p>
                 <p className="truncate text-xs text-zinc-500 dark:text-stone-400">
-                  {ROLE_LABEL[session.user.role] ?? session.user.role}
+                  {access.profileName ?? ROLE_LABEL[session.user.role] ?? session.user.role}
                 </p>
               </div>
             </div>

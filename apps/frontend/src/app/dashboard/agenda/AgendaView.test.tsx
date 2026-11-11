@@ -41,8 +41,8 @@ function calendar(appointments: PublicBooking[], professionals?: CalendarRespons
   };
 }
 
-function setup(cal: CalendarResponse, extra: { date?: string; role?: "OWNER" | "PROFESSIONAL" } = {}) {
-  return render(<AgendaView initialDate={extra.date ?? DAY} initialCalendar={cal} services={[]} role={extra.role ?? "OWNER"} />);
+function setup(cal: CalendarResponse, extra: { date?: string; canEdit?: boolean } = {}) {
+  return render(<AgendaView initialDate={extra.date ?? DAY} initialCalendar={cal} services={[]} canEdit={extra.canEdit ?? true} />);
 }
 
 describe("AgendaView", () => {

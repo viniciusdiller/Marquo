@@ -47,6 +47,7 @@ describe("exclusão de dados: cobertura do schema", () => {
     before("CommissionEntry", "Professional");
     before("StockMovement", "Product");
     before("ClubUsage", "ClubMembership");
+    before("User", "AccessProfile");
     before("ClubMembership", "ClubPlan");
     before("Appointment", "Service");
     before("Appointment", "Professional");

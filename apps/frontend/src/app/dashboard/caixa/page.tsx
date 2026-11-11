@@ -1,14 +1,12 @@
 import type { CashRegisterSummary } from "@marquo/shared-types";
-import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
-import { requireRole } from "@/lib/guards";
+import { requireArea } from "@/lib/access-server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { HowItWorks } from "@/components/ui/HowItWorks";
 import { CaixaView } from "./CaixaView";
 
 export default async function CaixaPage() {
-  const session = await auth();
-  requireRole(session, ["OWNER", "RECEPTIONIST"]);
+  await requireArea("caixa");
 
   const summary = await authedFetch<CashRegisterSummary>("/cash-register").catch(
     () => ({ open: false }) as CashRegisterSummary,

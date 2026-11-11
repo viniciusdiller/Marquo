@@ -1,14 +1,13 @@
 import "reflect-metadata";
-import { Role } from "@marquo/database";
 import { PublicWaitlistController, WaitlistController } from "./waitlist.controller";
-import { ROLES_KEY } from "../common/decorators/roles.decorator";
+import { areaOf, rolesOf } from "../access/area-metadata";
 import { IS_PUBLIC_KEY } from "../common/decorators/public.decorator";
 
-const proto = WaitlistController.prototype;
-
 describe("WaitlistController: quem pode chamar o quê", () => {
-  it.each(["findAll", "updateStatus"] as const)("%s exige OWNER (só o dono administra a lista de espera)", (handler) => {
-    expect(Reflect.getMetadata(ROLES_KEY, proto[handler])).toEqual([Role.OWNER]);
+  // Lista de espera virou uma área dos perfis (antes só o dono): ver a lista pede "ver"; dar andamento pede "editar".
+  it.each(["findAll", "counts", "updateStatus"] as const)("%s pertence à área lista_espera e não tem papel fixo", (handler) => {
+    expect(areaOf(WaitlistController, handler)).toMatchObject({ area: "lista_espera" });
+    expect(rolesOf(WaitlistController, handler)).toBeUndefined();
   });
 });
 

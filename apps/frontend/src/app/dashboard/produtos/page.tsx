@@ -1,14 +1,12 @@
 import type { AdminProduct } from "@marquo/shared-types";
-import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
-import { requireRole } from "@/lib/guards";
+import { requireArea } from "@/lib/access-server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { HowItWorks } from "@/components/ui/HowItWorks";
 import { ProductsManager } from "./ProductsManager";
 
 export default async function ProdutosPage() {
-  const session = await auth();
-  requireRole(session, ["OWNER", "RECEPTIONIST"]);
+  await requireArea("produtos");
 
   const products = await authedFetch<AdminProduct[]>("/products?includeInactive=true").catch(
     () => [],

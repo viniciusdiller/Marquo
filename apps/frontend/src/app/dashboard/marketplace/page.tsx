@@ -1,15 +1,13 @@
 import type { MarketplaceSettings as Settings, OwnerReview } from "@marquo/shared-types";
-import { auth } from "@/lib/auth";
 import { authedFetch } from "@/lib/api-server";
-import { requireRole } from "@/lib/guards";
+import { requireArea } from "@/lib/access-server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { HowItWorks } from "@/components/ui/HowItWorks";
 import { MarketplaceSettings } from "./MarketplaceSettings";
 import { ReviewsModeration } from "./ReviewsModeration";
 
 export default async function MarketplacePage() {
-  const session = await auth();
-  requireRole(session, ["OWNER"]);
+  await requireArea("marketplace");
 
   const [settings, reviews] = await Promise.all([
     authedFetch<Settings>("/tenants/me/marketplace"),

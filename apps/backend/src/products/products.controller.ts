@@ -1,15 +1,14 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { Role } from "@marquo/database";
 import { ProductsService } from "./products.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import { AdjustStockDto } from "./dto/adjust-stock.dto";
-import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../auth/types/auth-user";
 import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
 
-@Roles(Role.OWNER, Role.RECEPTIONIST)
+import { Area } from "../access/area.decorator";
+@Area("produtos")
 @Controller("products")
 export class ProductsController {
   constructor(private readonly products: ProductsService) {}
@@ -33,13 +32,11 @@ export class ProductsController {
     return this.products.listMovements(user.tenantId, id, query);
   }
 
-  @Roles(Role.OWNER)
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateProductDto) {
     return this.products.create(user.tenantId, dto);
   }
 
-  @Roles(Role.OWNER)
   @Patch(":id")
   update(
     @CurrentUser() user: AuthenticatedUser,
