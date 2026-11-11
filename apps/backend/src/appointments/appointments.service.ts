@@ -21,6 +21,7 @@ import { ListConsumerBookingsQueryDto } from "./dto/list-consumer-bookings-query
 import { ConsumerAuthService } from "../consumer-auth/consumer-auth.service";
 import { AuthenticatedConsumer } from "../consumer-auth/types/consumer-auth-user";
 import { AppointmentNotifierService } from "../email/appointment-notifier.service";
+import { anyBlockOverlaps, blocksTouchingWhere, dailyBlocksWhere, occurrencesInRange } from "../time-blocks/time-block-occurrences";
 import { REMINDER_LEAD_MS } from "./reminder.constants";
 
 
@@ -289,9 +290,9 @@ export class AppointmentsService {
         where: {
           tenantId: user.tenantId,
           ...(scopedProfessionalId ? { professionalId: scopedProfessionalId } : {}),
-          ...overlapWhere,
+          ...blocksTouchingWhere(fromDate, toDate),
         },
-        select: { id: true, professionalId: true, startAt: true, endAt: true, reason: true },
+        select: { id: true, professionalId: true, startAt: true, endAt: true, reason: true, recurrence: true, repeatUntil: true },
       }),
     ]);
 
@@ -303,7 +304,17 @@ export class AppointmentsService {
         workingHours: professional.workingHours,
       })),
       appointments: appointments.map((appointment) => this.serialize(appointment)),
-      timeBlocks,
+      // Bloqueio diário vira uma entrada por dia dentro do período (mesmo id, `recurring: true`).
+      timeBlocks: timeBlocks.flatMap((block) =>
+        occurrencesInRange(block, fromDate, toDate).map((occurrence) => ({
+          id: block.id,
+          professionalId: block.professionalId,
+          startAt: occurrence.startAt,
+          endAt: occurrence.endAt,
+          reason: block.reason,
+          recurring: block.recurrence === "DAILY",
+        })),
+      ),
     };
   }
 
@@ -692,7 +703,7 @@ export class AppointmentsService {
     endAt: Date,
     excludeAppointmentId?: string,
   ): Promise<void> {
-    const [conflictingAppointment, conflictingBlock] = await Promise.all([
+    const [conflictingAppointment, conflictingBlock, dailyBlocks] = await Promise.all([
       tx.appointment.findFirst({
         where: {
           professionalId,
@@ -705,13 +716,19 @@ export class AppointmentsService {
       tx.timeBlock.findFirst({
         where: {
           professionalId,
+          recurrence: "NONE",
           startAt: { lt: endAt },
           endAt: { gt: startAt },
         },
       }),
+      // Bloqueios diários (ex.: almoço todo dia): conflita se alguma ocorrência toca o horário.
+      tx.timeBlock.findMany({
+        where: { professionalId, ...dailyBlocksWhere(startAt, endAt) },
+        select: { startAt: true, endAt: true, recurrence: true, repeatUntil: true },
+      }),
     ]);
 
-    if (conflictingAppointment || conflictingBlock) {
+    if (conflictingAppointment || conflictingBlock || anyBlockOverlaps(dailyBlocks, startAt, endAt)) {
       throw new ConflictException("Este horário não está mais disponível.");
     }
   }

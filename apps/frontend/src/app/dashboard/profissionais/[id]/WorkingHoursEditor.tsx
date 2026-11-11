@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Plus, Trash } from "@phosphor-icons/react/dist/ssr";
 import { Button } from "@/components/ui/Button";
 import { updateWorkingHoursAction, type WorkingHoursInterval } from "./actions";
+import { TimePicker } from "@/components/ui/time-picker";
 
 const WEEKDAYS: { value: string; label: string }[] = [
   { value: "MONDAY", label: "Segunda" },
@@ -116,18 +117,20 @@ export function WorkingHoursEditor({
               ) : (
                 rowsByDay[day.value].map((row) => (
                   <div key={row.id} className="flex items-center gap-2">
-                    <input
-                      type="time"
+                    <TimePicker
+                      aria-label={`Início do intervalo de ${day.label}`}
                       value={row.start}
-                      onChange={(e) => updateRow(day.value, row.id, "start", e.target.value)}
-                      className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-white/15 dark:bg-zinc-900 dark:text-white"
+                      onChange={(value) => updateRow(day.value, row.id, "start", value)}
+                      compact
+                      className="w-[4.5rem] px-2 py-1.5 text-sm"
                     />
                     <span className="text-sm text-zinc-400">até</span>
-                    <input
-                      type="time"
+                    <TimePicker
+                      aria-label={`Fim do intervalo de ${day.label}`}
                       value={row.end}
-                      onChange={(e) => updateRow(day.value, row.id, "end", e.target.value)}
-                      className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 dark:border-white/15 dark:bg-zinc-900 dark:text-white"
+                      onChange={(value) => updateRow(day.value, row.id, "end", value)}
+                      compact
+                      className="w-[4.5rem] px-2 py-1.5 text-sm"
                     />
                     <button
                       type="button"

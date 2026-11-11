@@ -24,6 +24,7 @@ import {
   settleEntryAction,
   type FinanceActionState,
 } from "./actions";
+import { DatePicker } from "@/components/ui/date-picker";
 
 const TABS = ["Lançamentos", "A pagar", "A receber", "Fluxo de caixa", "DRE"] as const;
 type Tab = (typeof TABS)[number];
@@ -114,7 +115,7 @@ export function FinanceView({
             <input name="description" placeholder="Descrição" required maxLength={200} className="rounded-lg border border-zinc-300 px-2 py-2 text-sm dark:border-white/15 dark:bg-zinc-950 dark:text-white sm:col-span-2" />
             <input name="counterparty" placeholder="Fornecedor / cliente (opcional)" maxLength={200} className="rounded-lg border border-zinc-300 px-2 py-2 text-sm dark:border-white/15 dark:bg-zinc-950 dark:text-white sm:col-span-2" />
             <MoneyInput name="amount" placeholder="Valor (R$)" aria-label="Valor (R$)" required className="rounded-lg border border-zinc-300 px-2 py-2 text-sm dark:border-white/15 dark:bg-zinc-950 dark:text-white" />
-            <input name="dueDate" type="date" required defaultValue={DateTime.now().toISODate()!} className="rounded-lg border border-zinc-300 px-2 py-2 text-sm dark:border-white/15 dark:bg-zinc-950 dark:text-white" />
+            <DatePicker name="dueDate" aria-label="Vencimento" required defaultValue={DateTime.now().toISODate()!} className="px-3 py-2 text-sm" />
             <label className="flex items-center gap-2 text-sm text-zinc-600 sm:col-span-2 dark:text-stone-300">
               <input type="checkbox" name="paidNow" /> Já quitado
             </label>
@@ -168,8 +169,8 @@ export function FinanceView({
       {tab === "Fluxo de caixa" || tab === "DRE" ? (
         <div className="mt-5">
           <div className="flex flex-wrap items-end gap-2">
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-lg border border-zinc-300 px-2 py-2 text-sm dark:border-white/15 dark:bg-zinc-900 dark:text-white" />
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-lg border border-zinc-300 px-2 py-2 text-sm dark:border-white/15 dark:bg-zinc-900 dark:text-white" />
+            <div className="w-40"><DatePicker aria-label="Data inicial" value={from} onChange={setFrom} className="px-3 py-2 text-sm" /></div>
+            <div className="w-40"><DatePicker aria-label="Data final" value={to} onChange={setTo} className="px-3 py-2 text-sm" /></div>
             <button type="button" onClick={loadReports} disabled={reportPending} className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium dark:border-white/15 dark:text-stone-200">
               {reportPending ? "..." : "Atualizar"}
             </button>

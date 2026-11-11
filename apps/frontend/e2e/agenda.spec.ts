@@ -17,12 +17,14 @@ test.describe("Agenda", () => {
     // pra não colidir com um atendimento deixado por uma rodada anterior (mesmo slot).
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const y = tomorrow.getFullYear();
-    const m = String(tomorrow.getMonth() + 1).padStart(2, "0");
-    const d = String(tomorrow.getDate()).padStart(2, "0");
     const hour = String(8 + (Date.now() % 11)).padStart(2, "0");
     const minute = Date.now() % 2 === 0 ? "00" : "30";
-    await dialog.locator('input[type="datetime-local"]').fill(`${y}-${m}-${d}T${hour}:${minute}`);
+    // Data e hora agora são os seletores do shadcn (calendário + colunas de hora/minuto), não o campo nativo.
+    await dialog.getByRole("button", { name: "Início (data)" }).click();
+    await page.getByRole("button", { name: new RegExp(`, ${tomorrow.getDate()} de `) }).first().click();
+    await dialog.getByRole("button", { name: "Início (hora)" }).click();
+    await page.getByRole("listbox", { name: "Hora" }).getByRole("option", { name: hour, exact: true }).click();
+    await page.getByRole("listbox", { name: "Minuto" }).getByRole("option", { name: minute, exact: true }).click();
 
     await dialog.getByRole("button", { name: "Criar" }).click();
     await expect(dialog).toBeHidden({ timeout: 10_000 });

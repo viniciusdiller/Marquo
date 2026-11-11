@@ -2,11 +2,11 @@ import Form from "next/form";
 import { requireArea } from "@/lib/access-server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { getGeneralBalanceReport } from "./actions";
 import { DateTime } from "luxon";
 import { brl } from "@/lib/money";
+import { DatePicker } from "@/components/ui/date-picker";
 
 type PageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -37,20 +37,8 @@ export default async function ReportsPage(props: PageProps) {
       <div className="mt-6 grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
         <div className="flex flex-col gap-6 lg:col-span-4 xl:col-span-3">
           <Form action="/dashboard/relatorios" className="flex flex-col gap-4 rounded-xl border border-zinc-200 p-4 dark:border-white/10">
-            <Input
-              name="startDate"
-              type="date"
-              label="Data inicial"
-              defaultValue={startDate}
-              required
-            />
-            <Input
-              name="endDate"
-              type="date"
-              label="Data final"
-              defaultValue={endDate}
-              required
-            />
+            <DatePicker name="startDate" label="Data inicial" defaultValue={startDate} required />
+            <DatePicker name="endDate" label="Data final" defaultValue={endDate} required />
             <Button type="submit" className="w-full">
               Filtrar Período
             </Button>

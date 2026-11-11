@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { MaskedInput } from "@/components/ui/MaskedInput";
 import { Button } from "@/components/ui/Button";
 import { type ClientFormState } from "./actions";
+import { DatePicker } from "@/components/ui/date-picker";
 
 const initial: ClientFormState = {};
 
@@ -34,11 +35,13 @@ export function ClientForm({
           hint="Principal forma de contato (WhatsApp). Também identifica o cliente."
         />
         <Input label="E-mail" name="email" type="email" autoComplete="off" maxLength={254} defaultValue={client?.email ?? ""} hint="Opcional." />
-        <Input
+        <DatePicker
           label="Nascimento"
           name="birthDate"
-          type="date"
           min="1900-01-01"
+          max={new Date().toISOString().slice(0, 10)}
+          dropdownYears={{ from: 1900, to: new Date().getFullYear() }}
+          clearable
           defaultValue={client?.birthDate?.slice(0, 10) ?? ""}
           hint="Opcional. Útil para lembrar de aniversários."
         />

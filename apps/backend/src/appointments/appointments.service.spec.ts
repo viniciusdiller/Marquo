@@ -71,7 +71,7 @@ function buildTxMock(overrides: Partial<Record<string, unknown>> = {}) {
       create: jest.fn().mockResolvedValue(hydratedAppointment()),
       update: jest.fn().mockImplementation(({ data }) => hydratedAppointment(data)),
     },
-    timeBlock: { findFirst: jest.fn().mockResolvedValue(null) },
+    timeBlock: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
     ...overrides,
   };
 }
@@ -154,10 +154,46 @@ describe("AppointmentsService", () => {
     });
 
     it("lança ConflictException quando colide com um TimeBlock", async () => {
-      const tx = buildTxMock({ timeBlock: { findFirst: jest.fn().mockResolvedValue({ id: "block-1" }) } });
+      const tx = buildTxMock({ timeBlock: { findFirst: jest.fn().mockResolvedValue({ id: "block-1" }), findMany: jest.fn().mockResolvedValue([]) } });
       const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth, notifier);
 
       await expect(service.createFromPublicLink("slug", baseDto, consumer)).rejects.toThrow(ConflictException);
+    });
+
+    // Bloqueio "todo dia" (ex.: almoço): vale em qualquer data futura, sem linha por dia.
+    it("lança ConflictException quando o horário cai numa ocorrência de bloqueio diário", async () => {
+      const start = new Date(FUTURE_DATE);
+      const block = {
+        startAt: new Date(start.getTime() - 5 * 24 * 60 * 60 * 1000),
+        endAt: new Date(start.getTime() - 5 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000),
+        recurrence: "DAILY",
+        repeatUntil: null,
+      };
+      // Mesmo horário local do agendamento, criado 5 dias antes.
+      const tx = buildTxMock({
+        timeBlock: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([block]) },
+      });
+      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth, notifier);
+
+      await expect(service.createFromPublicLink("slug", baseDto, consumer)).rejects.toThrow(ConflictException);
+      expect(tx.appointment.create).not.toHaveBeenCalled();
+    });
+
+    it("bloqueio diário em outro horário do dia não impede o agendamento", async () => {
+      const start = new Date(FUTURE_DATE);
+      const block = {
+        startAt: new Date(start.getTime() - 5 * 24 * 60 * 60 * 1000 + 6 * 60 * 60 * 1000),
+        endAt: new Date(start.getTime() - 5 * 24 * 60 * 60 * 1000 + 7 * 60 * 60 * 1000),
+        recurrence: "DAILY",
+        repeatUntil: null,
+      };
+      const tx = buildTxMock({
+        timeBlock: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([block]) },
+      });
+      const service = new AppointmentsService(buildPrismaMock(tx), clientsService, consumerAuth, notifier);
+
+      await service.createFromPublicLink("slug", baseDto, consumer);
+      expect(tx.appointment.create).toHaveBeenCalled();
     });
 
     it("lança BadRequestException ao agendar no passado", async () => {
@@ -640,6 +676,35 @@ describe("AppointmentsService", () => {
       expect(result.professionals).toHaveLength(1);
       expect(result.appointments).toHaveLength(1);
       expect(result.appointments[0].items).toBeDefined();
+    });
+
+    it("bloqueio diário vira uma entrada por dia do intervalo, marcada como recorrente", async () => {
+      const prisma = calendarPrisma();
+      const created = new Date("2026-01-05T15:00:00.000Z"); // 12:00 locais, criado antes do intervalo
+      (prisma.timeBlock.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: "block-daily",
+          professionalId: "prof-1",
+          startAt: created,
+          endAt: new Date(created.getTime() + 60 * 60 * 1000),
+          reason: "Almoço",
+          recurrence: "DAILY",
+          repeatUntil: null,
+        },
+      ]);
+      const service = new AppointmentsService(prisma, clientsService, consumerAuth, notifier);
+
+      const from = new Date("2026-02-02T03:00:00.000Z").toISOString();
+      const to = new Date("2026-02-05T03:00:00.000Z").toISOString(); // 3 dias locais
+      const result = await service.getCalendar(owner, from, to);
+
+      expect(result.timeBlocks).toHaveLength(3);
+      expect(result.timeBlocks.every((b) => b.id === "block-daily" && b.recurring === true && b.reason === "Almoço")).toBe(true);
+      expect(result.timeBlocks.map((b) => b.startAt.toISOString())).toEqual([
+        "2026-02-02T15:00:00.000Z",
+        "2026-02-03T15:00:00.000Z",
+        "2026-02-04T15:00:00.000Z",
+      ]);
     });
 
     it("PROFESSIONAL só enxerga a própria coluna", async () => {

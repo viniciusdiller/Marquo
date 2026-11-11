@@ -76,16 +76,20 @@ export async function createTimeBlockAction(
   const date = formData.get("date");
   const startTime = formData.get("startTime");
   const endTime = formData.get("endTime");
+  const repeat = formData.get("repeat") === "DAILY" ? "DAILY" : "NONE";
+  const repeatUntil = formData.get("repeatUntil");
 
-  if (!date || !startTime || !endTime) {
+  if (typeof date !== "string" || typeof startTime !== "string" || typeof endTime !== "string" || !date || !startTime || !endTime) {
     return { error: "Preencha data, início e fim." };
   }
 
-  const startAt = new Date(`${date}T${startTime}:00`);
-  const endAt = new Date(`${date}T${endTime}:00`);
-
-  if (endAt <= startAt) {
+  // Mesmo dia e formato fixo (yyyy-MM-dd, HH:mm): a comparação de texto equivale à de horário.
+  if (endTime <= startTime) {
     return { error: "O horário de término deve ser depois do início." };
+  }
+
+  if (repeat === "DAILY" && typeof repeatUntil === "string" && repeatUntil && repeatUntil < date) {
+    return { error: "A data final deve ser o dia do bloqueio ou depois." };
   }
 
   try {
@@ -93,9 +97,12 @@ export async function createTimeBlockAction(
       method: "POST",
       body: JSON.stringify({
         professionalId,
-        startAt: startAt.toISOString(),
-        endAt: endAt.toISOString(),
+        // Sem fuso de propósito: o servidor interpreta no fuso do negócio (antes dependia do fuso do servidor do Next).
+        startAt: `${date}T${startTime}:00`,
+        endAt: `${date}T${endTime}:00`,
         reason: formData.get("reason") || undefined,
+        repeat,
+        repeatUntil: repeat === "DAILY" && typeof repeatUntil === "string" && repeatUntil ? repeatUntil : undefined,
       }),
     });
   } catch (error) {

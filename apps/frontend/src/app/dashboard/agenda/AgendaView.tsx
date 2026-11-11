@@ -451,7 +451,7 @@ export function AgendaView({
                             (minutesFromDayStart(b.endAt, date) - minutesFromDayStart(b.startAt, date)) * PX_PER_MIN;
                           return (
                             <div
-                              key={b.id}
+                              key={`${b.id}-${b.startAt}`}
                               className="absolute inset-x-1.5 rounded-lg bg-[repeating-linear-gradient(45deg,rgba(120,120,120,0.18)_0_6px,transparent_6px_12px)] px-2 py-1 text-[11px] font-medium text-zinc-500 dark:text-stone-400"
                               style={{ top, height }}
                             >

@@ -343,15 +343,24 @@ model WorkingHours {
   @@index([professionalId, weekday])
 }
 
+// NONE = bloqueio único. DAILY = a mesma janela (hora de início/fim de startAt/endAt) repete todo dia a partir do dia de startAt,
+// até `repeatUntil` (inclusive; nulo = sem fim). As ocorrências NÃO são gravadas: são calculadas na leitura.
+enum TimeBlockRecurrence {
+  NONE
+  DAILY
+}
+
 model TimeBlock {
-  id             String   @id @default(uuid())
+  id             String              @id @default(uuid())
   tenantId       String
   professionalId String
-  startAt        DateTime @db.Timestamptz(6)
-  endAt          DateTime @db.Timestamptz(6)
+  startAt        DateTime            @db.Timestamptz(6)
+  endAt          DateTime            @db.Timestamptz(6)
   reason         String?
-  createdAt      DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  recurrence     TimeBlockRecurrence @default(NONE)
+  repeatUntil    DateTime?           @db.Date
+  createdAt      DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime            @updatedAt @db.Timestamptz(6)
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)

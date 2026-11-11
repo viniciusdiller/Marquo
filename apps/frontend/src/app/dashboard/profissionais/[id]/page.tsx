@@ -37,6 +37,8 @@ interface TimeBlockItem {
   startAt: string;
   endAt: string;
   reason: string | null;
+  recurrence: "NONE" | "DAILY";
+  repeatUntil: string | null;
 }
 
 export default async function ProfessionalDetailPage({
@@ -145,8 +147,9 @@ export default async function ProfessionalDetailPage({
               Bloqueios (folga, almoço, férias)
             </h2>
             <FieldHint>
-              Tira um período pontual da agenda deste profissional. Não dá para bloquear um horário que já tem
-              atendimento marcado: cancele ou remarque o atendimento antes.
+              Tira um período da agenda deste profissional: uma folga pontual ou um horário que se repete todo dia
+              (ex.: almoço às 12:00). Não dá para bloquear um horário que já tem atendimento marcado: cancele ou
+              remarque o atendimento antes.
             </FieldHint>
             <div className="mt-3">
               <TimeBlocksManager professionalId={id} blocks={blocks} />

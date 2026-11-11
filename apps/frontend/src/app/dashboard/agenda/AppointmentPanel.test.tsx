@@ -142,15 +142,16 @@ describe("AppointmentPanel: pop-up no meio da tela", () => {
 
   it("Remarcar abre e fecha a área de remarcação (começa fechada)", async () => {
     renderPanel("CONFIRMED");
-    expect(screen.queryByLabelText(/remarcar para/i)).not.toBeInTheDocument();
+    // O campo agora é data + hora (DateTimePicker): o rótulo "Remarcar para" nomeia o grupo, não um input único.
+    expect(screen.queryByRole("group", { name: /remarcar para/i })).not.toBeInTheDocument();
 
     const toggle = screen.getByRole("button", { name: "Remarcar" });
     await userEvent.click(toggle);
-    expect(screen.getByLabelText(/remarcar para/i)).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /remarcar para/i })).toBeInTheDocument();
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
     await userEvent.click(toggle);
-    expect(screen.queryByLabelText(/remarcar para/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /remarcar para/i })).not.toBeInTheDocument();
   });
 
   it("finalizado/cancelado: sem Remarcar e sem Cancelar atendimento", () => {

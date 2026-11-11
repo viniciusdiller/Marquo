@@ -17,6 +17,7 @@ import { STATUS_LABEL, getStatusBadgeClasses, getStatusLabel } from "@/lib/appoi
 import { Avatar } from "@/components/ui/Avatar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 
 const TIMEZONE = "America/Sao_Paulo";
 
@@ -282,16 +283,9 @@ export function AppointmentPanel({
                   </label>
                 ) : null}
                 <div className="flex items-end gap-2">
-                  <label className="flex-1 text-xs text-zinc-500 dark:text-stone-400">
-                    Remarcar para
-                    <input
-                      type="datetime-local"
-                      value={rescheduleValue}
-                      min={minDateTimeLocal}
-                      onChange={(e) => setRescheduleValue(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-white/15 dark:bg-zinc-900 dark:text-white"
-                    />
-                  </label>
+                  <div className="flex-1">
+                    <DateTimePicker label="Remarcar para" value={rescheduleValue} min={minDateTimeLocal} onChange={setRescheduleValue} />
+                  </div>
                   <button
                     type="button"
                     disabled={isPending || !rescheduleValue}
