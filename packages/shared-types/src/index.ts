@@ -610,6 +610,29 @@ export interface CreateWaitlistInput {
   notes?: string;
 }
 
+export type WaitlistStatusValue = "PENDING" | "CONTACTED" | "RESOLVED" | "CANCELED";
+
+// Uma linha da lista de espera como o painel do negócio recebe (só o que a tela usa).
+export interface WaitlistEntryAdmin {
+  id: string;
+  clientId: string | null;
+  clientName: string;
+  clientPhone: string;
+  serviceName: string;
+  professionalName: string | null;
+  preferredDate: string | null;
+  notes: string | null;
+  status: WaitlistStatusValue;
+  createdAt: string;
+}
+
+// Contagem das abas: aguardando, contatados e encerrados (resolvidos + cancelados).
+export interface WaitlistCounts {
+  pending: number;
+  contacted: number;
+  closed: number;
+}
+
 export interface ApiErrorBody {
   statusCode: number;
   message: string | string[];
@@ -730,4 +753,122 @@ export interface ClubOverview {
   planAllowsClub: boolean;
   // O dono ligou o clube? (só vale se o plano permitir)
   enabled: boolean;
+}
+
+// ---- Perfis de acesso (o que cada pessoa da equipe vê e faz no painel) ----
+// O PAPEL do usuário (dono, equipe, profissional) continua existindo: define o escopo (profissional só vê a própria agenda) e o
+// dono é sempre total. O que cada pessoa acessa vem do PERFIL: um nível por área (sem acesso, só ver, ver e editar). O servidor
+// confere SEMPRE (AreaGuard); esconder o item do menu é só conforto.
+//
+// Fica FORA dos perfis, sempre só do dono: Plano e cobrança (paga o Marquo), Configurações (dados do negócio) e Perfis de acesso
+// (quem tem acesso). Um perfil nunca consegue se dar mais poder nem cancelar a assinatura.
+export const ACCESS_AREAS = [
+  { key: "agenda", label: "Agenda", group: "Operação do dia", hint: "Ver a agenda e marcar, remarcar e cancelar atendimentos e bloqueios." },
+  { key: "comandas", label: "Comandas", group: "Operação do dia", hint: "Abrir, editar, receber e fechar comandas. Reabrir comanda fechada é só do dono." },
+  { key: "caixa", label: "Caixa", group: "Operação do dia", hint: "Abrir e fechar o caixa e lançar entradas e saídas." },
+  { key: "lista_espera", label: "Lista de espera", group: "Operação do dia", hint: "Ver quem espera um horário e dar andamento." },
+  { key: "clientes", label: "Clientes", group: "Clientes", hint: "Cadastro e histórico dos clientes." },
+  { key: "fichas", label: "Fichas", group: "Clientes", hint: "Só ver: consulta e preenche as fichas no atendimento. Editar: também cria e altera os modelos." },
+  { key: "clube", label: "Clube de assinaturas", group: "Clientes", hint: "Pacotes mensais, adesões e renovações." },
+  { key: "servicos", label: "Serviços", group: "Catálogo", hint: "Catálogo de serviços, preços e durações." },
+  { key: "produtos", label: "Produtos", group: "Catálogo", hint: "Catálogo e estoque dos produtos." },
+  { key: "profissionais", label: "Profissionais", group: "Equipe e financeiro", hint: "Cadastrar e editar a equipe, horários e serviços de cada um." },
+  { key: "comissoes", label: "Comissões", group: "Equipe e financeiro", hint: "Ver ganhos por profissional. Editar: também as regras de comissão." },
+  { key: "financeiro", label: "Financeiro", group: "Equipe e financeiro", hint: "Lançamentos, contas a pagar e receber e fluxo de caixa." },
+  { key: "financeiro_avancado", label: "Financeiro avançado", group: "Equipe e financeiro", hint: "Resultado (DRE), categorias e repasse de comissões." },
+  { key: "relatorios", label: "Relatórios", group: "Equipe e financeiro", hint: "Balanço geral de serviços e produtos." },
+  { key: "marketplace", label: "Marketplace", group: "Negócio", hint: "Aparecer na busca, localização e avaliações." },
+] as const;
+
+export type AccessAreaKey = (typeof ACCESS_AREAS)[number]["key"];
+export const ACCESS_AREA_KEYS: readonly AccessAreaKey[] = ACCESS_AREAS.map((a) => a.key);
+
+// Áreas que só o dono acessa (não existem como opção de perfil).
+export const OWNER_ONLY_AREAS = ["Plano e cobrança", "Configurações", "Perfis de acesso"] as const;
+
+export type AccessLevel = "NONE" | "VIEW" | "EDIT";
+export const ACCESS_LEVELS: readonly AccessLevel[] = ["NONE", "VIEW", "EDIT"];
+export const ACCESS_LEVEL_LABEL: Record<AccessLevel, string> = { NONE: "Sem acesso", VIEW: "Só ver", EDIT: "Ver e editar" };
+
+export type AccessPermissions = Record<AccessAreaKey, AccessLevel>;
+
+export function isAccessLevel(value: unknown): value is AccessLevel {
+  return typeof value === "string" && (ACCESS_LEVELS as readonly string[]).includes(value);
+}
+
+export function isAccessAreaKey(value: unknown): value is AccessAreaKey {
+  return typeof value === "string" && (ACCESS_AREA_KEYS as readonly string[]).includes(value);
+}
+
+const LEVEL_RANK: Record<AccessLevel, number> = { NONE: 0, VIEW: 1, EDIT: 2 };
+
+// O nível `have` cobre o exigido `need`? (EDIT cobre VIEW; NONE nunca cobre nada além de NONE)
+export function levelAtLeast(have: AccessLevel | undefined, need: AccessLevel): boolean {
+  return LEVEL_RANK[have ?? "NONE"] >= LEVEL_RANK[need];
+}
+
+// Qualquer entrada (JSON do banco, corpo de requisição) vira um mapa completo e VÁLIDO: área desconhecida some, nível inválido ou
+// ausente vira NONE. Nunca confia no que veio: o pior caso é a pessoa perder acesso, nunca ganhar.
+export function normalizePermissions(input: unknown): AccessPermissions {
+  const source = typeof input === "object" && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+  const result = {} as AccessPermissions;
+  for (const key of ACCESS_AREA_KEYS) {
+    const value = source[key];
+    result[key] = isAccessLevel(value) ? value : "NONE";
+  }
+  return result;
+}
+
+export const FULL_ACCESS: AccessPermissions = normalizePermissions(Object.fromEntries(ACCESS_AREA_KEYS.map((k) => [k, "EDIT"])));
+
+// Perfis que todo negócio recebe, iguais ao que cada papel já podia fazer ANTES dos perfis existirem: nada muda até o dono mexer.
+export const DEFAULT_PROFILES = [
+  {
+    name: "Recepção",
+    role: "RECEPTIONIST",
+    description: "Atendimento do dia a dia: agenda, comandas, caixa e clientes.",
+    permissions: normalizePermissions({
+      agenda: "EDIT", comandas: "EDIT", caixa: "EDIT", lista_espera: "EDIT", clientes: "EDIT", fichas: "VIEW",
+      servicos: "VIEW", produtos: "EDIT", profissionais: "VIEW", financeiro: "EDIT", relatorios: "VIEW",
+    }),
+  },
+  {
+    name: "Profissional",
+    role: "PROFESSIONAL",
+    description: "Quem atende: a própria agenda, fichas e o catálogo para consulta.",
+    permissions: normalizePermissions({ agenda: "EDIT", fichas: "VIEW", servicos: "VIEW", profissionais: "VIEW" }),
+  },
+] as const;
+
+export type StaffKind = "OWNER" | "RECEPTIONIST" | "PROFESSIONAL";
+
+// Perfil padrão por papel, para quem ainda não tem perfil atribuído (conta antiga ou criada por outro caminho).
+export function defaultPermissionsForRole(role: string): AccessPermissions {
+  if (role === "OWNER") return FULL_ACCESS;
+  const profile = DEFAULT_PROFILES.find((p) => p.role === role);
+  return profile ? profile.permissions : normalizePermissions({});
+}
+
+export interface AccessMe {
+  role: StaffKind;
+  isOwner: boolean;
+  profileName: string | null;
+  permissions: AccessPermissions;
+}
+
+export interface AccessProfileSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  permissions: AccessPermissions;
+  usersCount: number;
+}
+
+export interface AccessUserSummary {
+  id: string;
+  name: string;
+  email: string;
+  role: StaffKind;
+  isActive: boolean;
+  profile: { id: string; name: string } | null;
 }

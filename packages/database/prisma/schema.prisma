@@ -195,6 +195,7 @@ model Tenant {
   clubMemberships     ClubMembership[]
   clubUsages          ClubUsage[]
   ticketAuditLogs     TicketAuditLog[]
+  accessProfiles      AccessProfile[]
   galleryImages       TenantGalleryImage[]
   intakeForms         IntakeForm[]
   intakeResponses     IntakeResponse[]
@@ -278,6 +279,11 @@ model User {
   // mensagem de erro é sempre a mesma genérica, logado ou não).
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime? @db.Timestamptz(6)
+
+  // Perfil de acesso (o que a pessoa vê e faz no painel, por área). Nulo no DONO (sempre total) e em contas sem perfil
+  // atribuído, que valem o perfil padrão do papel (defaultPermissionsForRole). RESTRICT: não se apaga um perfil em uso.
+  accessProfileId String?
+  accessProfile   AccessProfile? @relation(fields: [accessProfileId], references: [id], onDelete: Restrict)
 
   tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   professional      Professional?
@@ -1293,4 +1299,23 @@ model TicketAuditLog {
 
   @@index([ticketId, createdAt])
   @@index([tenantId, createdAt])
+}
+
+// ---- Perfis de acesso ----
+// O que uma pessoa da equipe vê e faz no painel: um nível por área (NONE, VIEW, EDIT) em `permissions`, no formato de
+// AccessPermissions (shared-types). O servidor normaliza ao ler e ao gravar (área desconhecida some; nível inválido vira NONE).
+// O dono não tem perfil: é sempre total. Todo negócio nasce com "Recepção" e "Profissional" (DEFAULT_PROFILES).
+model AccessProfile {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  permissions Json
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users  User[]
+
+  @@unique([tenantId, name])
 }
