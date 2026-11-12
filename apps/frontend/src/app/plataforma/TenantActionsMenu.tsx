@@ -299,7 +299,7 @@ export function TenantActionsMenu({
         <Modal title={`Excluir ${tenantName}`} onClose={close}>
           <p className="text-sm text-zinc-600 dark:text-stone-300">
             Por padrão apaga na hora clientes, agenda, comandas, financeiro, equipe e fotos. Ficam só o registro de pagamento, a auditoria e
-            um esqueleto anônimo do negócio. Não há como desfazer. Se o negócio paga no cartão, a cobrança recorrente é cancelada no Mercado Pago antes de apagar (se o cancelamento falhar, nada é excluído).
+            um esqueleto anônimo do negócio. Não há como desfazer. Se o negócio paga no cartão, a cobrança recorrente é cancelada no Asaas antes de apagar (se o cancelamento falhar, nada é excluído).
           </p>
           <label className="text-sm font-medium text-zinc-900 dark:text-white" htmlFor={`confirm-${tenantId}`}>
             Digite o endereço do negócio para confirmar: {tenantSlug}

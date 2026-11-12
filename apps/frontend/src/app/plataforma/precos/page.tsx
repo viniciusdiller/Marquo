@@ -14,7 +14,7 @@ export default async function PrecosPage() {
       />
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-        Quem já assina no cartão continua pagando o valor combinado com o Mercado Pago: a recorrência não é alterada por aqui.
+        Quem já assina no cartão continua pagando o valor combinado com o Asaas: a recorrência não é alterada por aqui.
         Esses assinantes só pagam o preço novo se trocarem de plano (vale também para aumentos).
       </div>
 

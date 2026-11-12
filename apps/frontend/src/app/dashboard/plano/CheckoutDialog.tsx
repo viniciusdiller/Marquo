@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { type BillingMethod, type PlanInfo, formatBRL } from "@/lib/billing";
+import { hasCpfOrCnpjLength } from "@/lib/masks";
+import { MaskedInput } from "@/components/ui/MaskedInput";
 import {
   attemptStatusAction,
   quoteAction,
@@ -60,6 +62,8 @@ export function CheckoutDialog({
   const router = useRouter();
   const [method, setMethod] = useState<BillingMethod>(mode === "renew" ? "PIX_MONTHLY" : "CARD_RECURRING");
   const [coupon, setCoupon] = useState("");
+  // CPF/CNPJ do pagador (o Asaas exige para emitir a cobrança). Fica só nesta tela e na chamada: o Marquo não o guarda.
+  const [document, setDocument] = useState("");
   const [quote, setQuote] = useState<QuoteView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pix, setPix] = useState<PixView | null>(null);
@@ -87,7 +91,7 @@ export function CheckoutDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Pix gerado: consulta o status até confirmar (o backend relê o Mercado Pago a cada consulta).
+  // Pix gerado: consulta o status até confirmar (o backend relê o Asaas a cada consulta).
   useEffect(() => {
     if (!pix || paid) return;
     polling.current = true;
@@ -126,18 +130,22 @@ export function CheckoutDialog({
 
   function confirm() {
     setError(null);
+    if (!hasCpfOrCnpjLength(document)) {
+      setError("Informe o CPF ou CNPJ de quem vai pagar.");
+      return;
+    }
     startTransition(async () => {
       if (method === "CARD_RECURRING") {
-        const result = await startCardAction(plan.tier, coupon);
+        const result = await startCardAction(plan.tier, coupon, document);
         if (!result.ok) {
           setError(result.error);
           return;
         }
-        // O pagamento acontece na página segura do Mercado Pago, que devolve o dono para /dashboard/plano.
+        // O pagamento acontece na página segura do Asaas, que devolve o dono para /dashboard/plano.
         window.location.assign(result.url);
         return;
       }
-      const result = await startPixAction(plan.tier, coupon);
+      const result = await startPixAction(plan.tier, coupon, document);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -243,6 +251,16 @@ export function CheckoutDialog({
                 Gere o Pix do próximo mês. O período novo começa quando o atual termina, sem perder dias.
               </p>
             )}
+
+            <MaskedInput
+              mask="cpfCnpj"
+              name="cpfCnpj"
+              label="CPF ou CNPJ de quem paga"
+              hint="Exigido para emitir a cobrança. Vai direto ao Asaas, o provedor de pagamento, e não fica salvo no Marquo."
+              value={document}
+              onChange={setDocument}
+              placeholder="000.000.000-00"
+            />
 
             <div>
               <label htmlFor="coupon" className="text-sm font-medium text-zinc-900 dark:text-white">

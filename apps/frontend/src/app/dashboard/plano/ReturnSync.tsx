@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { attemptStatusAction, syncBillingAction } from "./actions";
 
-// Ao voltar do checkout do cartão (?checkout=cartao&tentativa=...): o Mercado Pago pode demorar alguns segundos
+// Ao voltar do checkout do cartão (?checkout=cartao&tentativa=...): o Asaas pode demorar alguns segundos
 // para autorizar. Consulta a tentativa (o backend relê o provedor) até confirmar ou desistir, e atualiza a tela.
 export function ReturnSync({ attemptId }: { attemptId: string | null }) {
   const router = useRouter();
@@ -45,7 +45,7 @@ export function ReturnSync({ attemptId }: { attemptId: string | null }) {
       : state === "failed"
         ? "O pagamento não foi concluído. Nada foi cobrado; você pode tentar de novo."
         : state === "pending"
-          ? "Ainda estamos aguardando a confirmação do Mercado Pago. Isso pode levar alguns minutos; volte a esta tela depois."
+          ? "Ainda estamos aguardando a confirmação do Asaas. Isso pode levar alguns minutos; volte a esta tela depois."
           : "Confirmando o seu pagamento...";
 
   return (

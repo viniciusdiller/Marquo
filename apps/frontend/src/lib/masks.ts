@@ -41,6 +41,23 @@ export function formatCPF(value: string): string {
   return parts.join(".") + (dv ? `-${dv}` : "");
 }
 
+// CPF (até 11 dígitos) ou CNPJ (12 a 14): a máscara troca sozinha conforme o tamanho. "52998224725" → "529.982.247-25",
+// "11222333000181" → "11.222.333/0001-81". Só exibição: o backend confere os dígitos verificadores.
+export function formatCpfCnpj(value: string): string {
+  const d = onlyDigits(value).slice(0, 14);
+  if (d.length <= 11) return formatCPF(d);
+  const base = [d.slice(0, 2), d.slice(2, 5), d.slice(5, 8)].join(".");
+  const branch = d.slice(8, 12);
+  const dv = d.slice(12, 14);
+  return `${base}/${branch}${dv ? `-${dv}` : ""}`;
+}
+
+// Só o tamanho (11 = CPF, 14 = CNPJ), para avisar antes de enviar. Quem decide se o documento é válido é o backend.
+export function hasCpfOrCnpjLength(value: string): boolean {
+  const length = onlyDigits(value).length;
+  return length === 11 || length === 14;
+}
+
 // Teto do backend: 100_000_000 centavos (R$ 1.000.000,00). Digitar além disso não faz sentido e
 // o backend recusaria de qualquer jeito; 9 dígitos de centavos = R$ 9.999.999,99 → limitamos a 100_000_000.
 const MAX_CENTS = 100_000_000;
