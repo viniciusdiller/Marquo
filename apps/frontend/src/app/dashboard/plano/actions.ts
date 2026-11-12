@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { authedFetch } from "@/lib/api-server";
 import { ApiError } from "@/lib/api";
 import { isAsaasCheckoutUrl, type BillingMethod, type PlanTier } from "@/lib/billing";
+import { auth } from "@/lib/auth";
+import { type CepAddress, lookupCep } from "@/lib/cep";
 import { hasCpfOrCnpjLength, onlyDigits } from "@/lib/masks";
 
 // Server Actions da cobrança. O cliente só informa QUAL plano, o código do cupom e (ao pagar) o CPF/CNPJ do pagador, que o
@@ -94,6 +96,16 @@ function payBody(tier: PlanTier, coupon: string, payer: Partial<PayerForm>) {
     if (value) out[key] = value;
   }
   return JSON.stringify(out);
+}
+
+// Preenche rua e bairro a partir do CEP. Só quem está logado consulta (a Server Action não vira um proxy aberto) e a
+// consulta é só de leitura: nada é gravado aqui, o backend revalida tudo no checkout.
+export async function cepAction(cep: string): Promise<{ ok: true; found: boolean; data?: CepAddress } | { ok: false }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false };
+  const result = await lookupCep(cep);
+  if (!result.ok) return { ok: false };
+  return result.found ? { ok: true, found: true, data: result.data } : { ok: true, found: false };
 }
 
 export async function billingProfileAction(): Promise<ActionResult<{ profile: BillingProfileView }>> {
