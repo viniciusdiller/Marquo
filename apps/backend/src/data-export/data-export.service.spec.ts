@@ -83,7 +83,7 @@ describe("DataExportService", () => {
     const { service, findManys } = build();
     await read((await service.start("tenant-1")).stream);
     const selects = JSON.stringify(MODELS.map((m) => findManys[m].mock.calls[0][0].select));
-    for (const forbidden of ["passwordHash", "passwordSetToken", "refreshToken", "tokenHash", "lockedUntil", "failedLoginAttempts", "externalReference", "mercadopago"]) {
+    for (const forbidden of ["passwordHash", "passwordSetToken", "refreshToken", "tokenHash", "lockedUntil", "failedLoginAttempts", "externalReference", "asaas", "providerCustomerId"]) {
       expect(selects.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }
     // O profissional sai só com os dados de contato da equipe.

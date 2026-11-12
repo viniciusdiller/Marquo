@@ -984,7 +984,7 @@ model Review {
 // ─────────────────────────────────────────────
 // Billing
 // ─────────────────────────────────────────────
-// Sem provedor de pagamento ligado por enquanto (o Stripe foi removido; o Mercado Pago entra depois).
+// Cobrança pelo Asaas (cartão recorrente por checkout hospedado e Pix); ver CLAUDE.md > Billing.
 // Este backend mantém o estado necessário para aplicar limites por plano (PlanLimitService) e
 // liberar/bloquear acesso (TenantBillingGuard). Hoje o único jeito de um negócio ter Subscription é a
 // CORTESIA concedida pelo painel da plataforma (courtesy = true).
@@ -1013,7 +1013,7 @@ model Subscription {
   // Forma de pagamento da assinatura PAGA (nulo = cortesia). Cartão: o provedor cobra todo mês e o
   // currentPeriodEnd acompanha a próxima cobrança. Pix: cada mês é um pagamento; o acesso vai até currentPeriodEnd.
   method                 BillingMethod?
-  // Id da assinatura recorrente no provedor (preapproval do Mercado Pago). Só no cartão.
+  // Id da assinatura recorrente no provedor (Asaas, `sub_...`). Só no cartão.
   providerSubscriptionId String?            @unique
   // Cortesia concedida pela plataforma (sem cobrança). Fim em currentPeriodEnd (nulo = sem data de fim).
   // Vencida a cortesia, o acesso bloqueia (ver computeBillingStatus). Não é substituída por um pagamento
@@ -1094,8 +1094,9 @@ model CouponRedemption {
 }
 
 // Uma tentativa de pagamento iniciada pelo dono (checkout de cartão ou cobrança Pix). O `id` desta linha é o
-// `external_reference` enviado ao Mercado Pago: é por ele que o pagamento/assinatura volta ao negócio certo, nunca
-// por algo vindo do corpo de um webhook. Valores (lista, desconto, cobrado) são SEMPRE derivados no servidor.
+// `externalReference` enviado ao Asaas (no Pix) e o cliente criado por tentativa (`providerCustomerId`): é por eles que
+// o pagamento/assinatura volta ao negócio certo, nunca por algo vindo do corpo de um webhook. Valores (lista,
+// desconto, cobrado) são SEMPRE derivados no servidor.
 model BillingAttempt {
   id                 String               @id @default(uuid())
   tenantId           String
@@ -1110,8 +1111,11 @@ model BillingAttempt {
   // se ela falhar/expirar; um resgate antigo (do cadastro) não é devolvido.
   couponRedemptionId String?
   couponReserved     Boolean              @default(false)
-  // Id no provedor: assinatura (preapproval) no cartão, pagamento no Pix.
+  // Id no provedor: checkout hospedado (`checkout`) no cartão, cobrança (`pay_...`) no Pix.
   providerRef        String?              @unique
+  // Cliente criado no Asaas para esta tentativa (`cus_...`). No cartão é o que liga a assinatura que o checkout cria
+  // ao negócio: o checkout é montado com ESTE cliente, então a assinatura dele só pode ser desta tentativa.
+  providerCustomerId String?
   expiresAt          DateTime?            @db.Timestamptz(6)
   approvedAt         DateTime?            @db.Timestamptz(6)
   createdAt          DateTime             @default(now()) @db.Timestamptz(6)
@@ -1122,6 +1126,7 @@ model BillingAttempt {
 
   @@index([tenantId, status])
   @@index([status, expiresAt])
+  @@index([providerCustomerId])
 }
 
 // Refresh token de staff com ROTAÇÃO. Cada token (JWT com jti = id desta linha e fid = familyId) só vale uma

@@ -233,7 +233,7 @@ export interface PlatformDeletionPreview {
   // Pode ser excluído agora (só não pode o que já foi excluído) e, se não, por quê. `hasAccess` = ainda usa o Marquo.
   purgeable: boolean;
   blockedReason: string | null;
-  // Paga no cartão: a recorrência é cancelada no Mercado Pago junto com a exclusão.
+  // Paga no cartão: a recorrência é cancelada no Asaas junto com a exclusão.
   cancelsCardSubscription: boolean;
   hasAccess: boolean;
   retentionDays: number;

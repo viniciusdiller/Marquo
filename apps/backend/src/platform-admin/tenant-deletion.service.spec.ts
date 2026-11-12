@@ -1,6 +1,6 @@
 import { BadGatewayException, BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { MercadoPagoClient } from "../billing/payments/mercadopago.client";
+import { AsaasClient } from "../billing/payments/asaas.client";
 import {
   AUDIT_TENANT_DELETION_SCHEDULED,
   AUDIT_TENANT_PURGED,
@@ -149,11 +149,10 @@ function build(options: { tenantRow?: unknown; failAt?: string; mp?: Record<stri
   } as unknown as PrismaService;
   const mp = {
     isConfigured: jest.fn().mockReturnValue(true),
-    cancelPreapproval: jest.fn().mockResolvedValue({ status: "cancelled" }),
-    getPreapproval: jest.fn().mockResolvedValue({ status: "authorized" }),
+    deleteSubscription: jest.fn().mockResolvedValue(undefined),
     ...options.mp,
   };
-  return { service: new TenantDeletionService(prisma, mp as unknown as MercadoPagoClient), mp, prisma, calls, wheres, adminAuditLog, tenantDelegate, count };
+  return { service: new TenantDeletionService(prisma, mp as unknown as AsaasClient), mp, prisma, calls, wheres, adminAuditLog, tenantDelegate, count };
 }
 
 describe("TenantDeletionService.purge", () => {
@@ -260,14 +259,13 @@ describe("TenantDeletionService.purge", () => {
 
     it("com assinatura PAGA no cartão: cancela a recorrência no provedor ANTES de apagar e audita", async () => {
       const { service, mp, calls, adminAuditLog } = build({ tenantRow: active(cardSub()) });
-      mp.cancelPreapproval.mockImplementation(async () => {
+      mp.deleteSubscription.mockImplementation(async () => {
         calls.push("mp.cancel");
-        return { status: "cancelled" };
       });
 
       await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).resolves.toMatchObject({ purged: true });
 
-      expect(mp.cancelPreapproval).toHaveBeenCalledWith("pre-123");
+      expect(mp.deleteSubscription).toHaveBeenCalledWith("pre-123");
       expect(calls[0]).toBe("mp.cancel");
       expect(calls[1]).toBe("adminAuditLog");
       expect((adminAuditLog.create.mock.calls[0][0] as { data: { detail: string } }).data.detail).toContain("recorrência do cartão cancelada");
@@ -276,34 +274,33 @@ describe("TenantDeletionService.purge", () => {
     it("falha ao cancelar no provedor: 502 e NADA é apagado (senão o cartão seguiria sendo cobrado)", async () => {
       const { service, prisma, calls } = build({
         tenantRow: active(cardSub()),
-        mp: { cancelPreapproval: jest.fn().mockRejectedValue(new Error("mp fora do ar")), getPreapproval: jest.fn().mockResolvedValue({ status: "authorized" }) },
+        mp: { deleteSubscription: jest.fn().mockRejectedValue(new Error("asaas fora do ar")) },
       });
       await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).rejects.toThrow(BadGatewayException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(calls).toEqual([]);
     });
 
-    it("recorrência já cancelada no provedor (exclusão repetida): segue e apaga", async () => {
-      const { service } = build({
-        tenantRow: active(cardSub()),
-        mp: { cancelPreapproval: jest.fn().mockRejectedValue(new Error("já cancelada")), getPreapproval: jest.fn().mockResolvedValue({ status: "cancelled" }) },
-      });
+    it("recorrência que já não existe no provedor (exclusão repetida): o cliente trata o 404 como feito e a exclusão segue", async () => {
+      // AsaasClient.deleteSubscription engole o 404; aqui o provedor "responde ok" e o fluxo apaga normalmente.
+      const { service, mp } = build({ tenantRow: active(cardSub()), mp: { deleteSubscription: jest.fn().mockResolvedValue(undefined) } });
       await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).resolves.toMatchObject({ purged: true });
+      expect(mp.deleteSubscription).toHaveBeenCalledWith("pre-123");
     });
 
-    it("cartão, mas o Mercado Pago não está configurado neste servidor: 503 e nada é apagado", async () => {
+    it("cartão, mas o Asaas não está configurado neste servidor: 503 e nada é apagado", async () => {
       const { service, prisma } = build({ tenantRow: active(cardSub()), mp: { isConfigured: jest.fn().mockReturnValue(false) } });
       await expect(service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).rejects.toThrow(ServiceUnavailableException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it("Pix (sem recorrência no provedor) ou sem assinatura: exclui sem falar com o Mercado Pago", async () => {
+    it("Pix (sem recorrência no provedor) ou sem assinatura: exclui sem falar com o Asaas", async () => {
       const pix = build({ tenantRow: active(sub({ method: "PIX_MONTHLY", currentPeriodEnd: new Date(NOW.getTime() + 10 * DAY) })) });
       await expect(pix.service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).resolves.toMatchObject({ purged: true });
-      expect(pix.mp.cancelPreapproval).not.toHaveBeenCalled();
+      expect(pix.mp.deleteSubscription).not.toHaveBeenCalled();
       const trial = build({ tenantRow: active() });
       await trial.service.purge(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW);
-      expect(trial.mp.cancelPreapproval).not.toHaveBeenCalled();
+      expect(trial.mp.deleteSubscription).not.toHaveBeenCalled();
     });
 
     it("cortesia não é assinatura paga: pode excluir (com motivo)", async () => {
@@ -506,11 +503,11 @@ describe("TenantDeletionService.scheduleDeletion (Aguardar 90 dias)", () => {
     const card = sub({ status: "ACTIVE", currentPeriodEnd: new Date(NOW.getTime() + 10 * DAY), providerSubscriptionId: "pre-1" });
     const ok = build({ tenantRow: row({ subscription: card }) });
     await ok.service.scheduleDeletion(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW);
-    expect(ok.mp.cancelPreapproval).toHaveBeenCalledWith("pre-1");
+    expect(ok.mp.deleteSubscription).toHaveBeenCalledWith("pre-1");
 
     const fail = build({
       tenantRow: row({ subscription: card }),
-      mp: { cancelPreapproval: jest.fn().mockRejectedValue(new Error("fora")), getPreapproval: jest.fn().mockResolvedValue({ status: "authorized" }) },
+      mp: { deleteSubscription: jest.fn().mockRejectedValue(new Error("fora")) },
     });
     await expect(fail.service.scheduleDeletion(TENANT_ID, { confirmSlug: "salao-teste" }, "a@b.com", NOW)).rejects.toThrow(BadGatewayException);
     expect(fail.tenantDelegate.updateMany).not.toHaveBeenCalled();

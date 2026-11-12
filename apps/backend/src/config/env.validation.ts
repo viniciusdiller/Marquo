@@ -8,6 +8,7 @@ import {
   IsString,
   IsUrl,
   Matches,
+  MaxLength,
   Min,
   MinLength,
   ValidateIf,
@@ -75,48 +76,36 @@ class EnvironmentVariables {
   @MinLength(32)
   INTERNAL_API_SECRET?: string;
 
-  // Mercado Pago (cartão recorrente e Pix). Opcional em desenvolvimento: sem o token as rotas de cobrança respondem
-  // 503 e a tela só informa. Com o token em PRODUÇÃO o boot exige também o segredo do webhook e a URL pública do
-  // backend (onde o provedor entrega as notificações). O prefixo é conferido para pegar chave trocada.
-  @ValidateIf((o) => o.MERCADOPAGO_ACCESS_TOKEN !== undefined)
-  @Matches(/^(APP_USR|TEST)-[A-Za-z0-9_-]{10,}$/, {
-    message: "MERCADOPAGO_ACCESS_TOKEN deve ser o Access Token do Mercado Pago (APP_USR-... ou TEST-...).",
+  // Asaas (cartão recorrente pelo checkout hospedado e Pix). Opcional em desenvolvimento: sem a chave as rotas de cobrança
+  // respondem 503 e a tela só informa. A chave começa com `$aact_prod_` (produção) ou `$aact_hmlg_` (sandbox); o prefixo é
+  // conferido para pegar chave trocada ou colada pela metade. No .env, entre aspas simples (o `$` seria expandido).
+  @ValidateIf((o) => o.ASAAS_API_KEY !== undefined)
+  @Matches(/^\$aact_(prod|hmlg)_\S{20,}$/, {
+    message: "ASAAS_API_KEY deve ser a chave de API do Asaas ($aact_prod_... ou $aact_hmlg_...), entre aspas simples no .env.",
   })
-  MERCADOPAGO_ACCESS_TOKEN?: string;
+  ASAAS_API_KEY?: string;
 
+  // Token do webhook: o mesmo valor cadastrado como "Token de autenticação" no webhook do Asaas, que o devolve no cabeçalho
+  // `asaas-access-token` de cada aviso. O Asaas aceita de 32 a 255 caracteres. Com a chave em PRODUÇÃO é obrigatório (sem
+  // ele qualquer um poderia disparar leituras na API do provedor).
   @ValidateIf(
-    (o) =>
-      (o.NODE_ENV === "production" && o.MERCADOPAGO_ACCESS_TOKEN !== undefined) ||
-      o.MERCADOPAGO_WEBHOOK_SECRET !== undefined,
+    (o) => (o.NODE_ENV === "production" && o.ASAAS_API_KEY !== undefined) || o.ASAAS_WEBHOOK_TOKEN !== undefined,
   )
   @IsString()
-  @MinLength(16)
-  MERCADOPAGO_WEBHOOK_SECRET?: string;
+  @MinLength(32)
+  @MaxLength(255)
+  ASAAS_WEBHOOK_TOKEN?: string;
 
-  // URL pública do backend (sem barra no fim). Vira o notification_url enviado ao provedor.
-  @ValidateIf(
-    (o) =>
-      (o.NODE_ENV === "production" && o.MERCADOPAGO_ACCESS_TOKEN !== undefined) || o.BACKEND_PUBLIC_URL !== undefined,
-  )
-  @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
-  BACKEND_PUBLIC_URL?: string;
-
-  // Base https do endereço de volta do checkout do cartão (opcional; padrão = FRONTEND_URL). O Mercado Pago recusa http/localhost
-  // como back_url, então em dev aponte para um túnel https do frontend.
-  @ValidateIf((o) => o.MERCADOPAGO_BACK_URL_BASE !== undefined)
+  // Base https do endereço de volta do checkout do cartão (opcional; padrão = FRONTEND_URL). O Asaas recusa URL http/localhost
+  // ("O campo successUrl é inválido"), então em desenvolvimento aponte para um túnel https do frontend (porta 3000).
+  @ValidateIf((o) => o.ASAAS_BACK_URL_BASE !== undefined)
   @IsUrl({ require_tld: false, require_protocol: true, protocols: ["https"] })
-  MERCADOPAGO_BACK_URL_BASE?: string;
-
-  // E-mail do COMPRADOR de teste do Mercado Pago ("Contas de teste" no painel de desenvolvedores). Só em desenvolvimento: com
-  // credenciais de teste o pagador precisa ser um usuário de teste; em produção é proibido (o pagador é sempre o dono).
-  @ValidateIf((o) => o.MERCADOPAGO_TEST_PAYER_EMAIL !== undefined)
-  @IsEmail()
-  MERCADOPAGO_TEST_PAYER_EMAIL?: string;
+  ASAAS_BACK_URL_BASE?: string;
 
   // Só para testes com um servidor falso do provedor; ignorado em produção (o cliente usa sempre o host oficial).
-  @ValidateIf((o) => o.MERCADOPAGO_API_BASE !== undefined)
+  @ValidateIf((o) => o.ASAAS_API_BASE !== undefined)
   @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
-  MERCADOPAGO_API_BASE?: string;
+  ASAAS_API_BASE?: string;
 
   // E-mail transacional (Resend): aviso de novo agendamento, confirmação ao cliente. Opcional: sem a chave o
   // envio fica desligado (nada sai, nada quebra). A chave e o remetente vêm JUNTOS; o remetente precisa ser de
@@ -179,11 +168,6 @@ export function validateEnv(rawConfig: Record<string, unknown>) {
 
   if (errors.length > 0) {
     throw new Error(`Config inválida: ${errors.toString()}`);
-  }
-
-  // Comprador de teste só existe em desenvolvimento: em produção ele trocaria o pagador real por um e-mail fixo.
-  if (validated.NODE_ENV === "production" && validated.MERCADOPAGO_TEST_PAYER_EMAIL) {
-    throw new Error("Config inválida: MERCADOPAGO_TEST_PAYER_EMAIL não pode ser usado em produção.");
   }
 
   // 2FA ligado sem como entregar o código = ninguém mais entra no painel. Falha no boot, não no primeiro login.

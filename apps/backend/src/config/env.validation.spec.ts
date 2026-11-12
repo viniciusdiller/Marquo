@@ -191,9 +191,8 @@ describe("validateEnv: variável em branco (CHAVE=) vale como não definida", ()
     TRUST_PROXY_HOPS: "",
     CLIENT_IP_SECRET: "",
     INTERNAL_API_SECRET: "",
-    MERCADOPAGO_ACCESS_TOKEN: "",
-    MERCADOPAGO_WEBHOOK_SECRET: "",
-    BACKEND_PUBLIC_URL: "",
+    ASAAS_API_KEY: "",
+    ASAAS_WEBHOOK_TOKEN: "",
     PLATFORM_ADMIN_EMAIL: "",
     PLATFORM_ADMIN_PASSWORD_HASH: "",
     PLATFORM_ADMIN_2FA: "",
@@ -206,7 +205,7 @@ describe("validateEnv: variável em branco (CHAVE=) vale como não definida", ()
   });
 
   it("espaços sozinhos também contam como em branco", () => {
-    expect(() => validateEnv({ ...strong, MERCADOPAGO_ACCESS_TOKEN: "   ", RESEND_API_KEY: "\t" })).not.toThrow();
+    expect(() => validateEnv({ ...strong, ASAAS_API_KEY: "   ", RESEND_API_KEY: "\t" })).not.toThrow();
   });
 
   it("o par do Resend em branco não exige o outro (não liga e-mail com valor falso)", () => {
@@ -216,9 +215,9 @@ describe("validateEnv: variável em branco (CHAVE=) vale como não definida", ()
   });
 
   it("a variável em branco é removida do process.env (o ConfigService não devolve string vazia)", () => {
-    process.env.MERCADOPAGO_ACCESS_TOKEN = "";
-    validateEnv({ ...strong, MERCADOPAGO_ACCESS_TOKEN: "" });
-    expect(process.env.MERCADOPAGO_ACCESS_TOKEN).toBeUndefined();
+    process.env.ASAAS_API_KEY = "";
+    validateEnv({ ...strong, ASAAS_API_KEY: "" });
+    expect(process.env.ASAAS_API_KEY).toBeUndefined();
   });
 
   it("obrigatória em branco continua falhando (JWT_SECRET, DATABASE_URL, REDIS_URL)", () => {
@@ -240,23 +239,47 @@ describe("validateEnv: variável em branco (CHAVE=) vale como não definida", ()
     expect(() => validateEnv({ ...prod, INTERNAL_API_SECRET: "" })).toThrow();
   });
 
-  it("MERCADOPAGO_BACK_URL_BASE só aceita https (o Mercado Pago recusa http/localhost como back_url)", () => {
-    expect(() => validateEnv({ ...strong, MERCADOPAGO_BACK_URL_BASE: "https://abc.ngrok-free.app" })).not.toThrow();
-    expect(() => validateEnv({ ...strong, MERCADOPAGO_BACK_URL_BASE: "http://localhost:3000" })).toThrow();
-    expect(() => validateEnv({ ...strong, MERCADOPAGO_BACK_URL_BASE: "" })).not.toThrow();
+  const sandboxKey = "$aact_hmlg_" + "a".repeat(40);
+  const prodKey = "$aact_prod_" + "b".repeat(40);
+  const prod = {
+    ...strong,
+    NODE_ENV: "production",
+    CLIENT_IP_SECRET: "c".repeat(32),
+    INTERNAL_API_SECRET: "i".repeat(32),
+    FRONTEND_URL: "https://marquo.com.br",
+  };
+
+  it("ASAAS_API_KEY: aceita chave de sandbox e de produção; recusa prefixo errado (chave de outro provedor, texto solto)", () => {
+    expect(() => validateEnv({ ...strong, ASAAS_API_KEY: sandboxKey })).not.toThrow();
+    expect(() => validateEnv({ ...strong, ASAAS_API_KEY: prodKey })).not.toThrow();
+    expect(() => validateEnv({ ...strong, ASAAS_API_KEY: "qualquer-coisa" })).toThrow();
+    expect(() => validateEnv({ ...strong, ASAAS_API_KEY: "APP_USR-1234567890abcdef" })).toThrow();
+    // `$` expandido pelo shell some e deixa só um pedaço: não pode passar.
+    expect(() => validateEnv({ ...strong, ASAAS_API_KEY: "aact_prod_" + "b".repeat(40) })).toThrow();
+    expect(() => validateEnv({ ...strong, ASAAS_API_KEY: "$aact_prod_curta" })).toThrow();
   });
 
-  it("MERCADOPAGO_TEST_PAYER_EMAIL: e-mail válido em dev; proibido em produção", () => {
-    expect(() => validateEnv({ ...strong, MERCADOPAGO_TEST_PAYER_EMAIL: "test_user_1@testuser.com" })).not.toThrow();
-    expect(() => validateEnv({ ...strong, MERCADOPAGO_TEST_PAYER_EMAIL: "nao-e-email" })).toThrow();
-    const prod = { ...strong, NODE_ENV: "production", CLIENT_IP_SECRET: "c".repeat(32), INTERNAL_API_SECRET: "i".repeat(32), FRONTEND_URL: "https://marquo.com.br" };
-    expect(() => validateEnv({ ...prod, MERCADOPAGO_TEST_PAYER_EMAIL: "test_user_1@testuser.com" })).toThrow(/produção/);
+  it("ASAAS_WEBHOOK_TOKEN: 32 a 255 caracteres; em produção, com a chave, é obrigatório", () => {
+    expect(() => validateEnv({ ...strong, ASAAS_API_KEY: sandboxKey, ASAAS_WEBHOOK_TOKEN: "t".repeat(32) })).not.toThrow();
+    expect(() => validateEnv({ ...strong, ASAAS_API_KEY: sandboxKey, ASAAS_WEBHOOK_TOKEN: "curto" })).toThrow();
+    expect(() => validateEnv({ ...strong, ASAAS_API_KEY: sandboxKey, ASAAS_WEBHOOK_TOKEN: "t".repeat(256) })).toThrow();
+    // Em desenvolvimento sem token o boot passa (o webhook nem chega sem túnel); em produção não.
+    expect(() => validateEnv({ ...strong, ASAAS_API_KEY: sandboxKey })).not.toThrow();
+    expect(() => validateEnv({ ...prod, ASAAS_API_KEY: prodKey })).toThrow();
+    expect(() => validateEnv({ ...prod, ASAAS_API_KEY: prodKey, ASAAS_WEBHOOK_TOKEN: "t".repeat(40) })).not.toThrow();
+    // Sem a chave, produção sobe (cobrança desligada).
     expect(() => validateEnv(prod)).not.toThrow();
   });
 
-  it("valor preenchido continua sendo validado (token com prefixo errado falha)", () => {
-    expect(() => validateEnv({ ...strong, MERCADOPAGO_ACCESS_TOKEN: "qualquer-coisa" })).toThrow();
-    expect(() => validateEnv({ ...strong, MERCADOPAGO_ACCESS_TOKEN: "TEST-1234567890abcdef" })).not.toThrow();
+  it("ASAAS_BACK_URL_BASE só aceita https (o Asaas recusa http/localhost como successUrl)", () => {
+    expect(() => validateEnv({ ...strong, ASAAS_BACK_URL_BASE: "https://abc.ngrok-free.app" })).not.toThrow();
+    expect(() => validateEnv({ ...strong, ASAAS_BACK_URL_BASE: "http://localhost:3000" })).toThrow();
+    expect(() => validateEnv({ ...strong, ASAAS_BACK_URL_BASE: "" })).not.toThrow();
+  });
+
+  it("valor preenchido continua sendo validado (URL de teste inválida falha)", () => {
+    expect(() => validateEnv({ ...strong, ASAAS_API_BASE: "nao-e-url" })).toThrow();
+    expect(() => validateEnv({ ...strong, ASAAS_API_BASE: "http://localhost:4010" })).not.toThrow();
   });
 });
 
@@ -276,7 +299,7 @@ describe("arquivo de exemplo de ambiente da raiz", () => {
   it("não deixa variável de configuração comentada: toda chave da validação aparece ativa", () => {
     for (const key of [
       "REDIS_URL", "DATABASE_URL", "JWT_SECRET", "JWT_EXPIRES_IN", "PORT", "FRONTEND_URL", "SITE_URL", "TRUST_PROXY_HOPS",
-      "CLIENT_IP_SECRET", "INTERNAL_API_SECRET", "MERCADOPAGO_ACCESS_TOKEN", "MERCADOPAGO_WEBHOOK_SECRET", "BACKEND_PUBLIC_URL", "MERCADOPAGO_BACK_URL_BASE", "MERCADOPAGO_TEST_PAYER_EMAIL",
+      "CLIENT_IP_SECRET", "INTERNAL_API_SECRET", "ASAAS_API_KEY", "ASAAS_WEBHOOK_TOKEN", "ASAAS_BACK_URL_BASE",
       "PLATFORM_ADMIN_EMAIL", "PLATFORM_ADMIN_PASSWORD_HASH", "PLATFORM_ADMIN_2FA", "RESEND_API_KEY", "EMAIL_FROM",
     ]) {
       expect(Object.keys(parsed)).toContain(key);
@@ -285,7 +308,7 @@ describe("arquivo de exemplo de ambiente da raiz", () => {
 
   it("não traz segredo de verdade: valores preenchidos são só os de desenvolvimento/placeholder", () => {
     expect(parsed.JWT_SECRET).toMatch(/^CHANGE_ME/);
-    for (const key of ["MERCADOPAGO_ACCESS_TOKEN", "MERCADOPAGO_WEBHOOK_SECRET", "RESEND_API_KEY", "PLATFORM_ADMIN_PASSWORD_HASH", "INTERNAL_API_SECRET", "CLIENT_IP_SECRET"]) {
+    for (const key of ["ASAAS_API_KEY", "ASAAS_WEBHOOK_TOKEN", "ASAAS_BACK_URL_BASE", "RESEND_API_KEY", "PLATFORM_ADMIN_PASSWORD_HASH", "INTERNAL_API_SECRET", "CLIENT_IP_SECRET"]) {
       expect(parsed[key]).toBe("");
     }
   });

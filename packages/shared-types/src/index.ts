@@ -644,7 +644,7 @@ export interface ApiErrorBody {
 // CATÁLOGO DE PLANOS — a ÚNICA definição de preço e limite do Marquo.
 //
 // Para mudar um preço ou limite: edite AQUI e faça o deploy. Quem já assina segue no valor antigo até o provedor
-// de pagamento (Mercado Pago, a integrar) ser atualizado: com clientes reais, reajuste com migração deliberada.
+// de pagamento (Asaas) ser atualizado: com clientes reais, reajuste com migração deliberada.
 // Quem consome este arquivo:
 //   - backend: PlanCatalogService grava a tabela `Plan` a partir dele a cada boot;
 //   - seed do banco (packages/database/prisma/seed.ts);

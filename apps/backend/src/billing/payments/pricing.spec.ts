@@ -1,5 +1,5 @@
 import { CouponKind } from "@marquo/database";
-import { addOneMonth, centsToReais, MIN_CHARGE_CENTS, mpDateTime, nextPeriodStart, priceWithCoupon, reaisToCents } from "./pricing";
+import { addOneMonth, asaasDate, asaasDateTime, centsToReais, parseAsaasDate, MIN_CHARGE_CENTS, nextPeriodStart, priceWithCoupon, reaisToCents } from "./pricing";
 
 describe("priceWithCoupon", () => {
   const LIST = 9990;
@@ -76,7 +76,15 @@ describe("períodos", () => {
     expect(nextPeriodStart(null, now)).toEqual(now);
   });
 
-  it("data de expiração do Pix com offset de São Paulo", () => {
-    expect(mpDateTime(new Date("2026-10-15T15:00:00.000Z"))).toBe("2026-10-15T12:00:00.000-03:00");
+  it("datas do Asaas no fuso de São Paulo (23h de SP ainda é o mesmo dia civil, mesmo já sendo o dia seguinte em UTC)", () => {
+    expect(asaasDate(new Date("2026-10-16T02:30:00.000Z"))).toBe("2026-10-15");
+    expect(asaasDateTime(new Date("2026-10-15T15:00:00.000Z"))).toBe("2026-10-15 12:00:00");
+  });
+
+  it("lê a data civil do Asaas como meio-dia de São Paulo e recusa lixo", () => {
+    expect(parseAsaasDate("2026-11-12")?.toISOString()).toBe("2026-11-12T15:00:00.000Z");
+    expect(parseAsaasDate("2026-11-12 10:00:00")?.toISOString()).toBe("2026-11-12T15:00:00.000Z");
+    expect(parseAsaasDate(null)).toBeNull();
+    expect(parseAsaasDate("ontem")).toBeNull();
   });
 });

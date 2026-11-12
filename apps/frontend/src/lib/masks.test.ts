@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   formatCPF,
+  formatCpfCnpj,
   formatMoneyInput,
   formatPhoneBR,
+  hasCpfOrCnpjLength,
   moneyToCents,
   nationalPhoneDigits,
   normalizeInstagram,
@@ -61,6 +63,34 @@ describe("formatCPF", () => {
     assert.equal(formatCPF("5299"), "529.9");
     assert.equal(formatCPF("52998224725"), "529.982.247-25");
     assert.equal(formatCPF("52998224725999"), "529.982.247-25");
+  });
+});
+
+describe("formatCpfCnpj", () => {
+  it("até 11 dígitos formata como CPF", () => {
+    assert.equal(formatCpfCnpj("529"), "529");
+    assert.equal(formatCpfCnpj("52998224725"), "529.982.247-25");
+  });
+
+  it("de 12 a 14 dígitos vira CNPJ, progressivamente, e limita a 14", () => {
+    assert.equal(formatCpfCnpj("529982247259"), "52.998.224/7259");
+    assert.equal(formatCpfCnpj("11222333000181"), "11.222.333/0001-81");
+    assert.equal(formatCpfCnpj("11222333000181999"), "11.222.333/0001-81");
+  });
+
+  it("ignora tudo que não é dígito", () => {
+    assert.equal(formatCpfCnpj("11.222.333/0001-81"), "11.222.333/0001-81");
+    assert.equal(formatCpfCnpj("abc"), "");
+  });
+});
+
+describe("hasCpfOrCnpjLength", () => {
+  it("aceita só 11 (CPF) ou 14 (CNPJ) dígitos", () => {
+    assert.equal(hasCpfOrCnpjLength("529.982.247-25"), true);
+    assert.equal(hasCpfOrCnpjLength("11.222.333/0001-81"), true);
+    assert.equal(hasCpfOrCnpjLength("5299822472"), false);
+    assert.equal(hasCpfOrCnpjLength("529982247259"), false);
+    assert.equal(hasCpfOrCnpjLength(""), false);
   });
 });
 

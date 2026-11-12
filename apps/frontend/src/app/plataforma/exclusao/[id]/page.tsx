@@ -64,7 +64,7 @@ export default async function ExclusaoDetalhePage({ params }: { params: Promise<
         <h2 className="font-display text-lg font-semibold text-red-700 dark:text-red-300">Excluir os dados</h2>
         {preview.cancelsCardSubscription ? (
           <p className="mt-1 text-sm font-medium text-amber-700 dark:text-amber-300">
-            Este negócio paga no cartão: a cobrança recorrente será cancelada no Mercado Pago antes de apagar.
+            Este negócio paga no cartão: a cobrança recorrente será cancelada no Asaas antes de apagar.
           </p>
         ) : null}
         {preview.hasAccess ? (

@@ -1,8 +1,8 @@
 import { PrismaService } from "../prisma/prisma.service";
 import { BillingService } from "./billing.service";
-import { MercadoPagoClient } from "./payments/mercadopago.client";
+import { AsaasClient } from "./payments/asaas.client";
 
-const mp = { isConfigured: () => true } as unknown as MercadoPagoClient;
+const mp = { isConfigured: () => true } as unknown as AsaasClient;
 
 function buildPrisma(tenant: Record<string, unknown>) {
   return {
@@ -34,7 +34,7 @@ describe("BillingService.getTenantBillingStatus", () => {
         status: "ACTIVE",
         courtesy: false,
         method: null,
-        providerSubscriptionId: "preapproval-secreto",
+        providerSubscriptionId: "sub_secreta",
         currentPeriodEnd,
         cancelAtPeriodEnd: false,
         plan: PLAN,
@@ -57,7 +57,7 @@ describe("BillingService.getTenantBillingStatus", () => {
       },
     });
     const serialized = JSON.stringify(result);
-    for (const secret of ["plan-secret-id", "sub-row-id", "tenant-1", "preapproval-secreto"]) {
+    for (const secret of ["plan-secret-id", "sub-row-id", "tenant-1", "sub_secreta"]) {
       expect(serialized).not.toContain(secret);
     }
   });
