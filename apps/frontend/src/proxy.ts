@@ -4,6 +4,7 @@ import { decodeJwtExpiryMs } from "@/lib/jwt-decode";
 import { signedVisitorHeaders } from "@/lib/client-ip";
 import { CONSUMER_COOKIE_NAME, consumerCookieOptions } from "@/lib/consumer-cookie";
 import { buildCsp, generateNonce } from "@/lib/csp";
+import { getCanonicalRedirect } from "@/lib/canonical-url";
 
 const AUTH_PAGES = ["/entrar"];
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -50,6 +51,14 @@ async function renewConsumerSessionIfNeeded(req: NextRequest, response: NextResp
 }
 
 export default auth(async (req) => {
+  // Consolidação de domínio canônico: redireciona subdomínio www para o apex (marquo.com.br)
+  // com status 301 (Moved Permanently). Evita duplicação de páginas no Search Console.
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || req.nextUrl.host;
+  const canonicalRedirect = getCanonicalRedirect(req.nextUrl.pathname + req.nextUrl.search, host);
+  if (canonicalRedirect) {
+    return NextResponse.redirect(canonicalRedirect, { status: 301 });
+  }
+
   const { pathname } = req.nextUrl;
 
   if (
