@@ -31,7 +31,7 @@ estabelecimentos.
 **Para a plataforma**
 
 - Painel interno para criar negócios, aplicar cupons e planos de cortesia, suspender contas e consultar métricas
-- Planos com teste gratuito de 14 dias e cobrança por cartão recorrente ou Pix (Mercado Pago)
+- Planos com teste gratuito de 14 dias e cobrança por cartão recorrente ou Pix (Asaas)
 
 ## Tecnologias
 
@@ -42,7 +42,7 @@ estabelecimentos.
 | Frontend | Next.js 16 (App Router) + React 19, Tailwind CSS v4, NextAuth v5, Zod |
 | Banco de dados | PostgreSQL 16 + Prisma 5 |
 | E-mail | Resend |
-| Pagamentos | Mercado Pago |
+| Pagamentos | Asaas |
 | Testes | Jest (backend), Vitest + Testing Library (frontend), Playwright (E2E) |
 
 ## Estrutura do repositório
