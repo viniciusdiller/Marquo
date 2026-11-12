@@ -52,6 +52,12 @@ export function formatCpfCnpj(value: string): string {
   return `${base}/${branch}${dv ? `-${dv}` : ""}`;
 }
 
+// CEP: "01310100" → "01310-100". Só exibição; o backend confere os 8 dígitos.
+export function formatCep(value: string): string {
+  const d = onlyDigits(value).slice(0, 8);
+  return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d;
+}
+
 // Só o tamanho (11 = CPF, 14 = CNPJ), para avisar antes de enviar. Quem decide se o documento é válido é o backend.
 export function hasCpfOrCnpjLength(value: string): boolean {
   const length = onlyDigits(value).length;

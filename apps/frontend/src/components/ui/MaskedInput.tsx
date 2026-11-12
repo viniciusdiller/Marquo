@@ -2,21 +2,22 @@
 
 import { type ComponentPropsWithoutRef, forwardRef, useState } from "react";
 import { Input } from "./Input";
-import { formatCPF, formatCpfCnpj, formatMoneyInput, formatPhoneBR } from "@/lib/masks";
+import { formatCep, formatCPF, formatCpfCnpj, formatMoneyInput, formatPhoneBR } from "@/lib/masks";
 
 const FORMATTERS = {
   phone: formatPhoneBR,
   cpf: formatCPF,
   cpfCnpj: formatCpfCnpj,
+  cep: formatCep,
   // Dinheiro em reais: os dígitos entram pela direita ("4590" → "45,90"). O valor submetido é o
   // texto formatado ("1.234,56"); a Server Action converte para centavos com `moneyToCents`.
   money: formatMoneyInput,
 } as const;
 
 // Só teclado numérico nos campos que são só números (no celular abre o teclado certo).
-const INPUT_MODE = { phone: "numeric", cpf: "numeric", cpfCnpj: "numeric", money: "numeric" } as const;
+const INPUT_MODE = { phone: "numeric", cpf: "numeric", cpfCnpj: "numeric", cep: "numeric", money: "numeric" } as const;
 
-const AUTOCOMPLETE = { phone: "tel-national", cpf: undefined, cpfCnpj: "off", money: "off" } as const;
+const AUTOCOMPLETE = { phone: "tel-national", cpf: undefined, cpfCnpj: "off", cep: "postal-code", money: "off" } as const;
 
 interface MaskedInputProps extends Omit<ComponentPropsWithoutRef<typeof Input>, "onChange"> {
   mask: keyof typeof FORMATTERS;

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  formatCep,
   formatCPF,
   formatCpfCnpj,
   formatMoneyInput,
@@ -178,5 +179,14 @@ describe("parseCoordinate", () => {
     assert.equal(parseCoordinate("181", "lng"), null);
     assert.equal(parseCoordinate("abc", "lat"), null);
     assert.equal(parseCoordinate("", "lat"), null);
+  });
+});
+
+describe("formatCep", () => {
+  it("aplica a máscara e limita a 8 dígitos", () => {
+    assert.equal(formatCep("01310100"), "01310-100");
+    assert.equal(formatCep("01310"), "01310");
+    assert.equal(formatCep("0131010099"), "01310-100");
+    assert.equal(formatCep("abc"), "");
   });
 });
