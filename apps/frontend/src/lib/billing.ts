@@ -198,3 +198,16 @@ export function planActionFor(billing: BillingStatusResponse, tier: PlanTier, no
   }
   return "SUBSCRIBE";
 }
+
+// A página de pagamento do cartão fica no Asaas. O navegador só é levado a https em asaas.com (ou subdomínio): o endereço vem
+// do backend, e mesmo assim não vira redirecionamento aberto se algo for adulterado no caminho. Defesa em profundidade: o
+// backend já filtra o mesmo.
+export function isAsaasCheckoutUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && (url.hostname === "asaas.com" || url.hostname.endsWith(".asaas.com"));
+  } catch {
+    return false;
+  }
+}

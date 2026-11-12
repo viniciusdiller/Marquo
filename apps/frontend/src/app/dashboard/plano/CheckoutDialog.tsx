@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { type BillingMethod, type PlanInfo, formatBRL } from "@/lib/billing";
 import { hasCpfOrCnpjLength } from "@/lib/masks";
 import { MaskedInput } from "@/components/ui/MaskedInput";
+import { PixPanel } from "./PixPanel";
 import {
-  attemptStatusAction,
   quoteAction,
   startCardAction,
   startPixAction,
@@ -15,7 +15,6 @@ import {
   type QuoteView,
 } from "./actions";
 
-const POLL_MS = 4000;
 const BTN = "rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:opacity-60";
 const PRIMARY = `${BTN} bg-accent-500 text-white hover:bg-accent-600`;
 const NEUTRAL = `${BTN} text-zinc-800 ring-1 ring-zinc-300 ring-inset hover:bg-zinc-900/5 dark:text-stone-100 dark:ring-white/20 dark:hover:bg-white/10`;
@@ -68,9 +67,7 @@ export function CheckoutDialog({
   const [error, setError] = useState<string | null>(null);
   const [pix, setPix] = useState<PixView | null>(null);
   const [paid, setPaid] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
-  const polling = useRef(false);
 
   // Cotação sem cupom ao abrir (mostra o preço e, se o cadastro deu um desconto, já aplica).
   useEffect(() => {
@@ -90,30 +87,6 @@ export function CheckoutDialog({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-
-  // Pix gerado: consulta o status até confirmar (o backend relê o Asaas a cada consulta).
-  useEffect(() => {
-    if (!pix || paid) return;
-    polling.current = true;
-    const timer = setInterval(async () => {
-      if (!polling.current) return;
-      const result = await attemptStatusAction(pix.attemptId);
-      if (!result.ok) return;
-      if (result.attempt.status === "APPROVED") {
-        polling.current = false;
-        setPaid(true);
-        router.refresh();
-      } else if (result.attempt.status === "FAILED" || result.attempt.status === "EXPIRED") {
-        polling.current = false;
-        setPix(null);
-        setError("Este Pix expirou ou foi recusado. Gere um novo.");
-      }
-    }, POLL_MS);
-    return () => {
-      polling.current = false;
-      clearInterval(timer);
-    };
-  }, [pix, paid, router]);
 
   function applyCoupon() {
     setError(null);
@@ -177,54 +150,18 @@ export function CheckoutDialog({
             </button>
           </div>
         ) : pix ? (
-          <div className="flex flex-col gap-3">
-            <h2 className="font-display text-lg font-semibold text-zinc-900 dark:text-white">Pague com Pix</h2>
-            <p className="text-sm text-zinc-600 dark:text-stone-300">
-              Valor: <strong>{formatBRL(pix.chargeCents)}</strong>. Abra o app do seu banco, escolha Pix e leia o QR
-              Code ou use o código copia e cola. A confirmação é automática.
-            </p>
-            {pix.qrCodeBase64 ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={`data:image/png;base64,${pix.qrCodeBase64}`}
-                alt="QR Code do Pix"
-                className="mx-auto size-48 rounded-lg border border-zinc-200 bg-white p-2 dark:border-white/15"
-              />
-            ) : null}
-            <label className="text-xs font-medium text-zinc-500 dark:text-stone-400" htmlFor="pix-code">
-              Pix copia e cola
-            </label>
-            <textarea
-              id="pix-code"
-              readOnly
-              value={pix.qrCode}
-              rows={3}
-              onFocus={(e) => e.currentTarget.select()}
-              className="w-full rounded-xl border border-zinc-300 bg-white p-2 font-mono text-xs dark:border-white/15 dark:bg-zinc-900 dark:text-white"
-            />
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={PRIMARY}
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(pix.qrCode);
-                    setCopied(true);
-                  } catch {
-                    setCopied(false);
-                  }
-                }}
-              >
-                {copied ? "Copiado" : "Copiar código"}
-              </button>
-              <button type="button" className={NEUTRAL} onClick={onClose}>
-                Fechar (continuo aguardando)
-              </button>
-            </div>
-            <p className="text-xs text-zinc-500 dark:text-stone-400" role="status">
-              Aguardando o pagamento... válido até {new Date(pix.expiresAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.
-            </p>
-          </div>
+          <PixPanel
+            pix={pix}
+            onClose={onClose}
+            onPaid={() => {
+              setPaid(true);
+              router.refresh();
+            }}
+            onFailed={(message) => {
+              setPix(null);
+              setError(message);
+            }}
+          />
         ) : (
           <div className="flex flex-col gap-4">
             <h2 className="font-display text-lg font-semibold text-zinc-900 dark:text-white">

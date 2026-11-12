@@ -8,6 +8,7 @@ import {
   daysUntil,
   formatBRL,
   formatDate,
+  isAsaasCheckoutUrl,
   hasBillingAccess,
   isPlanInfo,
   planActionFor,
@@ -218,5 +219,30 @@ describe("isPlanInfo", () => {
     ]) {
       assert.equal(isPlanInfo(bad), false, JSON.stringify(bad));
     }
+  });
+});
+
+describe("isAsaasCheckoutUrl (nunca redirecionar o dono para fora do Asaas)", () => {
+  it("aceita só https em asaas.com ou subdomínio", () => {
+    assert.equal(isAsaasCheckoutUrl("https://asaas.com/checkoutSession/show?id=abc"), true);
+    assert.equal(isAsaasCheckoutUrl("https://sandbox.asaas.com/checkoutSession/show/abc"), true);
+  });
+
+  it("recusa domínio parecido, http, esquemas perigosos e lixo", () => {
+    for (const bad of [
+      "https://evil.example/pay",
+      "https://asaas.com.evil.example/x",
+      "https://evilasaas.com/x",
+      "http://asaas.com/x",
+      "javascript:alert(1)",
+      "data:text/html,<script>1</script>",
+      "//evil.example",
+      "https://user@evil.example@asaas.com.evil.example",
+      "",
+      "nao-e-url",
+    ]) {
+      assert.equal(isAsaasCheckoutUrl(bad), false, bad);
+    }
+    for (const bad of [null, undefined, 1, {}, ["https://asaas.com"]]) assert.equal(isAsaasCheckoutUrl(bad), false);
   });
 });

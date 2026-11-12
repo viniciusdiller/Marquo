@@ -41,6 +41,12 @@ export function reaisToCents(reais: number): number {
   return Math.round(reais * 100);
 }
 
+// O valor pago que o provedor relata confere com o que cobramos? ESTRITO: só número finito, positivo, e igual ao centavo.
+// Texto ("99.90"), NaN, nulo, negativo ou a mais/menos nunca conferem (a conta com texto converteria sozinha e passaria).
+export function paidAmountMatches(value: unknown, expectedCents: number): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 && reaisToCents(value) === expectedCents;
+}
+
 // Um mês de calendário a partir de `base` (31/01 + 1 mês = 28/02), no fuso do negócio para o "dia do mês" não
 // escorregar com a virada de UTC.
 export function addOneMonth(base: Date): Date {
@@ -69,4 +75,35 @@ export function parseAsaasDate(value: string | null | undefined): Date | null {
   if (!value) return null;
   const parsed = DateTime.fromISO(value.slice(0, 10), { zone: "America/Sao_Paulo" }).set({ hour: 12 });
   return parsed.isValid ? parsed.toJSDate() : null;
+}
+
+export interface UpgradeCharge {
+  // O que se cobra AGORA pela troca (centavos, nunca abaixo de MIN_CHARGE_CENTS, nunca acima da diferença cheia).
+  chargeCents: number;
+  // Dias que faltam no período já pago (arredondado para cima), só para explicar o valor na tela.
+  remainingDays: number;
+}
+
+// Troca para um plano mais caro no MEIO do período: o dono já pagou o mês do plano antigo, então paga só a diferença de
+// preço proporcional ao que ainda falta do período (diferença × tempo restante ÷ tempo do período), arredondada PARA CIMA
+// em centavos (nunca a favor de quem troca). O período é o mês que termina em `periodEnd`. Valores sempre derivados no
+// servidor: o cliente nunca informa preço nem data. Piso: MIN_CHARGE_CENTS (limite do provedor); teto: a diferença cheia.
+export function prorateUpgrade(
+  currentPriceCents: number,
+  newPriceCents: number,
+  periodEnd: Date,
+  now: Date = new Date(),
+): UpgradeCharge {
+  const diff = newPriceCents - currentPriceCents;
+  if (!(diff > 0)) throw new RangeError("Upgrade exige plano mais caro.");
+
+  const periodStart = DateTime.fromJSDate(periodEnd, { zone: "America/Sao_Paulo" }).minus({ months: 1 }).toJSDate();
+  const total = periodEnd.getTime() - periodStart.getTime();
+  const remaining = Math.min(Math.max(periodEnd.getTime() - now.getTime(), 0), total);
+  const prorated = total > 0 ? Math.ceil((diff * remaining) / total) : diff;
+
+  return {
+    chargeCents: Math.min(Math.max(prorated, MIN_CHARGE_CENTS), Math.max(diff, MIN_CHARGE_CENTS)),
+    remainingDays: Math.ceil(remaining / 86_400_000),
+  };
 }

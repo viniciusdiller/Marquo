@@ -45,10 +45,21 @@ describe("AsaasWebhookController", () => {
     expect(payments.handleNotification).not.toHaveBeenCalled();
   });
 
-  it("sem token configurado (dev) processa: o corpo nunca é confiado, só vira aviso para reler", async () => {
+  // Falha fechada: token ausente na configuração nunca vira "aceita sem conferir", nem em desenvolvimento.
+  it("SEM token configurado no servidor: 401 para qualquer um, com ou sem cabeçalho, e nada é processado", async () => {
     const { controller, payments } = build(null);
-    await controller.receive({ event: "PAYMENT_RECEIVED", payment: { id: "pay_1" } }, undefined);
-    expect(payments.handleNotification).toHaveBeenCalledWith("payment", "pay_1");
+    for (const header of [undefined, "", "qualquer-coisa", "undefined", "null"]) {
+      await expect(controller.receive({ event: "PAYMENT_RECEIVED", payment: { id: "pay_1" } }, header)).rejects.toThrow(UnauthorizedException);
+    }
+    expect(payments.handleNotification).not.toHaveBeenCalled();
+  });
+
+  it("a recusa por token vem ANTES de ler o corpo (corpo nulo ou malformado também dá 401, sem 500)", async () => {
+    const { controller, payments } = build();
+    for (const body of [undefined, null, "texto", 123, [] , { event: { x: 1 } }]) {
+      await expect(controller.receive(body as never, "errado")).rejects.toThrow(UnauthorizedException);
+    }
+    expect(payments.handleNotification).not.toHaveBeenCalled();
   });
 
   it("evento que não tratamos ou corpo vazio: 200 sem processar (o Asaas pausa a fila se não for 2xx)", async () => {

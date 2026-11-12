@@ -164,8 +164,8 @@ pós-trial/cancelamento. Enquanto o provedor não está validado, a equipe liber
 - [x] **Fase 6 — Asaas** (código e testes prontos; **falta o teste contra o provedor real, no sandbox**): cartão recorrente pelo Checkout hospedado (o cartão não passa pelo nosso servidor) e Pix mensal, CPF/CNPJ do
   pagador pedido no checkout (o Asaas exige) e não guardado, cupom abatendo a primeira cobrança, webhook com token e releitura
   do estado, sincronização pela tela e tarefa horária (que também remove o Pix expirado), cancelamento, "salão cai" no Pix
-  vencido e troca de plano (bloqueia downgrade se a equipe ativa não couber). Pendente: troca com cobrança proporcional e
-  pedir ao Asaas a tokenização (necessária para mudar o valor de assinatura de cartão).
+  vencido e troca de plano (upgrade cobra a diferença proporcional por Pix e só sobe o plano depois de confirmado; downgrade vale
+  na hora e bloqueia se a equipe ativa não couber). Pendente: pedir ao Asaas a tokenização (necessária para mudar o valor de assinatura de cartão).
 - [x] Painel da plataforma (`/plataforma`): métricas, negócios, assinaturas, usuários, auditoria; criar negócio,
   suspender/reativar, estender teste, plano de cortesia, telefone do dono e cupons.
 - [x] Fase 4 (Marquo) — `webhooks/totalsoftware`, `WebhookSecretGuard`, `TOTALAGENDA_*` e `Tenant.externalCustomerId`

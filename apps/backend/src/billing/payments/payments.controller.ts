@@ -69,7 +69,17 @@ export class PaymentsController {
   @HttpCode(200)
   @Post("change-plan")
   changePlan(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePlanDto) {
-    return this.payments.changePlan(user.tenantId, dto.tier);
+    return this.payments.changePlan(user.tenantId, dto.tier, { userId: user.userId, cpfCnpj: dto.cpfCnpj });
+  }
+
+  // Prévia da troca: se vale na hora ou se exige pagar a diferença proporcional (e quanto). Não cria nada no provedor.
+  @Roles(Role.OWNER)
+  @SkipBillingCheck()
+  @Throttle(START_THROTTLE)
+  @HttpCode(200)
+  @Post("change-plan/quote")
+  quoteChangePlan(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePlanDto) {
+    return this.payments.quoteChangePlan(user.tenantId, dto.tier);
   }
 
   @Roles(Role.OWNER)

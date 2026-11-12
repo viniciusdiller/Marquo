@@ -86,8 +86,8 @@ class EnvironmentVariables {
   ASAAS_API_KEY?: string;
 
   // Token do webhook: o mesmo valor cadastrado como "Token de autenticação" no webhook do Asaas, que o devolve no cabeçalho
-  // `asaas-access-token` de cada aviso. O Asaas aceita de 32 a 255 caracteres. Com a chave em PRODUÇÃO é obrigatório (sem
-  // ele qualquer um poderia disparar leituras na API do provedor).
+  // `asaas-access-token` de cada aviso. O Asaas aceita de 32 a 255 caracteres. Com a chave em PRODUÇÃO é obrigatório; sem ele o
+  // endpoint do webhook recusa tudo (falha fechada), em qualquer ambiente.
   @ValidateIf(
     (o) => (o.NODE_ENV === "production" && o.ASAAS_API_KEY !== undefined) || o.ASAAS_WEBHOOK_TOKEN !== undefined,
   )
