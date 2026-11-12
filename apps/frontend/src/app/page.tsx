@@ -1,9 +1,16 @@
+import type { Metadata } from "next";
 import { Nav } from "@/components/marketing/Nav";
 import { Hero } from "@/components/marketing/Hero";
 import { NearbyPlaces } from "@/components/marketing/NearbyPlaces";
 import { TopRatedPlaces } from "@/components/marketing/TopRatedPlaces";
 import { Footer } from "@/components/marketing/Footer";
 import { getNavSession } from "@/lib/nav-session";
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "/",
+  },
+};
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 

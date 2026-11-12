@@ -7,7 +7,10 @@ import { BackLink } from "@/components/ui/BackLink";
 import { BrandPattern } from "@/components/brand/BrandPattern";
 import { backendFetch } from "@/lib/backend-fetch";
 
-export const metadata: Metadata = { title: "Definir senha" };
+export const metadata: Metadata = {
+  title: "Definir senha",
+  robots: { index: false, follow: false },
+};
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 

@@ -48,9 +48,6 @@ export const metadata: Metadata = {
   authors: [{ name: "Marquo" }],
   creator: "Marquo",
   publisher: "Marquo",
-  alternates: {
-    canonical: "/",
-  },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },

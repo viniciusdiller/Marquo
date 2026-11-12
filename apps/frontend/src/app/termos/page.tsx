@@ -2,7 +2,13 @@ import type { Metadata } from "next";
 import { LegalDocument } from "@/components/legal/LegalDocument";
 import { TERMS_SECTIONS } from "@/lib/legal-content";
 
-export const metadata: Metadata = { title: "Termos de Uso" };
+export const metadata: Metadata = {
+  title: "Termos de Uso",
+  description: "Termos e condições gerais de uso da plataforma Marquo para clientes e estabelecimentos.",
+  alternates: {
+    canonical: "/termos",
+  },
+};
 
 export default function TermosPage() {
   return <LegalDocument title="Termos de Uso" sections={TERMS_SECTIONS} />;

@@ -11,6 +11,8 @@ export default function robots(): MetadataRoute.Robots {
         disallow: [
           "/dashboard",
           "/dashboard/",
+          "/plataforma",
+          "/plataforma/",
           "/minha-conta",
           "/minha-conta/",
           "/api/",

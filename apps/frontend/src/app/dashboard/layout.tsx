@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowSquareOut, SignOut } from "@phosphor-icons/react/dist/ssr";
@@ -13,6 +14,10 @@ import { BillingBanner } from "./BillingBanner";
 import { BillingGate } from "./BillingGate";
 import { BrandPattern } from "@/components/brand/BrandPattern";
 import { TourProvider } from "@/components/tour/TourProvider";
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 const ROLE_LABEL: Record<string, string> = {
   OWNER: "Dono do negócio",

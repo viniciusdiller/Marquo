@@ -6,9 +6,11 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://marquo.com.br";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base: MetadataRoute.Sitemap = [
-    { url: `${SITE_URL}/`, changeFrequency: "weekly", priority: 1 },
+    { url: `${SITE_URL}`, changeFrequency: "weekly", priority: 1 },
     { url: `${SITE_URL}/descobrir`, changeFrequency: "daily", priority: 0.9 },
     { url: `${SITE_URL}/para-donos`, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${SITE_URL}/termos`, changeFrequency: "yearly", priority: 0.3 },
+    { url: `${SITE_URL}/privacidade`, changeFrequency: "yearly", priority: 0.3 },
   ];
 
   try {

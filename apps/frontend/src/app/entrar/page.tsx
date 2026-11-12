@@ -6,7 +6,10 @@ import { Logo } from "@/components/brand/Logo";
 import { Footer } from "@/components/marketing/Footer";
 import { BrandPattern } from "@/components/brand/BrandPattern";
 
-export const metadata: Metadata = { title: "Entrar" };
+export const metadata: Metadata = {
+  title: "Entrar",
+  robots: { index: false, follow: true },
+};
 
 export default async function LoginPage({
   searchParams,

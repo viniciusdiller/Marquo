@@ -16,7 +16,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const tenant = await getTenant(slug);
-  return { title: tenant ? `Agendar em ${tenant.name}` : "Negócio não encontrado" };
+  return {
+    title: tenant ? `Agendar em ${tenant.name}` : "Negócio não encontrado",
+    robots: { index: false, follow: true },
+  };
 }
 
 export default async function AgendarPage({ params }: { params: Promise<{ slug: string }> }) {
