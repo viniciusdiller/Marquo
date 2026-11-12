@@ -107,6 +107,13 @@ class EnvironmentVariables {
   @IsUrl({ require_tld: false, require_protocol: true, protocols: ["http", "https"] })
   ASAAS_API_BASE?: string;
 
+  // Chave que criptografa dado pessoal guardado no banco (CPF/CNPJ do pagador, ver FieldCryptoService): 64 caracteres hex
+  // (`openssl rand -hex 32`). Opcional: sem ela o documento NÃO é guardado (é pedido a cada cobrança). Perder a chave
+  // torna os documentos já salvos ilegíveis (o dono digita de novo); trocá-la tem o mesmo efeito.
+  @ValidateIf((o) => o.DATA_ENCRYPTION_KEY !== undefined)
+  @Matches(/^[0-9a-fA-F]{64}$/, { message: "DATA_ENCRYPTION_KEY deve ter 64 caracteres hexadecimais (openssl rand -hex 32)." })
+  DATA_ENCRYPTION_KEY?: string;
+
   // E-mail transacional (Resend): aviso de novo agendamento, confirmação ao cliente. Opcional: sem a chave o
   // envio fica desligado (nada sai, nada quebra). A chave e o remetente vêm JUNTOS; o remetente precisa ser de
   // um domínio verificado no Resend ("Nome <avisos@dominio.com.br>" ou só o endereço).

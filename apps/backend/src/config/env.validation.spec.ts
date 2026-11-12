@@ -314,3 +314,17 @@ describe("arquivo de exemplo de ambiente da raiz", () => {
   });
 });
 
+
+describe("validateEnv: DATA_ENCRYPTION_KEY", () => {
+  it("é opcional", () => {
+    expect(() => validateEnv({ ...base, JWT_SECRET: "a".repeat(64) })).not.toThrow();
+  });
+
+  it("aceita 64 caracteres hex", () => {
+    expect(() => validateEnv({ ...base, JWT_SECRET: "a".repeat(64), DATA_ENCRYPTION_KEY: "ab".repeat(32) })).not.toThrow();
+  });
+
+  it.each(["curta", "z".repeat(64), "ab".repeat(31)])("recusa chave fora do formato (%s)", (key) => {
+    expect(() => validateEnv({ ...base, JWT_SECRET: "a".repeat(64), DATA_ENCRYPTION_KEY: key })).toThrow(/DATA_ENCRYPTION_KEY/);
+  });
+});

@@ -173,12 +173,31 @@ export class AsaasClient implements OnModuleInit {
   // ── Cliente ──────────────────────────────────────────────
 
   // O Asaas só emite cobrança para cliente com CPF/CNPJ. `externalReference` amarra o cliente à tentativa nossa.
-  createCustomer(input: { name: string; email: string; cpfCnpj: string; externalReference: string }): Promise<AsaasCustomer> {
+  // Telefone e endereço são exigidos pelo checkout de cartão (sem eles: "O campo phone deve existir para o customer"); só
+  // seguem os que vieram preenchidos.
+  createCustomer(input: {
+    name: string;
+    email: string;
+    cpfCnpj: string;
+    externalReference: string;
+    phone?: string;
+    postalCode?: string;
+    address?: string;
+    addressNumber?: string;
+    complement?: string;
+    province?: string;
+  }): Promise<AsaasCustomer> {
     return this.request<AsaasCustomer>("POST", "/customers", {
       name: input.name,
       email: input.email,
       cpfCnpj: input.cpfCnpj,
       externalReference: input.externalReference,
+      ...(input.phone ? { phone: input.phone, mobilePhone: input.phone } : {}),
+      ...(input.postalCode ? { postalCode: input.postalCode } : {}),
+      ...(input.address ? { address: input.address } : {}),
+      ...(input.addressNumber ? { addressNumber: input.addressNumber } : {}),
+      ...(input.complement ? { complement: input.complement } : {}),
+      ...(input.province ? { province: input.province } : {}),
       // O Marquo é quem avisa o dono; sem isto o Asaas manda e-mail e SMS próprios a cada cobrança.
       notificationDisabled: true,
     });

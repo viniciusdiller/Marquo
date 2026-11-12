@@ -25,8 +25,7 @@ import { CouponsService } from "../../coupons/coupons.service";
 import { couponState, isValidCouponCode, normalizeCouponCode } from "../../coupons/coupon.util";
 import { billingBlockMessage } from "../billing-status.util";
 import { PlanLimitService } from "../plan-limit.service";
-import { isValidCnpj, normalizeCnpj } from "../../common/utils/cnpj.util";
-import { isValidCpf, normalizeCpf } from "../../common/utils/cpf.util";
+import { BillingProfileInput, BillingProfileService, PayerData } from "./billing-profile.service";
 import {
   ASAAS_PAID_STATUSES,
   ASAAS_REVERSED_STATUSES,
@@ -124,6 +123,7 @@ export class PaymentsService {
     private readonly config: ConfigService,
     private readonly coupons: CouponsService,
     private readonly planLimit: PlanLimitService,
+    private readonly profile: BillingProfileService,
   ) {}
 
   isEnabled(): boolean {
@@ -339,22 +339,24 @@ export class PaymentsService {
     return user;
   }
 
-  // O Asaas só emite cobrança para cliente com CPF/CNPJ. O DTO já recusa documento inválido; o serviço repete a
-  // conferência (o DTO não é a última linha) e manda ao provedor só os dígitos.
-  private normalizeDocument(raw: string): string {
-    if (isValidCpf(raw)) return normalizeCpf(raw);
-    if (isValidCnpj(raw)) return normalizeCnpj(raw);
-    throw new BadRequestException("CPF ou CNPJ inválido.");
-  }
-
   // Cria no Asaas o cliente DESTA tentativa e grava o id: é a ligação entre o provedor e o negócio. O documento vai
-  // direto ao provedor e não fica no nosso banco.
-  private async createProviderCustomer(attemptId: string, owner: { name: string; email: string }, document: string) {
+  // provedor; o CPF/CNPJ só fica no nosso banco criptografado (BillingProfileService), nunca em claro nem em log.
+  private async createProviderCustomer(
+    attemptId: string,
+    owner: { name: string; email: string },
+    payer: Pick<PayerData, "document"> & Partial<PayerData>,
+  ) {
     const customer = await this.asaas.createCustomer({
       name: owner.name,
       email: owner.email,
-      cpfCnpj: document,
+      cpfCnpj: payer.document,
       externalReference: attemptId,
+      phone: payer.phone || undefined,
+      postalCode: payer.postalCode || undefined,
+      address: payer.address || undefined,
+      addressNumber: payer.addressNumber || undefined,
+      complement: payer.complement || undefined,
+      province: payer.province || undefined,
     });
     if (!customer.id) throw new PaymentProviderError(null, "Resposta sem id de cliente");
     await this.prisma.billingAttempt.update({ where: { id: attemptId }, data: { providerCustomerId: customer.id } });
@@ -363,9 +365,8 @@ export class PaymentsService {
 
   // Cartão: o dono vai para o checkout hospedado do Asaas e digita o cartão LÁ (nunca passa por aqui). Concluído, o
   // Asaas cria a assinatura mensal para o cliente que montamos, e é por esse cliente que ela volta a este negócio.
-  async startCard(tenantId: string, userId: string, tier: PlanTier, cpfCnpj: string, couponCode?: string) {
+  async startCard(tenantId: string, userId: string, tier: PlanTier, payerInput: BillingProfileInput, couponCode?: string) {
     this.requireEnabled();
-    const document = this.normalizeDocument(cpfCnpj);
     // Falha cedo e com motivo claro (em vez de criar tentativa/cliente e receber um 400 do provedor). Em produção o
     // FRONTEND_URL é https, então isto só aparece em desenvolvimento.
     const back = `${this.backUrlBase()}/dashboard/plano`;
@@ -375,10 +376,13 @@ export class PaymentsService {
       );
     }
     const owner = await this.owner(tenantId, userId);
+    // O checkout de cartão do Asaas exige documento, telefone e endereço do cliente: o que não veio no pedido sai do cadastro
+    // salvo; se ainda faltar algo, 400 com o que preencher (antes de criar tentativa ou cliente no provedor).
+    const payer = await this.profile.resolve(tenantId, userId, payerInput, true);
     const { attempt, planName } = await this.createAttempt(tenantId, tier, BillingMethod.CARD_RECURRING, couponCode);
 
     try {
-      const customerId = await this.createProviderCustomer(attempt.id, owner, document);
+      const customerId = await this.createProviderCustomer(attempt.id, owner, payer);
       const checkout = await this.asaas.createCheckout({
         customerId,
         itemName: `Marquo - Plano ${planName}`,
@@ -401,12 +405,12 @@ export class PaymentsService {
     }
   }
 
-  async startPix(tenantId: string, userId: string, tier: PlanTier, cpfCnpj: string, couponCode?: string) {
+  async startPix(tenantId: string, userId: string, tier: PlanTier, payerInput: BillingProfileInput, couponCode?: string) {
     this.requireEnabled();
-    const document = this.normalizeDocument(cpfCnpj);
     const owner = await this.owner(tenantId, userId);
+    const payer = await this.profile.resolve(tenantId, userId, payerInput, false);
     const { attempt, planName } = await this.createAttempt(tenantId, tier, BillingMethod.PIX_MONTHLY, couponCode);
-    return this.issuePix(attempt, `Marquo - Plano ${planName} (1 mês)`, (id) => this.createProviderCustomer(id, owner, document));
+    return this.issuePix(attempt, `Marquo - Plano ${planName} (1 mês)`, (id) => this.createProviderCustomer(id, owner, payer));
   }
 
   // Cria no Asaas a cobrança Pix de UMA tentativa (assinatura mensal ou diferença de upgrade) e devolve o QR Code. O valor
@@ -950,8 +954,10 @@ export class PaymentsService {
     let owner: { name: string; email: string } | null = null;
     let document: string | null = null;
     if (!known?.providerCustomerId) {
-      if (!ctx?.cpfCnpj || !ctx.userId) throw new BadRequestException("Informe o CPF ou CNPJ de quem vai pagar.");
-      document = this.normalizeDocument(ctx.cpfCnpj);
+      if (!ctx?.userId) throw new BadRequestException("Informe o CPF ou CNPJ de quem vai pagar.");
+      // O digitado vale; sem ele, o documento salvo (criptografado) no cadastro de cobrança do negócio.
+      document = await this.profile.resolveDocument(tenantId, ctx.cpfCnpj);
+      if (!document) throw new BadRequestException("Informe o CPF ou CNPJ de quem vai pagar.");
       owner = await this.owner(tenantId, ctx.userId);
     }
 
@@ -985,7 +991,7 @@ export class PaymentsService {
         await this.prisma.billingAttempt.update({ where: { id: attemptId }, data: { providerCustomerId: known.providerCustomerId } });
         return known.providerCustomerId;
       }
-      return this.createProviderCustomer(attemptId, owner as { name: string; email: string }, document as string);
+      return this.createProviderCustomer(attemptId, owner as { name: string; email: string }, { document: document as string });
     });
     return { applied: false, requiresPayment: true, planName: plan.name, ...pix };
   }
