@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { type BillingMethod, type PlanInfo, formatBRL } from "@/lib/billing";
-import { formatCep, formatPhoneBR, hasCpfOrCnpjLength } from "@/lib/masks";
+import { formatCep, formatPhoneBR, hasCpfOrCnpjLength, onlyDigits } from "@/lib/masks";
 import { MaskedInput } from "@/components/ui/MaskedInput";
 import { Input } from "@/components/ui/Input";
 import { PixPanel } from "./PixPanel";
 import {
   billingProfileAction,
+  cepAction,
   quoteAction,
   startCardAction,
   startPixAction,
@@ -79,6 +80,11 @@ export function CheckoutForm({
   const [addressNumber, setAddressNumber] = useState("");
   const [complement, setComplement] = useState("");
   const [province, setProvince] = useState("");
+  // Busca de endereço pelo CEP: preenche rua e bairro (sem sobrescrever o que o dono digitou) e leva o foco ao número.
+  const [cepHint, setCepHint] = useState<string | undefined>(undefined);
+  const lastCep = useRef("");
+  const autoFilled = useRef({ address: "", province: "" });
+  const numberRef = useRef<HTMLInputElement>(null);
   const [quote, setQuote] = useState<QuoteView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pix, setPix] = useState<PixView | null>(null);
@@ -105,6 +111,8 @@ export function CheckoutForm({
       setProfile(saved);
       setPhone(formatPhoneBR(saved.phone ?? ""));
       setPostalCode(formatCep(saved.postalCode ?? ""));
+      // CEP que já veio do cadastro salvo não precisa ser consultado de novo.
+      lastCep.current = onlyDigits(saved.postalCode ?? "");
       setAddress(saved.address ?? "");
       setAddressNumber(saved.addressNumber ?? "");
       setComplement(saved.complement ?? "");
@@ -114,6 +122,37 @@ export function CheckoutForm({
       cancelled = true;
     };
   }, []);
+
+  async function onCepChange(value: string) {
+    setPostalCode(value);
+    const digits = onlyDigits(value);
+    if (digits.length !== 8) {
+      lastCep.current = "";
+      setCepHint(undefined);
+      return;
+    }
+    if (digits === lastCep.current) return;
+    lastCep.current = digits;
+    setCepHint("Buscando endereço...");
+    const result = await cepAction(digits);
+    // O dono pode ter mudado o CEP durante a busca: resposta velha é descartada.
+    if (lastCep.current !== digits) return;
+    if (!result.ok) {
+      setCepHint("Não foi possível buscar o CEP agora. Preencha o endereço à mão.");
+      return;
+    }
+    if (!result.found || !result.data) {
+      setCepHint("CEP não encontrado. Confira os números ou preencha o endereço à mão.");
+      return;
+    }
+    const { address: street, province: district, city, state } = result.data;
+    // Só preenche campo vazio ou que a própria busca preencheu antes; o que o dono digitou fica.
+    setAddress((current) => (!current || current === autoFilled.current.address ? street || current : current));
+    setProvince((current) => (!current || current === autoFilled.current.province ? district || current : current));
+    autoFilled.current = { address: street, province: district };
+    setCepHint([city, state].filter(Boolean).join(" / "));
+    if (street) numberRef.current?.focus();
+  }
 
   function applyCoupon() {
     setError(null);
@@ -279,8 +318,16 @@ export function CheckoutForm({
             <legend className="text-sm font-medium text-zinc-900 dark:text-white">Endereço e telefone de quem paga</legend>
             <MaskedInput mask="phone" name="phone" label="Telefone com DDD" value={phone} onChange={setPhone} placeholder="(11) 91234-5678" />
             <div className="grid grid-cols-2 gap-3">
-              <MaskedInput mask="cep" name="postalCode" label="CEP" value={postalCode} onChange={setPostalCode} placeholder="00000-000" />
-              <Input name="addressNumber" label="Número" value={addressNumber} onChange={(e) => setAddressNumber(e.target.value)} maxLength={20} autoComplete="off" />
+              <MaskedInput
+                mask="cep"
+                name="postalCode"
+                label="CEP"
+                value={postalCode}
+                onChange={onCepChange}
+                hint={cepHint}
+                placeholder="00000-000"
+              />
+              <Input ref={numberRef} name="addressNumber" label="Número" value={addressNumber} onChange={(e) => setAddressNumber(e.target.value)} maxLength={20} autoComplete="off" />
             </div>
             <Input name="address" label="Rua" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={120} autoComplete="off" />
             <div className="grid grid-cols-2 gap-3">
