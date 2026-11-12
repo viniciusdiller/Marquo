@@ -1,6 +1,6 @@
 import { Logger, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { AsaasClient, describeApiKey, PaymentProviderError } from "./asaas.client";
+import { AsaasClient, describeApiKey, isAsaasCheckoutUrl, PaymentProviderError } from "./asaas.client";
 
 const SANDBOX_KEY = "$aact_hmlg_" + "x".repeat(40);
 const PROD_KEY = "$aact_prod_" + "y".repeat(40);
@@ -125,11 +125,14 @@ describe("AsaasClient", () => {
     expect(JSON.stringify(body)).not.toMatch(/creditCard|ccv/i);
   });
 
-  it("link do checkout: usa o `link` do provedor quando é https; senão monta pelo id, no ambiente da chave", () => {
-    expect(build().checkoutUrl({ id: "chk_1", link: "https://pagar.asaas.test/c/1" })).toBe("https://pagar.asaas.test/c/1");
+  it("link do checkout: usa o `link` do provedor quando é https em asaas.com; senão monta pelo id, no ambiente da chave", () => {
+    expect(build().checkoutUrl({ id: "chk_1", link: "https://sandbox.asaas.com/checkoutSession/show/abc" })).toBe("https://sandbox.asaas.com/checkoutSession/show/abc");
     expect(build({ ASAAS_API_KEY: PROD_KEY }).checkoutUrl({ id: "chk_1" })).toBe("https://asaas.com/checkoutSession/show?id=chk_1");
     expect(build().checkoutUrl({ id: "chk_1", link: null })).toBe("https://sandbox.asaas.com/checkoutSession/show?id=chk_1");
-    // `link` que não é https (ou javascript:) não é usado.
+    // `link` fora do asaas.com (redirecionamento aberto) ou que não é https (javascript:, http:) NUNCA é usado.
+    for (const evil of ["https://evil.example/pay", "https://asaas.com.evil.example/x", "https://notasaas.com/x", "http://sandbox.asaas.com/x", "//evil.example", "https://evil.example/?u=https://asaas.com"]) {
+      expect(build().checkoutUrl({ id: "chk_1", link: evil })).toBe("https://sandbox.asaas.com/checkoutSession/show?id=chk_1");
+    }
     expect(build().checkoutUrl({ id: "chk_1", link: "javascript:alert(1)" })).toContain("checkoutSession/show?id=chk_1");
     expect(build().checkoutUrl({ id: "a b&x=1" })).toContain("id=a%20b%26x%3D1");
   });
@@ -181,6 +184,28 @@ describe("AsaasClient", () => {
     await expect(attempt).rejects.not.toThrow(/detalhe-interno-secreto/);
   });
 
+  it("o log do erro não ecoa CPF/CNPJ que o provedor devolva", async () => {
+    const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    mockFetch({ ok: false, status: 400, body: { errors: [{ description: "CPF 529.982.247-25 e CNPJ 11222333000181 inválidos" }] } });
+    await expect(build().getPayment("pay_1")).rejects.toBeInstanceOf(PaymentProviderError);
+    const logged = warn.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(logged).not.toMatch(/529\.982|52998224725|11222333000181/);
+    expect(logged).toContain("[numero]");
+    warn.mockRestore();
+  });
+
+  it("a chave nunca aparece em log nenhum, nem em erro de rede nem em erro HTTP", async () => {
+    const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    mockFetch({ ok: false, status: 401, body: { errors: [{ description: "chave " + SANDBOX_KEY }] } });
+    await expect(build().getPayment("pay_1")).rejects.toBeInstanceOf(PaymentProviderError);
+    global.fetch = jest.fn().mockRejectedValue(new Error(SANDBOX_KEY)) as unknown as typeof fetch;
+    await expect(build().getPayment("pay_1")).rejects.toBeInstanceOf(PaymentProviderError);
+    // O que NÃO pode vazar é o valor da chave no log da falha de REDE (nome do erro apenas).
+    const networkLog = String(warn.mock.calls.at(-1)?.[0]);
+    expect(networkLog).not.toContain(SANDBOX_KEY);
+    warn.mockRestore();
+  });
+
   it("a exceção carrega o status HTTP (o serviço trata 404 de forma diferente de 5xx)", async () => {
     mockFetch({ ok: false, status: 404, body: {} });
     await expect(build().getPayment("pay_1")).rejects.toMatchObject({ status: 404 });
@@ -207,6 +232,16 @@ describe("AsaasClient", () => {
     const prod = mockFetch({ ok: true, status: 200, body: {} });
     await build({ ASAAS_API_KEY: PROD_KEY, ASAAS_API_BASE: "https://evil.example", NODE_ENV: "production" }).getPayment("pay_1");
     expect(prod.mock.calls[0][0]).toBe("https://api.asaas.com/v3/payments/pay_1");
+  });
+});
+
+describe("isAsaasCheckoutUrl", () => {
+  it("só aceita https em asaas.com ou subdomínio", () => {
+    expect(isAsaasCheckoutUrl("https://asaas.com/checkoutSession/show?id=1")).toBe(true);
+    expect(isAsaasCheckoutUrl("https://sandbox.asaas.com/checkoutSession/show/1")).toBe(true);
+    for (const bad of ["", "nao-e-url", "http://asaas.com/x", "https://evil.example", "https://asaas.com.evil.example", "https://evilasaas.com", "javascript:alert(1)", "https://user@evil.example@asaas.com.evil.example"]) {
+      expect(isAsaasCheckoutUrl(bad)).toBe(false);
+    }
   });
 });
 

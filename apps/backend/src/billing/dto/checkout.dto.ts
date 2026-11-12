@@ -25,8 +25,15 @@ export class StartCheckoutDto extends CheckoutDto {
   cpfCnpj!: string;
 }
 
-// Troca de plano: só QUAL plano. O valor novo vem do catálogo; o servidor recusa se a equipe ativa não couber.
+// Troca de plano: QUAL plano (e, só se o negócio ainda não tem cliente no provedor, o documento de quem paga a diferença de um
+// upgrade). O valor novo e a diferença vêm do servidor; ele recusa se a equipe ativa não couber no plano menor.
 export class ChangePlanDto {
   @IsEnum(PlanTier)
   tier!: PlanTier;
+
+  @IsOptional()
+  @Trim()
+  @IsString()
+  @IsCpfOrCnpj()
+  cpfCnpj?: string;
 }

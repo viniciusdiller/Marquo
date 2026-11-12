@@ -23,8 +23,10 @@ function tokensMatch(received: string | undefined, expected: string): boolean {
 // POST /webhooks/asaas — público, mas o corpo é só um AVISO: o estado real é sempre relido na API do Asaas com a nossa
 // chave (ver PaymentsService.handleNotification). Por isso uma notificação forjada, repetida ou fora de ordem não
 // consegue creditar nada. O Asaas não assina o corpo: ele repete o `authToken` que cadastramos no cabeçalho
-// `asaas-access-token`, e com ASAAS_WEBHOOK_TOKEN configurado qualquer outro valor é recusado (401). Responde 200 mesmo
-// para eventos que não tratamos: o Asaas pausa a fila do webhook depois de várias respostas que não sejam 2xx.
+// `asaas-access-token`, e qualquer outro valor é recusado (401). FALHA FECHADA: sem ASAAS_WEBHOOK_TOKEN configurado o
+// endpoint recusa tudo, em qualquer ambiente (um token ausente nunca vira "aceita sem conferir"). A recusa acontece antes de
+// ler o corpo e de qualquer chamada ao provedor, então quem não tem o token não gasta a cota da API do Asaas. Responde 200
+// para eventos autenticados que não tratamos: o Asaas pausa a fila do webhook depois de várias respostas que não sejam 2xx.
 @Controller("webhooks")
 export class AsaasWebhookController {
   private readonly logger = new Logger(AsaasWebhookController.name);
@@ -40,7 +42,11 @@ export class AsaasWebhookController {
   @Post("asaas")
   async receive(@Body() body: NotificationBody, @Headers("asaas-access-token") token: string | undefined) {
     const secret = this.config.get<string>("ASAAS_WEBHOOK_TOKEN");
-    if (secret && !tokensMatch(token, secret)) {
+    if (!secret) {
+      this.logger.warn("Notificação do Asaas recusada: ASAAS_WEBHOOK_TOKEN não está configurado.");
+      throw new UnauthorizedException();
+    }
+    if (!tokensMatch(token, secret)) {
       this.logger.warn("Notificação do Asaas com token inválido recusada.");
       throw new UnauthorizedException();
     }

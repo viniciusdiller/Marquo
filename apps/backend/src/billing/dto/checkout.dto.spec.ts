@@ -45,8 +45,16 @@ describe("CheckoutDto (cotação) e ChangePlanDto", () => {
     expect(await errorsOf(CheckoutDto, { tier: "PREMIUM", couponCode: "PROMO20" })).toEqual([]);
   });
 
-  it("troca de plano só aceita o plano", async () => {
+  it("troca de plano aceita só o plano, mais (opcional) o documento de quem paga a diferença", async () => {
     expect(await errorsOf(ChangePlanDto, { tier: "ESSENCIAL" })).toEqual([]);
-    expect(await errorsOf(ChangePlanDto, { tier: "ESSENCIAL", cpfCnpj: "52998224725" })).not.toEqual([]);
+    expect(await errorsOf(ChangePlanDto, { tier: "PREMIUM", cpfCnpj: "52998224725" })).toEqual([]);
+    expect(await errorsOf(ChangePlanDto, { tier: "PREMIUM", cpfCnpj: "123" })).toContain("cpfCnpj");
+  });
+
+  // Nenhum valor, desconto ou data da diferença do upgrade pode vir do cliente.
+  it("troca de plano recusa qualquer campo de valor, data ou plano de origem vindo do cliente", async () => {
+    for (const extra of [{ amountCents: 1 }, { chargeCents: 1 }, { value: 1 }, { fromPlanId: "x" }, { periodEnd: "2026-12-01" }, { remainingDays: 1 }, { tenantId: "t" }]) {
+      expect(await errorsOf(ChangePlanDto, { tier: "PREMIUM", ...extra })).not.toEqual([]);
+    }
   });
 });

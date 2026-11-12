@@ -60,6 +60,22 @@ interface AsaasList<T> {
   hasMore?: boolean;
 }
 
+// A página de pagamento só pode ficar em asaas.com (ou subdomínio), por https. O endereço vai para o NAVEGADOR do dono, então
+// um `link` inesperado (resposta adulterada, servidor falso em dev) não pode virar redirecionamento para outro site.
+export function isAsaasCheckoutUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && (url.hostname === "asaas.com" || url.hostname.endsWith(".asaas.com"));
+  } catch {
+    return false;
+  }
+}
+
+// Corpo de erro do provedor vai ao log truncado e SEM sequências de 11 a 14 dígitos (CPF/CNPJ que ele possa ecoar).
+function redactForLog(text: string): string {
+  return text.slice(0, 300).replace(/\d[\d.\-/]{9,}\d/g, "[numero]");
+}
+
 // Só identifica de que ambiente é a chave, para conferir no log do boot se é a credencial que você pensa que é
 // (sandbox x produção). NUNCA devolve a chave nem pedaço dela.
 export function describeApiKey(key: string): "sandbox" | "produção" | "formato não reconhecido" {
@@ -116,7 +132,7 @@ export class AsaasClient implements OnModuleInit {
   // Endereço da página de pagamento hospedada. Usa o `link` que o provedor devolveu quando houver; senão monta a
   // partir do id (o id é sempre texto vindo do provedor, nunca do usuário).
   checkoutUrl(checkout: AsaasCheckout): string {
-    if (checkout.link && /^https:\/\//.test(checkout.link)) return checkout.link;
+    if (checkout.link && isAsaasCheckoutUrl(checkout.link)) return checkout.link;
     const base = this.isSandbox() ? SANDBOX_CHECKOUT_BASE : PRODUCTION_CHECKOUT_BASE;
     return `${base}?id=${encodeURIComponent(checkout.id)}`;
   }
@@ -141,7 +157,7 @@ export class AsaasClient implements OnModuleInit {
       const text = await response.text();
       if (!response.ok) {
         // Corpo logado só em nível de aviso, truncado, e nunca devolvido ao usuário.
-        this.logger.warn(`Asaas ${method} ${path} -> ${response.status}: ${text.slice(0, 300)}`);
+        this.logger.warn(`Asaas ${method} ${path} -> ${response.status}: ${redactForLog(text)}`);
         throw new PaymentProviderError(response.status, `Asaas respondeu ${response.status}`);
       }
       return (text ? JSON.parse(text) : undefined) as T;

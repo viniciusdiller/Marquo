@@ -26,6 +26,7 @@ interface World {
   pendingRedemption?: Record<string, unknown> | null;
   existingRedemption?: Record<string, unknown> | null;
   configured?: boolean;
+  pendingAttempts?: number;
   env?: Record<string, string>;
 }
 
@@ -34,6 +35,7 @@ function build(world: World = {}) {
 
   const tx = {
     $executeRaw: jest.fn().mockResolvedValue(1),
+    plan: { findUnique: jest.fn() },
     tenant: {
       findUniqueOrThrow: jest.fn().mockImplementation(async () => ({
         id: TENANT,
@@ -50,10 +52,13 @@ function build(world: World = {}) {
       delete: jest.fn().mockResolvedValue({}),
     },
     billingAttempt: {
+      // Upgrade pago anterior (cura do valor mensal): por padrão não há.
+      findFirst: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockImplementation(async ({ data }) => {
         state.attempt = { id: ATTEMPT, status: "PENDING", providerRef: null, expiresAt: new Date(Date.now() + DAY), ...data };
         return state.attempt;
       }),
+      count: jest.fn().mockResolvedValue(world.pendingAttempts ?? 0),
       findUnique: jest.fn().mockImplementation(async () => state.attempt),
       findUniqueOrThrow: jest.fn().mockImplementation(async () => state.attempt),
       update: jest.fn().mockImplementation(async ({ data }) => {
@@ -81,13 +86,14 @@ function build(world: World = {}) {
   const prisma = {
     $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
     plan: {
-      findUnique: jest.fn().mockImplementation(async ({ where }: { where: { tier: string } }) =>
-        ({
-          ESSENCIAL: { id: "plan-ess", tier: "ESSENCIAL", name: "Essencial", priceCents: 4990, maxProfessionals: 2 },
-          PROFISSIONAL: PLAN,
-          PREMIUM: { id: "plan-prem", tier: "PREMIUM", name: "Premium", priceCents: 18990, maxProfessionals: null },
-        })[where.tier] ?? null,
-      ),
+      findUnique: jest.fn().mockImplementation(async ({ where }: { where: { tier?: string; id?: string } }) => {
+        const plans = [
+          { id: "plan-ess", tier: "ESSENCIAL", name: "Essencial", priceCents: 4990, maxProfessionals: 2 },
+          PLAN,
+          { id: "plan-prem", tier: "PREMIUM", name: "Premium", priceCents: 18990, maxProfessionals: null },
+        ];
+        return plans.find((p) => (where.tier ? p.tier === where.tier : p.id === where.id)) ?? null;
+      }),
     },
     user: { findFirst: jest.fn().mockResolvedValue({ name: "Dono do Salão", email: "dono@salao.com" }) },
     coupon: tx.coupon,
@@ -104,6 +110,8 @@ function build(world: World = {}) {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
   } as unknown as PrismaService;
+
+  tx.plan = (prisma as unknown as { plan: typeof tx.plan }).plan;
 
   const asaas = {
     isConfigured: jest.fn().mockReturnValue(world.configured ?? true),
@@ -903,7 +911,7 @@ describe("PaymentsService.handleNotification", () => {
 
     await service.handleNotification("payment", "pay_a");
 
-    expect(prisma.billingAttempt.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { providerCustomerId: "cus_1" } }));
+    expect(prisma.billingAttempt.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { providerCustomerId: "cus_1", kind: "SUBSCRIPTION" } }));
     expect((state.subscription as Record<string, unknown>).providerSubscriptionId).toBe("sub_1");
   });
 
@@ -914,7 +922,7 @@ describe("PaymentsService.handleNotification", () => {
     await service.handleNotification("subscription", "sub_1");
 
     expect(asaas.getSubscription).toHaveBeenCalledWith("sub_1");
-    expect(prisma.billingAttempt.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { providerCustomerId: "cus_1" } }));
+    expect(prisma.billingAttempt.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { providerCustomerId: "cus_1", kind: "SUBSCRIPTION" } }));
     expect(asaas.listSubscriptionsByCustomer).toHaveBeenCalledWith("cus_1");
   });
 
@@ -1060,61 +1068,329 @@ describe("PaymentsService.changePlan", () => {
   const paidPix = (over: Record<string, unknown> = {}) =>
     paidCard({ method: "PIX_MONTHLY", providerSubscriptionId: null, ...over });
   const confirmed = [{ id: "pay_a", status: "CONFIRMED", value: 99.9, dueDate: "2026-11-01" }];
+  const knownCustomer = (prisma: PrismaService) =>
+    (prisma.billingAttempt.findFirst as jest.Mock).mockResolvedValueOnce({ providerCustomerId: "cus_conhecido" });
 
-  it("upgrade no cartão: atualiza o valor da recorrência no provedor e grava o plano", async () => {
-    const { service, asaas, state } = build({ subscription: paidCard() });
-    asaas.listSubscriptionPayments.mockResolvedValue(confirmed);
+  describe("para plano MAIS CARO (upgrade): a diferença é cobrada e o plano só sobe quando o pagamento for confirmado", () => {
+    it("gera um Pix da diferença PROPORCIONAL e NÃO troca o plano nem o valor da assinatura ainda", async () => {
+      const { service, prisma, asaas, state, tx } = build({ subscription: paidCard() });
+      asaas.listSubscriptionPayments.mockResolvedValue(confirmed);
+      knownCustomer(prisma);
 
-    const result = await service.changePlan(TENANT, "PREMIUM" as never);
+      const result = await service.changePlan(TENANT, "PREMIUM" as never, { userId: USER });
 
-    expect(asaas.updateSubscriptionValue).toHaveBeenCalledWith("sub_1", 18990);
-    expect((state.subscription as Record<string, unknown>).planId).toBe("plan-prem");
-    expect(result.effective).toMatch(/próxima cobrança/);
+      // Diferença cheia = 18990 - 9990 = 9000; faltam ~15 de 30 dias → ~4500.
+      expect(result).toMatchObject({ applied: false, requiresPayment: true, planName: "Premium", qrCode: "000201..." });
+      if (result.applied) throw new Error("esperava pagamento");
+      expect(result.chargeCents).toBeGreaterThan(4300);
+      expect(result.chargeCents).toBeLessThan(4700);
+
+      expect(tx.billingAttempt.create.mock.calls[0][0].data).toMatchObject({
+        tenantId: TENANT,
+        planId: "plan-prem",
+        fromPlanId: "plan-pro",
+        kind: "PLAN_UPGRADE",
+        method: "PIX_MONTHLY",
+        listPriceCents: 18990,
+        discountCents: 0,
+        chargeCents: result.chargeCents,
+      });
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-pro");
+      expect(asaas.updateSubscriptionValue).not.toHaveBeenCalled();
+      expect(asaas.createPixPayment).toHaveBeenCalledWith(expect.objectContaining({ customerId: "cus_conhecido", amountCents: result.chargeCents }));
+    });
+
+    it("reaproveita o cliente do Asaas (não pede CPF/CNPJ de novo) e não cria outro cliente", async () => {
+      const { service, prisma, asaas, tx } = build({ subscription: paidPix() });
+      knownCustomer(prisma);
+      await service.changePlan(TENANT, "PREMIUM" as never, { userId: USER });
+      expect(asaas.createCustomer).not.toHaveBeenCalled();
+      expect(tx.billingAttempt.update.mock.calls.map((c) => c[0].data)).toEqual(
+        expect.arrayContaining([{ providerCustomerId: "cus_conhecido" }]),
+      );
+    });
+
+    it("sem cliente conhecido e sem documento: 400, nada é criado", async () => {
+      const { service, asaas, tx } = build({ subscription: paidPix() });
+      await expect(service.changePlan(TENANT, "PREMIUM" as never, { userId: USER })).rejects.toThrow(BadRequestException);
+      expect(tx.billingAttempt.create).not.toHaveBeenCalled();
+      expect(asaas.createPixPayment).not.toHaveBeenCalled();
+    });
+
+    it("sem cliente conhecido, com documento válido: cria o cliente (documento só em dígitos) e gera o Pix", async () => {
+      const { service, asaas } = build({ subscription: paidPix() });
+      await service.changePlan(TENANT, "PREMIUM" as never, { userId: USER, cpfCnpj: CPF });
+      expect(asaas.createCustomer).toHaveBeenCalledWith(expect.objectContaining({ cpfCnpj: CPF_DIGITS, externalReference: ATTEMPT }));
+    });
+
+    it("documento inválido na troca: 400 antes de criar qualquer coisa", async () => {
+      const { service, tx } = build({ subscription: paidPix() });
+      await expect(service.changePlan(TENANT, "PREMIUM" as never, { userId: USER, cpfCnpj: "123" })).rejects.toThrow(BadRequestException);
+      expect(tx.billingAttempt.create).not.toHaveBeenCalled();
+    });
+
+    it("no cartão, antes da 1ª cobrança confirmada (valor ainda com o cupom) não troca", async () => {
+      const { service, asaas, tx } = build({ subscription: paidCard() });
+      asaas.listSubscriptionPayments.mockResolvedValue([{ id: "pay_a", status: "PENDING", value: 79.92, dueDate: "2026-11-01" }]);
+      await expect(service.changePlan(TENANT, "PREMIUM" as never, { userId: USER })).rejects.toThrow(/primeira cobrança/);
+      expect(tx.billingAttempt.create).not.toHaveBeenCalled();
+    });
+
+    it("sem provedor configurado: 503 e nada muda", async () => {
+      const { service, state } = build({ subscription: paidPix(), configured: false });
+      await expect(service.changePlan(TENANT, "PREMIUM" as never, { userId: USER })).rejects.toThrow(/ainda não está disponível/);
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-pro");
+    });
+
+    it("falha do provedor ao gerar o Pix: 502 e o plano NÃO muda", async () => {
+      const { service, prisma, asaas, state } = build({ subscription: paidPix() });
+      knownCustomer(prisma);
+      (asaas.createPixPayment as jest.Mock).mockRejectedValueOnce(new PaymentProviderError(500, "segredo"));
+      const attempt = service.changePlan(TENANT, "PREMIUM" as never, { userId: USER });
+      await expect(attempt).rejects.toBeInstanceOf(BadGatewayException);
+      await expect(attempt).rejects.not.toThrow(/segredo/);
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-pro");
+    });
+
+    it("o plano mudou/cancelou entre a prévia e o pedido (relido sob o lock): 409, nada é criado", async () => {
+      const { service, prisma, tx, asaas } = build({ subscription: paidPix() });
+      knownCustomer(prisma);
+      // 1ª leitura (contexto) vê o plano antigo; a 2ª, sob o lock, já mudou.
+      tx.subscription.findUnique.mockResolvedValueOnce(paidPix()).mockResolvedValueOnce(paidPix({ planId: "plan-prem" }));
+      await expect(service.changePlan(TENANT, "PREMIUM" as never, { userId: USER })).rejects.toThrow(/mudou enquanto/);
+      expect(tx.billingAttempt.create).not.toHaveBeenCalled();
+      expect(asaas.createPixPayment).not.toHaveBeenCalled();
+    });
+
+    it("um pedido novo substitui o Pix de upgrade ainda em aberto: o antigo é relido e, não pago, removido no provedor", async () => {
+      const old = {
+        id: ATTEMPT, tenantId: TENANT, planId: "plan-prem", fromPlanId: "plan-pro", kind: "PLAN_UPGRADE", method: "PIX_MONTHLY",
+        status: "PENDING", listPriceCents: 18990, discountCents: 0, chargeCents: 4500, couponRedemptionId: null, couponReserved: false,
+        providerRef: "pay_old", providerCustomerId: "cus_conhecido",
+      };
+      const { service, prisma, asaas, state } = build({ subscription: paidPix(), attempt: old });
+      (prisma.billingAttempt.findMany as jest.Mock).mockResolvedValueOnce([{ id: ATTEMPT }]);
+      (asaas.getPayment as jest.Mock).mockResolvedValue({ id: "pay_old", status: "PENDING", externalReference: ATTEMPT, value: 45 });
+      knownCustomer(prisma);
+
+      await service.changePlan(TENANT, "PREMIUM" as never, { userId: USER });
+
+      expect(asaas.deletePayment).toHaveBeenCalledWith("pay_old");
+      expect(asaas.createPixPayment).toHaveBeenCalledTimes(1);
+      expect((state.attempt as Record<string, unknown>).kind).toBe("PLAN_UPGRADE");
+    });
   });
 
-  // O requisito: não dá para rebaixar para um plano que não comporta a equipe que o negócio tem.
-  it("downgrade com equipe MAIOR que o plano novo é recusado e nada muda", async () => {
-    const { service, asaas, planLimit, state } = build({ subscription: paidCard() });
-    (planLimit.assertCanDowngrade as jest.Mock).mockRejectedValueOnce(
-      new ConflictException("Você tem 4 profissionais ativos, mas o plano Essencial permite no máximo 2."),
-    );
+  describe("quando o Pix da diferença é CONFIRMADO", () => {
+    const upgradeAttempt = (over: Record<string, unknown> = {}) => ({
+      id: ATTEMPT, tenantId: TENANT, planId: "plan-prem", fromPlanId: "plan-pro", kind: "PLAN_UPGRADE", method: "PIX_MONTHLY",
+      status: "PENDING", listPriceCents: 18990, discountCents: 0, chargeCents: 4500, couponRedemptionId: null, couponReserved: false,
+      providerRef: "pay_up", providerCustomerId: "cus_conhecido", ...over,
+    });
+    const received = (over: Record<string, unknown> = {}) => ({ id: "pay_up", status: "RECEIVED", externalReference: ATTEMPT, value: 45, ...over });
 
-    await expect(service.changePlan(TENANT, "ESSENCIAL" as never)).rejects.toThrow(/4 profissionais ativos/);
+    it("sobe o plano, MANTÉM o período e a forma de pagamento, e não soma mês novo", async () => {
+      const end = new Date(Date.now() + 15 * DAY);
+      const { service, asaas, state, tx } = build({ attempt: upgradeAttempt(), subscription: paidPix({ currentPeriodEnd: end }) });
+      (asaas.getPayment as jest.Mock).mockResolvedValue(received());
 
-    expect(planLimit.assertCanDowngrade).toHaveBeenCalledWith(TENANT, "ESSENCIAL");
-    expect(asaas.updateSubscriptionValue).not.toHaveBeenCalled();
-    expect((state.subscription as Record<string, unknown>).planId).toBe("plan-pro");
+      await service.syncAttempt(ATTEMPT);
+
+      expect(state.subscription).toMatchObject({ planId: "plan-prem", method: "PIX_MONTHLY", currentPeriodEnd: end });
+      expect((state.attempt as Record<string, unknown>).status).toBe("APPROVED");
+      expect(tx.subscription.upsert).not.toHaveBeenCalled();
+      expect(asaas.deleteSubscription).not.toHaveBeenCalled();
+    });
+
+    it("quem paga no cartão: o valor mensal da assinatura no provedor sobe para o preço do plano novo", async () => {
+      const { service, asaas, state } = build({ attempt: upgradeAttempt(), subscription: paidCard() });
+      (asaas.getPayment as jest.Mock).mockResolvedValue(received());
+      await service.syncAttempt(ATTEMPT);
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-prem");
+      expect(asaas.updateSubscriptionValue).toHaveBeenCalledWith("sub_1", 18990);
+    });
+
+    it("falha ao subir o valor no provedor NÃO desfaz o upgrade já pago (fica no log; a releitura corrige)", async () => {
+      const { service, asaas, state } = build({ attempt: upgradeAttempt(), subscription: paidCard() });
+      (asaas.getPayment as jest.Mock).mockResolvedValue(received());
+      asaas.updateSubscriptionValue.mockRejectedValueOnce(new PaymentProviderError(400, "tokenização"));
+      await expect(service.syncAttempt(ATTEMPT)).resolves.toBeUndefined();
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-prem");
+    });
+
+    it("aplicar duas vezes (webhook repetido + tela) sobe o plano UMA vez", async () => {
+      const { service, asaas, tx } = build({ attempt: upgradeAttempt(), subscription: paidPix() });
+      (asaas.getPayment as jest.Mock).mockResolvedValue(received());
+      await service.syncAttempt(ATTEMPT);
+      await service.syncAttempt(ATTEMPT);
+      expect(tx.subscription.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["valor menor que a diferença cobrada", received({ value: 5 })],
+      ["valor maior", received({ value: 100 })],
+      ["referência de outra tentativa", received({ externalReference: "44444444-4444-4444-8444-444444444444" })],
+      ["id de outra cobrança", received({ id: "pay_outra" })],
+      ["ainda pendente", received({ status: "PENDING" })],
+      ["recebida em dinheiro (marcação manual)", received({ status: "RECEIVED_IN_CASH" })],
+    ])("pagamento com %s NÃO sobe o plano", async (_label, payment) => {
+      const { service, asaas, state } = build({ attempt: upgradeAttempt(), subscription: paidPix() });
+      (asaas.getPayment as jest.Mock).mockResolvedValue(payment);
+      await service.syncAttempt(ATTEMPT);
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-pro");
+      expect((state.attempt as Record<string, unknown>).status).toBe("PENDING");
+    });
+
+    it.each([
+      ["o plano mudou por outro caminho (origem diferente)", paidPix({ planId: "plan-ess" })],
+      ["a assinatura foi cancelada", paidPix({ cancelAtPeriodEnd: true })],
+      ["virou cortesia", paidPix({ courtesy: true, method: null })],
+      ["a assinatura caiu (cancelada no provedor)", paidPix({ status: "CANCELED" })],
+    ])("dinheiro recebido, mas %s: plano NÃO é trocado às cegas (tentativa fica APPROVED e vai para revisão)", async (_label, subscription) => {
+      const { service, asaas, state } = build({ attempt: upgradeAttempt(), subscription });
+      (asaas.getPayment as jest.Mock).mockResolvedValue(received());
+      await service.syncAttempt(ATTEMPT);
+      expect((state.subscription as Record<string, unknown>).planId).toBe((subscription as { planId: string }).planId);
+      expect((state.attempt as Record<string, unknown>).status).toBe("APPROVED");
+    });
+
+    it("cobrança estornada/removida: tentativa FAILED e o plano não sobe", async () => {
+      const { service, asaas, state } = build({ attempt: upgradeAttempt(), subscription: paidPix() });
+      (asaas.getPayment as jest.Mock).mockResolvedValue(received({ status: "REFUNDED" }));
+      await service.syncAttempt(ATTEMPT);
+      expect((state.attempt as Record<string, unknown>).status).toBe("FAILED");
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-pro");
+    });
+
+    it("upgrade nunca é aplicado como mensalidade: não grava assinatura nova, não mexe em cupom", async () => {
+      const { service, asaas, tx } = build({ attempt: upgradeAttempt(), subscription: paidPix() });
+      (asaas.getPayment as jest.Mock).mockResolvedValue(received());
+      await service.syncAttempt(ATTEMPT);
+      expect(tx.subscription.upsert).not.toHaveBeenCalled();
+      expect(tx.couponRedemption.updateMany).not.toHaveBeenCalled();
+    });
   });
 
-  it("downgrade que a equipe comporta é permitido", async () => {
-    const { service, asaas, state } = build({ subscription: paidCard() });
-    asaas.listSubscriptionPayments.mockResolvedValue(confirmed);
-    await service.changePlan(TENANT, "ESSENCIAL" as never);
-    expect(asaas.updateSubscriptionValue).toHaveBeenCalledWith("sub_1", 4990);
-    expect((state.subscription as Record<string, unknown>).planId).toBe("plan-ess");
+  describe("cura do valor mensal do cartão depois de um upgrade pago", () => {
+    const cardAttempt = {
+      id: ATTEMPT, tenantId: TENANT, planId: "plan-pro", method: "CARD_RECURRING", kind: "SUBSCRIPTION", status: "APPROVED",
+      listPriceCents: 9990, discountCents: 0, chargeCents: 9990, couponRedemptionId: null, couponReserved: false,
+      providerRef: "chk_1", providerCustomerId: "cus_1",
+    };
+    const premiumSub = () => paidCard({ planId: "plan-prem" });
+    const provider = (asaas: Record<string, jest.Mock>, value: number) => {
+      asaas.listSubscriptionsByCustomer.mockResolvedValue([{ id: "sub_1", status: "ACTIVE", customer: "cus_1", value }]);
+      asaas.listSubscriptionPayments.mockResolvedValue([{ id: "pay_a", status: "CONFIRMED", value: 99.9, dueDate: asaasDate(new Date()) }]);
+    };
+
+    it("plano já é o Premium (upgrade pago) mas a assinatura ainda cobra o valor antigo: sobe até o preço combinado", async () => {
+      const { service, asaas, tx } = build({ attempt: cardAttempt, subscription: premiumSub() });
+      tx.billingAttempt.findFirst.mockResolvedValue({ listPriceCents: 18990 });
+      provider(asaas, 99.9);
+      await service.syncAttempt(ATTEMPT);
+      expect(asaas.updateSubscriptionValue).toHaveBeenCalledWith("sub_1", 18990);
+    });
+
+    it("valor já correto: não chama o provedor", async () => {
+      const { service, asaas, tx } = build({ attempt: cardAttempt, subscription: premiumSub() });
+      tx.billingAttempt.findFirst.mockResolvedValue({ listPriceCents: 18990 });
+      provider(asaas, 189.9);
+      await service.syncAttempt(ATTEMPT);
+      expect(asaas.updateSubscriptionValue).not.toHaveBeenCalled();
+    });
+
+    it("NUNCA baixa o valor (a cura só sobe) e nunca reajusta quem não fez upgrade (reajuste combinado fica)", async () => {
+      const higher = build({ attempt: cardAttempt, subscription: premiumSub() });
+      higher.tx.billingAttempt.findFirst.mockResolvedValue({ listPriceCents: 18990 });
+      provider(higher.asaas, 250);
+      await higher.service.syncAttempt(ATTEMPT);
+      expect(higher.asaas.updateSubscriptionValue).not.toHaveBeenCalled();
+
+      const noUpgrade = build({ attempt: cardAttempt, subscription: paidCard() });
+      provider(noUpgrade.asaas, 79.9); // valor combinado diferente do preço de tabela, sem upgrade: não mexe
+      await noUpgrade.service.syncAttempt(ATTEMPT);
+      expect(noUpgrade.asaas.updateSubscriptionValue).not.toHaveBeenCalled();
+    });
+
+    it("a busca do upgrade é do próprio negócio, do plano ATUAL, aprovada e a mais recente", async () => {
+      const { service, asaas, tx } = build({ attempt: cardAttempt, subscription: premiumSub() });
+      provider(asaas, 99.9);
+      await service.syncAttempt(ATTEMPT);
+      expect(tx.billingAttempt.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId: TENANT, kind: "PLAN_UPGRADE", status: "APPROVED", planId: "plan-prem" },
+          orderBy: { approvedAt: "desc" },
+        }),
+      );
+    });
   });
 
-  it("Pix: troca o plano sem falar com o provedor; o valor novo vale no próximo Pix", async () => {
-    const { service, asaas, state } = build({ subscription: paidPix() });
-    const result = await service.changePlan(TENANT, "PREMIUM" as never);
-    expect(asaas.updateSubscriptionValue).not.toHaveBeenCalled();
-    expect((state.subscription as Record<string, unknown>).planId).toBe("plan-prem");
-    expect(result.effective).toMatch(/próximo Pix/);
-  });
+  describe("para plano MAIS BARATO (ou mesmo preço): vale na hora, sem cobrança agora e sem reembolso", () => {
+    it("downgrade no cartão: atualiza o valor da recorrência no provedor e grava o plano", async () => {
+      const { service, asaas, state } = build({ subscription: paidCard({ planId: "plan-prem" }) });
+      asaas.listSubscriptionPayments.mockResolvedValue(confirmed);
 
-  it("falha do provedor ao trocar: 502 e o plano NÃO muda (não finge que trocou)", async () => {
-    const { service, asaas, state } = build({ subscription: paidCard() });
-    asaas.listSubscriptionPayments.mockResolvedValue(confirmed);
-    asaas.updateSubscriptionValue.mockRejectedValueOnce(new PaymentProviderError(500, "x"));
-    await expect(service.changePlan(TENANT, "PREMIUM" as never)).rejects.toBeInstanceOf(BadGatewayException);
-    expect((state.subscription as Record<string, unknown>).planId).toBe("plan-pro");
-  });
+      const result = await service.changePlan(TENANT, "PROFISSIONAL" as never);
 
-  it("antes da 1ª cobrança confirmada (valor ainda com o cupom) não troca", async () => {
-    const { service, asaas } = build({ subscription: paidCard() });
-    asaas.listSubscriptionPayments.mockResolvedValue([{ id: "pay_a", status: "PENDING", value: 79.92, dueDate: "2026-11-01" }]);
-    await expect(service.changePlan(TENANT, "PREMIUM" as never)).rejects.toThrow(/primeira cobrança/);
-    expect(asaas.updateSubscriptionValue).not.toHaveBeenCalled();
+      expect(asaas.updateSubscriptionValue).toHaveBeenCalledWith("sub_1", 9990);
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-pro");
+      expect(result).toMatchObject({ applied: true, planName: "Profissional" });
+      if (result.applied) expect(result.effective).toMatch(/próxima cobrança/);
+      expect(asaas.createPixPayment).not.toHaveBeenCalled();
+    });
+
+    // O requisito: não dá para rebaixar para um plano que não comporta a equipe que o negócio tem.
+    it("downgrade com equipe MAIOR que o plano novo é recusado e nada muda", async () => {
+      const { service, asaas, planLimit, state } = build({ subscription: paidCard() });
+      (planLimit.assertCanDowngrade as jest.Mock).mockRejectedValueOnce(
+        new ConflictException("Você tem 4 profissionais ativos, mas o plano Essencial permite no máximo 2."),
+      );
+
+      await expect(service.changePlan(TENANT, "ESSENCIAL" as never)).rejects.toThrow(/4 profissionais ativos/);
+
+      expect(planLimit.assertCanDowngrade).toHaveBeenCalledWith(TENANT, "ESSENCIAL");
+      expect(asaas.updateSubscriptionValue).not.toHaveBeenCalled();
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-pro");
+    });
+
+    it("downgrade que a equipe comporta é permitido", async () => {
+      const { service, asaas, state } = build({ subscription: paidCard() });
+      asaas.listSubscriptionPayments.mockResolvedValue(confirmed);
+      await service.changePlan(TENANT, "ESSENCIAL" as never);
+      expect(asaas.updateSubscriptionValue).toHaveBeenCalledWith("sub_1", 4990);
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-ess");
+    });
+
+    it("Pix: troca o plano sem falar com o provedor; o valor novo vale no próximo Pix", async () => {
+      const { service, asaas, state } = build({ subscription: paidPix({ planId: "plan-prem" }) });
+      const result = await service.changePlan(TENANT, "PROFISSIONAL" as never);
+      expect(asaas.updateSubscriptionValue).not.toHaveBeenCalled();
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-pro");
+      expect(result).toMatchObject({ applied: true });
+      if (result.applied) expect(result.effective).toMatch(/próximo Pix/);
+    });
+
+    it("falha do provedor ao trocar: 502 e o plano NÃO muda (não finge que trocou)", async () => {
+      const { service, asaas, state } = build({ subscription: paidCard({ planId: "plan-prem" }) });
+      asaas.listSubscriptionPayments.mockResolvedValue(confirmed);
+      asaas.updateSubscriptionValue.mockRejectedValueOnce(new PaymentProviderError(500, "x"));
+      await expect(service.changePlan(TENANT, "PROFISSIONAL" as never)).rejects.toBeInstanceOf(BadGatewayException);
+      expect((state.subscription as Record<string, unknown>).planId).toBe("plan-prem");
+    });
+
+    it("antes da 1ª cobrança confirmada (valor ainda com o cupom) não troca", async () => {
+      const { service, asaas } = build({ subscription: paidCard({ planId: "plan-prem" }) });
+      asaas.listSubscriptionPayments.mockResolvedValue([{ id: "pay_a", status: "PENDING", value: 79.92, dueDate: "2026-11-01" }]);
+      await expect(service.changePlan(TENANT, "PROFISSIONAL" as never)).rejects.toThrow(/primeira cobrança/);
+      expect(asaas.updateSubscriptionValue).not.toHaveBeenCalled();
+    });
+
+    it("duas trocas simultâneas: a que perde a corrida (plano antigo no WHERE) recebe 409", async () => {
+      const { service, tx } = build({ subscription: paidPix({ planId: "plan-prem" }) });
+      tx.subscription.updateMany.mockResolvedValueOnce({ count: 0 });
+      await expect(service.changePlan(TENANT, "PROFISSIONAL" as never)).rejects.toThrow(/mudou enquanto/);
+      expect(tx.subscription.updateMany.mock.calls[0][0].where).toMatchObject({ tenantId: TENANT, planId: "plan-prem", courtesy: false });
+    });
   });
 
   it.each([
@@ -1125,16 +1401,48 @@ describe("PaymentsService.changePlan", () => {
     ["mesmo plano", paidCard({ planId: "plan-prem" }), /já é o seu plano/],
     ["Pix com o mês vencido", paidPix({ currentPeriodEnd: new Date(Date.now() - DAY) }), /próximo mês/],
   ])("recusa a troca: %s", async (_label, subscription, message) => {
-    const { service, asaas } = build({ subscription: subscription as Record<string, unknown> | null });
-    await expect(service.changePlan(TENANT, "PREMIUM" as never)).rejects.toThrow(message as RegExp);
+    const { service, asaas, tx } = build({ subscription: subscription as Record<string, unknown> | null });
+    await expect(service.changePlan(TENANT, "PREMIUM" as never, { userId: USER })).rejects.toThrow(message as RegExp);
     expect(asaas.updateSubscriptionValue).not.toHaveBeenCalled();
+    expect(asaas.createPixPayment).not.toHaveBeenCalled();
+    expect(tx.billingAttempt.create).not.toHaveBeenCalled();
   });
 
-  it("duas trocas simultâneas: a que perde a corrida (plano antigo no WHERE) recebe 409", async () => {
-    const { service, tx } = build({ subscription: paidPix() });
-    tx.subscription.updateMany.mockResolvedValueOnce({ count: 0 });
-    await expect(service.changePlan(TENANT, "PREMIUM" as never)).rejects.toThrow(/mudou enquanto/);
-    expect(tx.subscription.updateMany.mock.calls[0][0].where).toMatchObject({ tenantId: TENANT, planId: "plan-pro", courtesy: false });
+  describe("quoteChangePlan (prévia, não cria nada)", () => {
+    it("upgrade: PAYMENT com a diferença proporcional e os dias restantes", async () => {
+      const { service, asaas, tx } = build({ subscription: paidCard() });
+      const quote = await service.quoteChangePlan(TENANT, "PREMIUM" as never);
+      expect(quote).toMatchObject({ kind: "PAYMENT", planName: "Premium", newPriceCents: 18990, currentPriceCents: 9990 });
+      expect(quote.chargeCents).toBeGreaterThan(4300);
+      expect(quote.chargeCents).toBeLessThan(4700);
+      expect(quote.remainingDays).toBe(15);
+      expect(tx.billingAttempt.create).not.toHaveBeenCalled();
+      expect(asaas.createCustomer).not.toHaveBeenCalled();
+      expect(asaas.createPixPayment).not.toHaveBeenCalled();
+    });
+
+    it("downgrade: IMMEDIATE, sem cobrança, e já avisa se a equipe não couber", async () => {
+      const ok = build({ subscription: paidCard() });
+      await expect(ok.service.quoteChangePlan(TENANT, "ESSENCIAL" as never)).resolves.toMatchObject({ kind: "IMMEDIATE", chargeCents: null, remainingDays: null });
+
+      const tooBig = build({ subscription: paidCard() });
+      (tooBig.planLimit.assertCanDowngrade as jest.Mock).mockRejectedValueOnce(new ConflictException("equipe grande"));
+      await expect(tooBig.service.quoteChangePlan(TENANT, "ESSENCIAL" as never)).rejects.toThrow("equipe grande");
+    });
+
+    it("aplica as mesmas recusas do pedido (cortesia, cancelada, mesmo plano)", async () => {
+      const { service } = build({ subscription: paidCard({ cancelAtPeriodEnd: true }) });
+      await expect(service.quoteChangePlan(TENANT, "PREMIUM" as never)).rejects.toThrow(/cancelada/);
+    });
+
+    it("o valor da prévia é o mesmo que será cobrado (mesma função, mesmo servidor)", async () => {
+      const { service, prisma } = build({ subscription: paidPix() });
+      knownCustomer(prisma);
+      const quote = await service.quoteChangePlan(TENANT, "PREMIUM" as never);
+      const result = await service.changePlan(TENANT, "PREMIUM" as never, { userId: USER });
+      if (result.applied) throw new Error("esperava pagamento");
+      expect(Math.abs(result.chargeCents - (quote.chargeCents as number))).toBeLessThanOrEqual(2);
+    });
   });
 });
 
@@ -1177,5 +1485,164 @@ describe("PaymentsService: releitura do cartão depois de trocar de plano", () =
 
     expect((state.subscription as Record<string, unknown>).planId).toBe("plan-prem");
     expect(asaas.updateSubscriptionValue).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Adulteração (Burp Suite & cia): o que um dono autenticado, ou quem forja um webhook, tenta e o servidor tem de recusar.
+// Cada teste descreve o ataque. A regra geral: o servidor decide valor, plano, pagador e estado; o cliente só escolhe o plano.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+describe("PaymentsService: tentativas de fraude", () => {
+  const pixAttempt = (over: Record<string, unknown> = {}) => ({
+    id: ATTEMPT, tenantId: TENANT, planId: "plan-pro", method: "PIX_MONTHLY", status: "PENDING",
+    listPriceCents: 9990, discountCents: 0, chargeCents: 9990, couponRedemptionId: null, couponReserved: false,
+    providerRef: "pay_1", providerCustomerId: "cus_1", ...over,
+  });
+
+  it("o valor cobrado vem SEMPRE do catálogo do servidor: o plano é a única entrada e o valor segue para o provedor", async () => {
+    const { service, asaas } = build();
+    await service.startPix(TENANT, USER, "ESSENCIAL" as never, CPF);
+    expect(asaas.createPixPayment).toHaveBeenCalledWith(expect.objectContaining({ amountCents: 4990 }));
+    // A assinatura do método não aceita valor: não há por onde um cliente injetar preço.
+    expect(service.startPix.length).toBeLessThanOrEqual(5);
+  });
+
+  it("cupom de desconto nunca leva a cobrança abaixo do mínimo (R$ 5,00), nem com desconto fixo absurdo", async () => {
+    const { service, tx } = build({ coupon: { ...percentCoupon, kind: "FIXED_CENTS", value: 99_999_999 } });
+    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF, "PROMO20");
+    expect(tx.billingAttempt.create.mock.calls[0][0].data.chargeCents).toBe(500);
+  });
+
+  it("cupom de 100% ou acima não zera a cobrança", async () => {
+    const { service, tx } = build({ coupon: { ...percentCoupon, value: 100 } });
+    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF, "PROMO20");
+    expect(tx.billingAttempt.create.mock.calls[0][0].data.chargeCents).toBeGreaterThanOrEqual(500);
+  });
+
+  it("o pagador e o e-mail vêm do banco (tenant no WHERE): usuário de outro negócio não é encontrado", async () => {
+    const { service, prisma, asaas } = build();
+    (prisma.user.findFirst as jest.Mock).mockResolvedValueOnce(null);
+    await expect(service.startPix(TENANT, "99999999-9999-4999-8999-999999999999", "PROFISSIONAL" as never, CPF)).rejects.toThrow(/Usuário não encontrado/);
+    expect(asaas.createCustomer).not.toHaveBeenCalled();
+    expect(prisma.user.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "99999999-9999-4999-8999-999999999999", tenantId: TENANT } }));
+  });
+
+  it("webhook/tela com id de cobrança de OUTRO negócio: o valor pago e a referência têm de bater com a tentativa deste", async () => {
+    // Atacante paga uma cobrança barata dele e tenta usar o id na tentativa cara de outro.
+    const { service, tx, asaas } = build({ attempt: pixAttempt({ providerRef: "pay_vitima", chargeCents: 18990 }) });
+    (asaas.getPayment as jest.Mock).mockResolvedValue({ id: "pay_vitima", status: "RECEIVED", externalReference: "44444444-4444-4444-8444-444444444444", value: 49.9 });
+    await service.syncAttempt(ATTEMPT);
+    expect(tx.subscription.upsert).not.toHaveBeenCalled();
+  });
+
+  it("pagar MENOS do que o plano custa (valor menor, mesmo com referência certa) não ativa nada", async () => {
+    const { service, tx, asaas } = build({ attempt: pixAttempt({ chargeCents: 18990 }) });
+    (asaas.getPayment as jest.Mock).mockResolvedValue({ id: "pay_1", status: "RECEIVED", externalReference: ATTEMPT, value: 49.9 });
+    await service.syncAttempt(ATTEMPT);
+    expect(tx.subscription.upsert).not.toHaveBeenCalled();
+  });
+
+  it("pagar MAIS do que o cobrado também é recusado (valor tem de ser exato, sem arredondar a favor de ninguém)", async () => {
+    const { service, tx, asaas } = build({ attempt: pixAttempt() });
+    (asaas.getPayment as jest.Mock).mockResolvedValue({ id: "pay_1", status: "RECEIVED", externalReference: ATTEMPT, value: 100 });
+    await service.syncAttempt(ATTEMPT);
+    expect(tx.subscription.upsert).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["valor como texto", "99.90"],
+    ["valor NaN", Number.NaN],
+    ["valor negativo", -99.9],
+    ["valor nulo", null],
+  ])("resposta do provedor com %s não ativa nada", async (_label, value) => {
+    const { service, tx, asaas } = build({ attempt: pixAttempt() });
+    (asaas.getPayment as jest.Mock).mockResolvedValue({ id: "pay_1", status: "RECEIVED", externalReference: ATTEMPT, value });
+    await service.syncAttempt(ATTEMPT);
+    expect(tx.subscription.upsert).not.toHaveBeenCalled();
+  });
+
+  it("estado inventado (status desconhecido, minúsculo, com espaço) não conta como pago", async () => {
+    for (const status of ["received", "PAID", "RECEIVED ", "approved", "OK", ""]) {
+      const { service, tx, asaas } = build({ attempt: pixAttempt() });
+      (asaas.getPayment as jest.Mock).mockResolvedValue({ id: "pay_1", status, externalReference: ATTEMPT, value: 99.9 });
+      await service.syncAttempt(ATTEMPT);
+      expect(tx.subscription.upsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it("o webhook não aplica nada com o que está no corpo: tudo passa pela releitura (um aviso de PAGO sem o provedor confirmar é ignorado)", async () => {
+    const { service, tx, asaas } = build({ attempt: pixAttempt() });
+    // O provedor responde que NÃO está pago, mesmo que o aviso (forjado) dissesse que sim.
+    (asaas.getPayment as jest.Mock).mockResolvedValue({ id: "pay_1", status: "PENDING", externalReference: ATTEMPT, value: 99.9 });
+    await service.handleNotification("payment", "pay_1");
+    expect(asaas.getPayment).toHaveBeenCalledWith("pay_1");
+    expect(tx.subscription.upsert).not.toHaveBeenCalled();
+  });
+
+  it("o tipo do aviso não escolhe a rota de leitura por conta própria: só payment/subscription/checkout existem", async () => {
+    const { service, asaas } = build();
+    for (const kind of ["__proto__", "constructor", "PAYMENT", "payments", "../payments", "payment/../x"]) {
+      await service.handleNotification(kind, "pay_1");
+    }
+    expect(asaas.getPayment).not.toHaveBeenCalled();
+    expect(asaas.getSubscription).not.toHaveBeenCalled();
+  });
+
+  it("id do aviso com caracteres de caminho não chega ao provedor sem ser codificado (o cliente HTTP codifica; aqui só passa como dado)", async () => {
+    const { service, asaas } = build();
+    (asaas.getPayment as jest.Mock).mockRejectedValueOnce(new PaymentProviderError(404, "x"));
+    await expect(service.handleNotification("payment", "../customers")).resolves.toBeUndefined();
+    expect(asaas.getPayment).toHaveBeenCalledWith("../customers");
+  });
+
+  it("tentativa de outro negócio: a consulta leva o tenant do JWT no WHERE e responde 404 igual a 'não existe'", async () => {
+    const { service, prisma } = build();
+    (prisma.billingAttempt.findFirst as jest.Mock).mockResolvedValue(null);
+    await expect(service.getAttempt(TENANT, "55555555-5555-4555-8555-555555555555")).rejects.toThrow(/não encontrada/);
+    expect(prisma.billingAttempt.findFirst).toHaveBeenCalledWith({ where: { id: "55555555-5555-4555-8555-555555555555", tenantId: TENANT } });
+  });
+
+  it("o retorno de checkout de cartão (?tentativa=) não ativa nada por si só: a tela só RELÊ o provedor", async () => {
+    const attempt = pixAttempt({ method: "CARD_RECURRING", providerRef: "chk_1" });
+    const { service, tx, asaas } = build({ attempt });
+    // O dono volta pela successUrl sem ter pago: o provedor não tem assinatura nenhuma.
+    asaas.listSubscriptionsByCustomer.mockResolvedValue([]);
+    const view = await service.getAttempt(TENANT, ATTEMPT);
+    expect(view.status).toBe("PENDING");
+    expect(tx.subscription.upsert).not.toHaveBeenCalled();
+  });
+
+  it("assinatura com cobrança paga, mas de OUTRO cliente do Asaas, não ativa o negócio", async () => {
+    const attempt = pixAttempt({ method: "CARD_RECURRING", providerRef: "chk_1" });
+    const { service, tx, asaas } = build({ attempt });
+    asaas.listSubscriptionsByCustomer.mockResolvedValue([{ id: "sub_x", status: "ACTIVE", customer: "cus_de_outro", value: 99.9 }]);
+    asaas.listSubscriptionPayments.mockResolvedValue([{ id: "p", status: "CONFIRMED", value: 99.9, dueDate: asaasDate(new Date()) }]);
+    await service.syncAttempt(ATTEMPT);
+    expect(tx.subscription.upsert).not.toHaveBeenCalled();
+  });
+
+  it("pagamento NÃO credita acesso a um negócio suspenso: a suspensão vence qualquer cobrança (decidida na leitura do estado)", async () => {
+    // A suspensão fica em Tenant.suspendedAt e computeBillingStatus a coloca acima de tudo; o pagamento só grava a assinatura.
+    const { service, tx, asaas } = build({ attempt: pixAttempt(), suspendedAt: new Date() });
+    (asaas.getPayment as jest.Mock).mockResolvedValue({ id: "pay_1", status: "RECEIVED", externalReference: ATTEMPT, value: 99.9 });
+    await service.syncAttempt(ATTEMPT);
+    // Grava a assinatura (o dinheiro entrou), mas nunca toca em suspendedAt.
+    expect(JSON.stringify(tx.subscription.upsert.mock.calls)).not.toContain("suspendedAt");
+  });
+
+  it("teto de tentativas em aberto: acima dele, 429 e NADA é criado no provedor (não dá para encher a conta do Asaas)", async () => {
+    const { service, tx, asaas } = build({ pendingAttempts: 10 });
+    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF)).rejects.toMatchObject({ status: 429 });
+    await expect(service.startCard(TENANT, USER, "PROFISSIONAL" as never, CPF)).rejects.toMatchObject({ status: 429 });
+    expect(tx.billingAttempt.create).not.toHaveBeenCalled();
+    expect(asaas.createCustomer).not.toHaveBeenCalled();
+  });
+
+  it("abaixo do teto segue normal, e o teto só conta tentativas PENDENTES do próprio negócio na última hora", async () => {
+    const { service, tx } = build({ pendingAttempts: 9 });
+    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF)).resolves.toBeDefined();
+    const where = tx.billingAttempt.count.mock.calls[0][0].where;
+    expect(where).toMatchObject({ tenantId: TENANT, status: "PENDING" });
+    expect(where.createdAt.gte).toBeInstanceOf(Date);
   });
 });

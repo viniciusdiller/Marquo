@@ -2,6 +2,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -10,6 +12,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import {
+  BillingAttemptKind,
   BillingAttemptStatus,
   BillingMethod,
   CouponKind,
@@ -37,7 +40,9 @@ import {
   addOneMonth,
   asaasDate,
   nextPeriodStart,
+  paidAmountMatches,
   parseAsaasDate,
+  prorateUpgrade,
   priceWithCoupon,
   reaisToCents,
   type PriceQuote,
@@ -50,6 +55,11 @@ const RENEWAL_WINDOW_MS = 10 * 24 * 60 * 60 * 1000;
 const CARD_ATTEMPT_TTL_MS = 48 * 60 * 60 * 1000;
 // O checkout hospedado do Asaas aceita de 10 a 1440 minutos de validade.
 const CHECKOUT_MINUTES_TO_EXPIRE = 1440;
+// Cada tentativa cria um cliente (e uma cobrança ou checkout) na conta do Asaas. Sem teto, um dono autenticado poderia
+// enchê-la de objetos e gastar a cota da API (25 mil requisições a cada 12 h, da conta inteira). Abandonar um checkout de
+// cartão deixa a tentativa PENDENTE por até 48 h, então o teto conta só a última hora.
+const MAX_PENDING_ATTEMPTS_PER_HOUR = 10;
+const HOUR_MS = 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const COUPON_ALREADY_USED_MESSAGE = "Este negócio já usou este cupom.";
@@ -68,8 +78,35 @@ export interface QuoteResult extends PriceQuote {
   couponError: string | null;
 }
 
+export interface PixIssued {
+  attemptId: string;
+  chargeCents: number;
+  expiresAt: Date;
+  qrCode: string;
+  qrCodeBase64: string | null;
+  ticketUrl: string | null;
+}
+
+// Resposta da troca de plano: ou já valeu (queda de plano / mesmo preço) ou exige pagar a diferença por Pix (upgrade).
+export type ChangePlanResult =
+  | { applied: true; planName: string; effective: string }
+  | ({ applied: false; requiresPayment: true; planName: string } & PixIssued);
+
+export interface ChangePlanQuote {
+  tier: PlanTier;
+  planName: string;
+  // IMMEDIATE = vale na hora, sem cobrança agora; PAYMENT = paga a diferença por Pix e o plano muda ao confirmar.
+  kind: "IMMEDIATE" | "PAYMENT";
+  newPriceCents: number;
+  currentPriceCents: number;
+  chargeCents: number | null;
+  remainingDays: number | null;
+  effective: string;
+}
+
 export interface AttemptView {
   id: string;
+  kind: BillingAttemptKind;
   method: BillingMethod;
   status: BillingAttemptStatus;
   chargeCents: number;
@@ -252,6 +289,8 @@ export class PaymentsService {
       });
       this.assertCanStart(tenant, method);
 
+      await this.assertPendingCap(tx, tenantId);
+
       const { choice, error } = await this.chooseCoupon(tx, tenantId, couponCode);
       if (error) throw new BadRequestException(error);
 
@@ -367,16 +406,26 @@ export class PaymentsService {
     const document = this.normalizeDocument(cpfCnpj);
     const owner = await this.owner(tenantId, userId);
     const { attempt, planName } = await this.createAttempt(tenantId, tier, BillingMethod.PIX_MONTHLY, couponCode);
+    return this.issuePix(attempt, `Marquo - Plano ${planName} (1 mês)`, (id) => this.createProviderCustomer(id, owner, document));
+  }
+
+  // Cria no Asaas a cobrança Pix de UMA tentativa (assinatura mensal ou diferença de upgrade) e devolve o QR Code. O valor
+  // cobrado é o da tentativa, que o servidor calculou. Qualquer falha encerra a tentativa e remove a cobrança do provedor.
+  private async issuePix(
+    attempt: { id: string; chargeCents: number; expiresAt: Date | null },
+    description: string,
+    customer: (attemptId: string) => Promise<string>,
+  ): Promise<PixIssued> {
     const expiresAt = attempt.expiresAt ?? new Date(Date.now() + PIX_VALIDITY_MS);
     let paymentId: string | null = null;
 
     try {
-      const customerId = await this.createProviderCustomer(attempt.id, owner, document);
+      const customerId = await customer(attempt.id);
       const payment = await this.asaas.createPixPayment({
         customerId,
         amountCents: attempt.chargeCents,
         dueDate: asaasDate(new Date()),
-        description: `Marquo - Plano ${planName} (1 mês)`,
+        description,
         externalReference: attempt.id,
       });
       if (!payment.id) throw new PaymentProviderError(null, "Resposta sem cobrança");
@@ -430,6 +479,7 @@ export class PaymentsService {
 
   private view(a: {
     id: string;
+    kind: BillingAttemptKind;
     method: BillingMethod;
     status: BillingAttemptStatus;
     chargeCents: number;
@@ -438,6 +488,7 @@ export class PaymentsService {
   }): AttemptView {
     return {
       id: a.id,
+      kind: a.kind,
       method: a.method,
       status: a.status,
       chargeCents: a.chargeCents,
@@ -491,6 +542,8 @@ export class PaymentsService {
 
   private async applyPixPayment(attemptId: string, payment: AsaasPayment): Promise<void> {
     let previousSubscription: string | null = null;
+    // Upgrade pago de quem assina no cartão: o valor mensal da assinatura no provedor passa ao do plano novo.
+    let upgradeValue: { subscriptionId: string; priceCents: number } | null = null;
 
     await this.prisma.$transaction(async (tx) => {
       const attempt = await tx.billingAttempt.findUnique({ where: { id: attemptId } });
@@ -507,8 +560,13 @@ export class PaymentsService {
       }
 
       if ((ASAAS_PAID_STATUSES as readonly string[]).includes(payment.status)) {
-        if (payment.value === undefined || reaisToCents(payment.value) !== current.chargeCents) {
+        if (!paidAmountMatches(payment.value, current.chargeCents)) {
           this.logger.error(`Valor pago (${payment.value}) difere do cobrado na tentativa ${current.id}; ignorado.`);
+          return;
+        }
+        // Diferença de upgrade: NÃO é um mês novo. Só troca o plano (se ainda for seguro) e mantém período e forma de pagamento.
+        if (current.kind === BillingAttemptKind.PLAN_UPGRADE) {
+          upgradeValue = await this.applyUpgradePayment(tx, current);
           return;
         }
         const existing = await tx.subscription.findUnique({ where: { tenantId: current.tenantId } });
@@ -550,6 +608,16 @@ export class PaymentsService {
       }
     });
 
+    if (upgradeValue) {
+      const target = upgradeValue as { subscriptionId: string; priceCents: number };
+      try {
+        await this.asaas.updateSubscriptionValue(target.subscriptionId, target.priceCents);
+      } catch (error) {
+        // O plano já foi trocado (o dinheiro entrou). A próxima leitura da assinatura corrige o valor mensal.
+        this.logger.error(`Não foi possível subir o valor da assinatura ${target.subscriptionId} após o upgrade: ${(error as Error).message}`);
+      }
+    }
+
     // Trocou de cartão para Pix: encerra a recorrência antiga para não cobrar nos dois (melhor esforço).
     if (previousSubscription) {
       try {
@@ -558,6 +626,53 @@ export class PaymentsService {
         this.logger.error(`Não foi possível cancelar a assinatura ${previousSubscription} ao migrar para Pix: ${(error as Error).message}`);
       }
     }
+  }
+
+  // O Pix da diferença foi confirmado (valor e referência já conferidos). Só agora o plano sobe, e só se o negócio ainda está
+  // como estava ao pedir a troca: mesmo plano de origem, assinatura paga viva e plano novo realmente mais caro. Se algo mudou
+  // no meio (cancelou, trocou de plano por outro caminho), o dinheiro fica registrado, nada é trocado às cegas e vai para o
+  // log para a equipe revisar. Devolve o novo valor mensal a gravar no provedor quando a assinatura é de cartão.
+  private async applyUpgradePayment(
+    tx: Prisma.TransactionClient,
+    attempt: { id: string; tenantId: string; planId: string; fromPlanId: string | null },
+  ): Promise<{ subscriptionId: string; priceCents: number } | null> {
+    const sub = await tx.subscription.findUnique({ where: { tenantId: attempt.tenantId } });
+    const target = await tx.plan.findUnique({ where: { id: attempt.planId } });
+    const from = sub ? await tx.plan.findUnique({ where: { id: sub.planId } }) : null;
+    const alive = sub?.status === SubscriptionStatus.ACTIVE || sub?.status === SubscriptionStatus.PAST_DUE;
+    const safe =
+      !!sub &&
+      !!target &&
+      !!from &&
+      !sub.courtesy &&
+      !!sub.method &&
+      alive &&
+      !sub.cancelAtPeriodEnd &&
+      sub.planId === attempt.fromPlanId &&
+      target.priceCents > from.priceCents;
+
+    await tx.billingAttempt.update({
+      where: { id: attempt.id },
+      data: { status: BillingAttemptStatus.APPROVED, approvedAt: new Date() },
+    });
+
+    if (!safe || !sub || !target) {
+      this.logger.error(
+        `Pagamento de upgrade recebido (tentativa ${attempt.id}), mas o negócio mudou desde o pedido: plano NÃO alterado. Revisar.`,
+      );
+      return null;
+    }
+    const changed = await tx.subscription.updateMany({
+      where: { tenantId: attempt.tenantId, planId: attempt.fromPlanId as string, courtesy: false },
+      data: { planId: target.id },
+    });
+    if (changed.count !== 1) {
+      this.logger.error(`Pagamento de upgrade recebido (tentativa ${attempt.id}), mas o plano mudou em paralelo. Revisar.`);
+      return null;
+    }
+    return sub.method === BillingMethod.CARD_RECURRING && sub.providerSubscriptionId
+      ? { subscriptionId: sub.providerSubscriptionId, priceCents: target.priceCents }
+      : null;
   }
 
   // Aplica o estado RELIDO da assinatura (e das cobranças dela) no negócio. A assinatura do Asaas já nasce ACTIVE ao
@@ -614,7 +729,7 @@ export class PaymentsService {
       // Primeira ativação: a cobrança paga precisa ter o valor que cobramos (nunca confiar só no que o provedor diz).
       if (!ownsSub) {
         const first = paid[paid.length - 1];
-        if (first.value === undefined || reaisToCents(first.value) !== current.chargeCents) {
+        if (!paidAmountMatches(first.value, current.chargeCents)) {
           this.logger.error(`Valor pago (${first.value}) difere do cobrado na tentativa ${current.id}; ignorado.`);
           return;
         }
@@ -662,6 +777,17 @@ export class PaymentsService {
         reaisToCents(subscription.value) !== current.listPriceCents
       ) {
         restorePrice = { subscriptionId: subscription.id, listPriceCents: current.listPriceCents };
+      } else if (ownsSub) {
+        // Upgrade pago cujo aumento do valor mensal falhou no provedor: o plano já é o novo, mas a assinatura segue cobrando o
+        // valor antigo. Corrige SÓ para cima e SÓ até o preço combinado no upgrade (nunca reajusta quem não trocou de plano).
+        const upgrade = await tx.billingAttempt.findFirst({
+          where: { tenantId: current.tenantId, kind: BillingAttemptKind.PLAN_UPGRADE, status: BillingAttemptStatus.APPROVED, planId: sub.planId },
+          orderBy: { approvedAt: "desc" },
+          select: { listPriceCents: true },
+        });
+        if (upgrade && typeof subscription.value === "number" && reaisToCents(subscription.value) < upgrade.listPriceCents) {
+          restorePrice = { subscriptionId: subscription.id, listPriceCents: upgrade.listPriceCents };
+        }
       }
     });
 
@@ -681,10 +807,12 @@ export class PaymentsService {
   // Troca de plano (assinatura paga ativa)
   // ─────────────────────────────────────────────
 
-  // Vale NA HORA para o limite de profissionais; o valor novo é cobrado a partir da próxima cobrança (cartão) ou do
-  // próximo Pix. Troca para um plano que não comporta a equipe ATIVA é recusada (409): nada é desativado em silêncio,
-  // o dono é quem decide quem sai antes de reduzir o plano.
-  async changePlan(tenantId: string, tier: PlanTier): Promise<{ planName: string; effective: string }> {
+  // PLANO MAIS CARO (upgrade): paga a diferença PROPORCIONAL ao que falta do período, por Pix (vale para quem paga por cartão
+  // ou por Pix; o checkout hospedado não guarda o cartão para uma cobrança avulsa). O plano só sobe quando o Asaas confirma
+  // o pagamento, nunca por pedido do cliente. Valor, dias restantes e plano de origem são SEMPRE derivados no servidor.
+  // PLANO MAIS BARATO (ou mesmo preço): vale na hora, sem reembolso, e o novo valor é cobrado a partir da próxima cobrança; a
+  // equipe ativa precisa caber no plano novo (409 com os números, nada é desativado em silêncio).
+  private async changeContext(tenantId: string, tier: PlanTier) {
     const plan = await this.prisma.plan.findUnique({ where: { tier } });
     if (!plan) throw new NotFoundException("Plano não encontrado.");
 
@@ -703,7 +831,58 @@ export class PaymentsService {
     if (sub.method === BillingMethod.PIX_MONTHLY && sub.currentPeriodEnd && sub.currentPeriodEnd.getTime() <= Date.now()) {
       throw new ConflictException("Seu mês terminou. Pague o Pix do próximo mês para escolher o plano.");
     }
+    const current = await this.prisma.plan.findUnique({ where: { id: sub.planId } });
+    if (!current) throw new ConflictException("Não foi possível identificar o seu plano atual.");
 
+    return { plan, sub, current, upgrade: plan.priceCents > current.priceCents };
+  }
+
+  private effectiveText(method: BillingMethod): string {
+    return method === BillingMethod.CARD_RECURRING
+      ? "O novo valor passa a valer na próxima cobrança."
+      : "O novo valor vale a partir do próximo Pix.";
+  }
+
+  // Prévia do que a troca faz e QUANTO custa agora. Não reserva nada nem cria objeto no provedor.
+  async quoteChangePlan(tenantId: string, tier: PlanTier): Promise<ChangePlanQuote> {
+    const { plan, sub, current, upgrade } = await this.changeContext(tenantId, tier);
+    const base = { tier, planName: plan.name, newPriceCents: plan.priceCents, currentPriceCents: current.priceCents };
+
+    if (!upgrade) {
+      // Mesma regra do pedido: se a equipe não couber, a prévia já avisa (com os números).
+      await this.planLimit.assertCanDowngrade(tenantId, tier);
+      return { ...base, kind: "IMMEDIATE", chargeCents: null, remainingDays: null, effective: this.effectiveText(sub.method as BillingMethod) };
+    }
+    if (!sub.currentPeriodEnd) throw new ConflictException("Não foi possível calcular a diferença do seu período.");
+    const charge = prorateUpgrade(current.priceCents, plan.priceCents, sub.currentPeriodEnd);
+    return {
+      ...base,
+      kind: "PAYMENT",
+      chargeCents: charge.chargeCents,
+      remainingDays: charge.remainingDays,
+      effective: "O plano novo vale assim que o Pix for confirmado. O valor cheio passa a ser cobrado a partir do próximo ciclo.",
+    };
+  }
+
+  async changePlan(
+    tenantId: string,
+    tier: PlanTier,
+    ctx?: { userId?: string; cpfCnpj?: string },
+  ): Promise<ChangePlanResult> {
+    // Um pedido novo substitui o anterior ainda em aberto: o Pix antigo é lido (se já foi pago, credita) e, se não, removido
+    // no provedor para não poder ser pago depois.
+    await this.settlePendingUpgrades(tenantId);
+
+    const context = await this.changeContext(tenantId, tier);
+    if (context.upgrade) return this.startUpgrade(tenantId, context, ctx);
+    return this.applyImmediateChange(tenantId, tier, context);
+  }
+
+  private async applyImmediateChange(
+    tenantId: string,
+    tier: PlanTier,
+    { plan, sub }: { plan: { id: string; name: string; priceCents: number }; sub: { planId: string; method: BillingMethod | null; providerSubscriptionId: string | null } },
+  ): Promise<ChangePlanResult> {
     // A equipe ativa precisa caber no plano novo (mesma regra do checkout).
     await this.planLimit.assertCanDowngrade(tenantId, tier);
 
@@ -711,13 +890,7 @@ export class PaymentsService {
       this.requireEnabled();
       if (!sub.providerSubscriptionId) throw new ConflictException("Assinatura sem vínculo com o provedor.");
       try {
-        // Antes da 1ª cobrança confirmada a assinatura ainda está com o valor do cupom: trocar agora faria o valor
-        // errado valer.
-        const payments = await this.asaas.listSubscriptionPayments(sub.providerSubscriptionId);
-        const charged = payments.some((p) => !p.deleted && (ASAAS_PAID_STATUSES as readonly string[]).includes(p.status));
-        if (!charged) {
-          throw new ConflictException("Aguarde a primeira cobrança ser confirmada para trocar de plano.");
-        }
+        await this.assertFirstChargeConfirmed(sub.providerSubscriptionId);
         await this.asaas.updateSubscriptionValue(sub.providerSubscriptionId, plan.priceCents);
       } catch (error) {
         if (error instanceof ConflictException) throw error;
@@ -737,13 +910,119 @@ export class PaymentsService {
     });
     if (updated.count !== 1) throw new ConflictException("O plano mudou enquanto você trocava. Tente de novo.");
 
-    return {
-      planName: plan.name,
-      effective:
-        sub.method === BillingMethod.CARD_RECURRING
-          ? "O novo valor passa a valer na próxima cobrança."
-          : "O novo valor vale a partir do próximo Pix.",
-    };
+    return { applied: true, planName: plan.name, effective: this.effectiveText(sub.method as BillingMethod) };
+  }
+
+  // Antes da 1ª cobrança confirmada a assinatura ainda está com o valor do cupom: trocar agora faria o valor errado valer.
+  private async assertFirstChargeConfirmed(providerSubscriptionId: string): Promise<void> {
+    const payments = await this.asaas.listSubscriptionPayments(providerSubscriptionId);
+    const charged = payments.some((p) => !p.deleted && (ASAAS_PAID_STATUSES as readonly string[]).includes(p.status));
+    if (!charged) throw new ConflictException("Aguarde a primeira cobrança ser confirmada para trocar de plano.");
+  }
+
+  private async startUpgrade(
+    tenantId: string,
+    { plan, sub, current }: Awaited<ReturnType<PaymentsService["changeContext"]>>,
+    ctx?: { userId?: string; cpfCnpj?: string },
+  ): Promise<ChangePlanResult> {
+    this.requireEnabled();
+    if (!sub.currentPeriodEnd) throw new ConflictException("Não foi possível calcular a diferença do seu período.");
+    const charge = prorateUpgrade(current.priceCents, plan.priceCents, sub.currentPeriodEnd);
+
+    if (sub.method === BillingMethod.CARD_RECURRING) {
+      if (!sub.providerSubscriptionId) throw new ConflictException("Assinatura sem vínculo com o provedor.");
+      try {
+        await this.assertFirstChargeConfirmed(sub.providerSubscriptionId);
+      } catch (error) {
+        if (error instanceof ConflictException) throw error;
+        this.logger.warn(`Troca de plano (tenant ${tenantId}) falhou no provedor: ${(error as Error).message}`);
+        throw toBadGateway();
+      }
+    }
+
+    // Quem paga já é cliente no Asaas (criado no 1º pagamento, com o documento): reaproveita, sem pedir CPF/CNPJ de novo.
+    // Só sem cliente conhecido o documento é exigido, e como sempre vai direto ao provedor.
+    const known = await this.prisma.billingAttempt.findFirst({
+      where: { tenantId, status: BillingAttemptStatus.APPROVED, providerCustomerId: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { providerCustomerId: true },
+    });
+    let owner: { name: string; email: string } | null = null;
+    let document: string | null = null;
+    if (!known?.providerCustomerId) {
+      if (!ctx?.cpfCnpj || !ctx.userId) throw new BadRequestException("Informe o CPF ou CNPJ de quem vai pagar.");
+      document = this.normalizeDocument(ctx.cpfCnpj);
+      owner = await this.owner(tenantId, ctx.userId);
+    }
+
+    const attempt = await this.prisma.$transaction(async (tx) => {
+      await this.lockTenant(tx, tenantId);
+      // Relê sob o lock: o negócio não pode ter trocado de plano nem cancelado entre a prévia e agora.
+      const fresh = await tx.subscription.findUnique({ where: { tenantId } });
+      if (!fresh || fresh.planId !== sub.planId || fresh.courtesy || fresh.cancelAtPeriodEnd || fresh.status !== SubscriptionStatus.ACTIVE) {
+        throw new ConflictException("Sua assinatura mudou enquanto você trocava de plano. Tente de novo.");
+      }
+      await this.assertPendingCap(tx, tenantId);
+      // `listPriceCents` guarda o preço mensal combinado do plano novo (o que a assinatura passa a cobrar); `chargeCents` é só
+      // a diferença proporcional cobrada agora.
+      return tx.billingAttempt.create({
+        data: {
+          tenantId,
+          planId: plan.id,
+          fromPlanId: sub.planId,
+          kind: BillingAttemptKind.PLAN_UPGRADE,
+          method: BillingMethod.PIX_MONTHLY,
+          listPriceCents: plan.priceCents,
+          discountCents: 0,
+          chargeCents: charge.chargeCents,
+          expiresAt: new Date(Date.now() + PIX_VALIDITY_MS),
+        },
+      });
+    });
+
+    const pix = await this.issuePix(attempt, `Marquo - troca para o plano ${plan.name} (diferença proporcional)`, async (attemptId) => {
+      if (known?.providerCustomerId) {
+        await this.prisma.billingAttempt.update({ where: { id: attemptId }, data: { providerCustomerId: known.providerCustomerId } });
+        return known.providerCustomerId;
+      }
+      return this.createProviderCustomer(attemptId, owner as { name: string; email: string }, document as string);
+    });
+    return { applied: false, requiresPayment: true, planName: plan.name, ...pix };
+  }
+
+  // Cada tentativa cria objetos na conta do Asaas (cota global de API): teto de tentativas em aberto na última hora.
+  private async assertPendingCap(tx: Prisma.TransactionClient, tenantId: string): Promise<void> {
+    const pendingRecently = await tx.billingAttempt.count({
+      where: { tenantId, status: BillingAttemptStatus.PENDING, createdAt: { gte: new Date(Date.now() - HOUR_MS) } },
+    });
+    if (pendingRecently >= MAX_PENDING_ATTEMPTS_PER_HOUR) {
+      throw new HttpException(
+        "Há tentativas de pagamento demais em aberto. Conclua uma delas ou aguarde alguns minutos.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  // Encerra os upgrades em aberto do negócio (um pedido novo substitui o anterior). Lê o provedor ANTES: se o Pix antigo já
+  // foi pago, credita; se não, a cobrança é removida no Asaas para não poder ser paga depois sem tentativa viva.
+  private async settlePendingUpgrades(tenantId: string): Promise<void> {
+    if (!this.asaas.isConfigured()) return;
+    const pending = await this.prisma.billingAttempt.findMany({
+      where: { tenantId, kind: BillingAttemptKind.PLAN_UPGRADE, status: BillingAttemptStatus.PENDING },
+      select: { id: true },
+      take: 20,
+    });
+    for (const { id } of pending) {
+      await this.syncAttemptSafely(id);
+      let ref: string | null = null;
+      await this.prisma.$transaction(async (tx) => {
+        const attempt = await tx.billingAttempt.findUnique({ where: { id } });
+        if (!attempt || attempt.status !== BillingAttemptStatus.PENDING) return;
+        await tx.billingAttempt.update({ where: { id }, data: { status: BillingAttemptStatus.EXPIRED } });
+        ref = attempt.providerRef;
+      });
+      if (ref) await this.deletePaymentQuietly(ref);
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -880,7 +1159,8 @@ export class PaymentsService {
   private async attemptIdForCustomer(customerId: string | undefined): Promise<string | null> {
     if (!customerId) return null;
     const attempt = await this.prisma.billingAttempt.findFirst({
-      where: { providerCustomerId: customerId },
+      // Só a tentativa da ASSINATURA: o cliente também é reaproveitado nos Pix de upgrade, que não são mensalidade.
+      where: { providerCustomerId: customerId, kind: BillingAttemptKind.SUBSCRIPTION },
       orderBy: { createdAt: "desc" },
       select: { id: true },
     });
