@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { authedFetch } from "@/lib/api-server";
 import { ApiError } from "@/lib/api";
-import type { BillingMethod, PlanTier } from "@/lib/billing";
+import { isAsaasCheckoutUrl, type BillingMethod, type PlanTier } from "@/lib/billing";
 import { hasCpfOrCnpjLength, onlyDigits } from "@/lib/masks";
 
 // Server Actions da cobrança. O cliente só informa QUAL plano, o código do cupom e (ao pagar) o CPF/CNPJ do pagador, que o
@@ -82,6 +82,8 @@ export async function startCardAction(
       method: "POST",
       body: payBody(tier, coupon, cpfCnpj),
     });
+    // Nunca leva o dono para fora do Asaas, mesmo que a resposta venha adulterada.
+    if (!isAsaasCheckoutUrl(result.url)) return { ok: false, error: "Não foi possível abrir o pagamento agora. Tente novamente." };
     return { ok: true, url: result.url };
   } catch (err) {
     return failure(err);
@@ -109,6 +111,7 @@ export async function startPixAction(
 export interface AttemptStatusView {
   status: "PENDING" | "APPROVED" | "FAILED" | "EXPIRED";
   method: BillingMethod;
+  kind?: "SUBSCRIPTION" | "PLAN_UPGRADE";
 }
 
 export async function attemptStatusAction(attemptId: string): Promise<ActionResult<{ attempt: AttemptStatusView }>> {
@@ -121,15 +124,57 @@ export async function attemptStatusAction(attemptId: string): Promise<ActionResu
   }
 }
 
-export async function changePlanAction(tier: string): Promise<ActionResult<{ planName: string; effective: string }>> {
+// Prévia da troca de plano. O valor da diferença (upgrade) é SEMPRE calculado no backend: a tela só mostra.
+export interface ChangePlanQuoteView {
+  tier: PlanTier;
+  planName: string;
+  kind: "IMMEDIATE" | "PAYMENT";
+  newPriceCents: number;
+  currentPriceCents: number;
+  chargeCents: number | null;
+  remainingDays: number | null;
+  effective: string;
+}
+
+export async function quoteChangePlanAction(tier: string): Promise<ActionResult<{ quote: ChangePlanQuoteView }>> {
   if (!validTier(tier)) return { ok: false, error: "Plano inválido." };
   try {
-    const result = await authedFetch<{ planName: string; effective: string }>("/billing/change-plan", {
+    const quote = await authedFetch<ChangePlanQuoteView>("/billing/change-plan/quote", {
       method: "POST",
       body: JSON.stringify({ tier }),
     });
-    revalidatePath("/dashboard", "layout");
-    return { ok: true, planName: result.planName, effective: result.effective };
+    return { ok: true, quote };
+  } catch (err) {
+    return failure(err);
+  }
+}
+
+// Troca para plano mais barato vale na hora (`applied`). Para plano mais caro o backend devolve o Pix da diferença
+// (`requiresPayment`) e o plano só sobe quando o pagamento for confirmado: nada é trocado por esta chamada.
+export type ChangePlanOutcome =
+  | { applied: true; planName: string; effective: string }
+  | { applied: false; planName: string; pix: PixView };
+
+export async function changePlanAction(tier: string, cpfCnpj?: string): Promise<ActionResult<{ outcome: ChangePlanOutcome }>> {
+  if (!validTier(tier)) return { ok: false, error: "Plano inválido." };
+  const document = cpfCnpj ? onlyDigits(cpfCnpj) : "";
+  if (document && !hasCpfOrCnpjLength(document)) return { ok: false, error: DOCUMENT_ERROR };
+  try {
+    const result = await authedFetch<
+      | { applied: true; planName: string; effective: string }
+      | ({ applied: false; requiresPayment: true; planName: string } & PixView)
+    >("/billing/change-plan", {
+      method: "POST",
+      body: JSON.stringify(document ? { tier, cpfCnpj: document } : { tier }),
+    });
+    if (result.applied) {
+      revalidatePath("/dashboard", "layout");
+      return { ok: true, outcome: { applied: true, planName: result.planName, effective: result.effective } };
+    }
+    const { applied: _applied, requiresPayment: _requiresPayment, planName, ...pix } = result;
+    void _applied;
+    void _requiresPayment;
+    return { ok: true, outcome: { applied: false, planName, pix } };
   } catch (err) {
     return failure(err);
   }

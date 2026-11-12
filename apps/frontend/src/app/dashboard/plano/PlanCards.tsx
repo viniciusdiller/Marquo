@@ -107,7 +107,6 @@ export function PlanCards({
         <ChangePlanDialog
           from={billing.subscription.plan}
           to={changeTo}
-          method={billing.subscription.method}
           onClose={() => setChangeTo(null)}
         />
       ) : null}

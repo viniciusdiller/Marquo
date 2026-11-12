@@ -104,7 +104,7 @@ export function ConfirmDialog({
             {children ? <div className="mt-3">{children}</div> : null}
 
             {errorMessage ? (
-              <p className="mt-3 text-sm text-red-600 dark:text-red-400">{errorMessage}</p>
+              <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">{errorMessage}</p>
             ) : null}
 
             <div className="mt-5 flex gap-3">
