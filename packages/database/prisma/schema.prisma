@@ -1041,6 +1041,13 @@ enum BillingMethod {
   PIX_MONTHLY
 }
 
+// O que a tentativa paga: a assinatura em si (cartão ou Pix mensal) ou a DIFERENÇA proporcional de uma troca para plano
+// mais caro no meio do período (sempre por Pix). A diferença só muda o plano quando o pagamento é confirmado.
+enum BillingAttemptKind {
+  SUBSCRIPTION
+  PLAN_UPGRADE
+}
+
 enum BillingAttemptStatus {
   PENDING
   APPROVED
@@ -1102,6 +1109,10 @@ model BillingAttempt {
   tenantId           String
   planId             String
   method             BillingMethod
+  kind               BillingAttemptKind   @default(SUBSCRIPTION)
+  // Só em PLAN_UPGRADE: o plano que o negócio tinha ao pedir a troca. Se mudou até o pagamento chegar, o upgrade não é aplicado
+  // às cegas (o dinheiro fica registrado e a equipe revisa).
+  fromPlanId         String?
   status             BillingAttemptStatus @default(PENDING)
   listPriceCents     Int
   discountCents      Int                  @default(0)
