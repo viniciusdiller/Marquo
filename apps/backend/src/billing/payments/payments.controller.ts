@@ -7,6 +7,7 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../../auth/types/auth-user";
 import { ChangePlanDto, CheckoutDto, StartCheckoutDto } from "../dto/checkout.dto";
 import { PaymentsService } from "./payments.service";
+import { BillingProfileService } from "./billing-profile.service";
 
 // Rotas do OWNER, que funcionam mesmo com o acesso bloqueado (@SkipBillingCheck): quem está bloqueado precisa
 // justamente delas para pagar. Criam objetos no provedor: limite bem abaixo do global.
@@ -16,7 +17,19 @@ const POLL_THROTTLE = { default: { limit: 60, ttl: 60_000 } };
 
 @Controller("billing")
 export class PaymentsController {
-  constructor(private readonly payments: PaymentsService) {}
+  constructor(
+    private readonly payments: PaymentsService,
+    private readonly profile: BillingProfileService,
+  ) {}
+
+  // Dados de cobrança salvos (documento só mascarado) e o que ainda falta, para o checkout pré-preencher o formulário.
+  @Roles(Role.OWNER)
+  @SkipBillingCheck()
+  @Throttle(POLL_THROTTLE)
+  @Get("profile")
+  billingProfile(@CurrentUser() user: AuthenticatedUser) {
+    return this.profile.view(user.tenantId, user.userId);
+  }
 
   @Roles(Role.OWNER)
   @SkipBillingCheck()
@@ -33,7 +46,7 @@ export class PaymentsController {
   @HttpCode(200)
   @Post("checkout/card")
   card(@CurrentUser() user: AuthenticatedUser, @Body() dto: StartCheckoutDto) {
-    return this.payments.startCard(user.tenantId, user.userId, dto.tier, dto.cpfCnpj, dto.couponCode);
+    return this.payments.startCard(user.tenantId, user.userId, dto.tier, dto, dto.couponCode);
   }
 
   @Roles(Role.OWNER)
@@ -42,7 +55,7 @@ export class PaymentsController {
   @HttpCode(200)
   @Post("checkout/pix")
   pix(@CurrentUser() user: AuthenticatedUser, @Body() dto: StartCheckoutDto) {
-    return this.payments.startPix(user.tenantId, user.userId, dto.tier, dto.cpfCnpj, dto.couponCode);
+    return this.payments.startPix(user.tenantId, user.userId, dto.tier, dto, dto.couponCode);
   }
 
   @Roles(Role.OWNER)

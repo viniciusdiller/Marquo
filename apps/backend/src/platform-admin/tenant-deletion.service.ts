@@ -37,6 +37,8 @@ type Tx = Prisma.TransactionClient;
 // antes dos usuários; agendamentos antes de serviços e profissionais. O resto sai em cascata com o pai (itens da comanda,
 // itens do agendamento, horários, vínculo profissional-serviço, tokens de sessão...).
 export const PURGE_STEPS: { model: string; run: (tx: Tx, tenantId: string) => Promise<{ count: number }> }[] = [
+  // Dados de cobrança (CPF/CNPJ criptografado, telefone, endereço): dado pessoal, apagado junto com o negócio.
+  { model: "TenantBillingProfile", run: (tx, tenantId) => tx.tenantBillingProfile.deleteMany({ where: { tenantId } }) },
   { model: "CommissionPayout", run: (tx, tenantId) => tx.commissionPayout.deleteMany({ where: { tenantId } }) },
   { model: "CommissionEntry", run: (tx, tenantId) => tx.commissionEntry.deleteMany({ where: { tenantId } }) },
   { model: "StockMovement", run: (tx, tenantId) => tx.stockMovement.deleteMany({ where: { tenantId } }) },

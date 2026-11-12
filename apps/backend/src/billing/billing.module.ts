@@ -6,6 +6,8 @@ import { BillingService } from "./billing.service";
 import { PlanCatalogService } from "./plan-catalog.service";
 import { AsaasClient } from "./payments/asaas.client";
 import { PaymentsService } from "./payments/payments.service";
+import { BillingProfileService } from "./payments/billing-profile.service";
+import { FieldCryptoService } from "../common/crypto/field-crypto.service";
 import { PaymentsController } from "./payments/payments.controller";
 import { AsaasWebhookController } from "./payments/asaas-webhook.controller";
 
@@ -14,7 +16,7 @@ import { AsaasWebhookController } from "./payments/asaas-webhook.controller";
 @Module({
   imports: [CouponsModule],
   controllers: [BillingController, PaymentsController, AsaasWebhookController],
-  providers: [PlanLimitService, BillingService, PlanCatalogService, AsaasClient, PaymentsService],
+  providers: [PlanLimitService, BillingService, PlanCatalogService, AsaasClient, PaymentsService, BillingProfileService, FieldCryptoService],
   exports: [PlanLimitService, AsaasClient],
 })
 export class BillingModule {}

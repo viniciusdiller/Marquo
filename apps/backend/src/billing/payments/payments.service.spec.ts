@@ -6,6 +6,8 @@ import { PlanLimitService } from "../plan-limit.service";
 import { AsaasClient, PaymentProviderError } from "./asaas.client";
 import { asaasDate } from "./pricing";
 import { PaymentsService } from "./payments.service";
+import { BillingProfileService } from "./billing-profile.service";
+import { FieldCryptoService } from "../../common/crypto/field-crypto.service";
 
 const TENANT = "11111111-1111-4111-8111-111111111111";
 const USER = "22222222-2222-4222-8222-222222222222";
@@ -14,6 +16,16 @@ const DAY = 86_400_000;
 // CPF válido (com máscara, como o formulário envia) e o mesmo em dígitos (como segue para o provedor).
 const CPF = "529.982.247-25";
 const CPF_DIGITS = "52998224725";
+// O checkout de cartão do Asaas exige documento, telefone e endereço do pagador.
+const CARD_PAYER = {
+  cpfCnpj: CPF,
+  phone: "(11) 91234-5678",
+  postalCode: "01310-100",
+  address: "Av. Paulista",
+  addressNumber: "1000",
+  province: "Bela Vista",
+};
+const ENC_KEY = "a".repeat(64);
 const CNPJ = "11.222.333/0001-81";
 
 const PLAN = { id: "plan-pro", tier: "PROFISSIONAL", name: "Profissional", priceCents: 9990, maxProfessionals: 5 };
@@ -31,7 +43,11 @@ interface World {
 }
 
 function build(world: World = {}) {
-  const state = { attempt: world.attempt ?? null, subscription: world.subscription ?? null };
+  const state: { attempt: unknown; subscription: unknown; profile: Record<string, unknown> | null } = {
+    attempt: world.attempt ?? null,
+    subscription: world.subscription ?? null,
+    profile: null,
+  };
 
   const tx = {
     $executeRaw: jest.fn().mockResolvedValue(1),
@@ -95,7 +111,14 @@ function build(world: World = {}) {
         return plans.find((p) => (where.tier ? p.tier === where.tier : p.id === where.id)) ?? null;
       }),
     },
-    user: { findFirst: jest.fn().mockResolvedValue({ name: "Dono do Salão", email: "dono@salao.com" }) },
+    user: { findFirst: jest.fn().mockResolvedValue({ name: "Dono do Salão", email: "dono@salao.com", phone: null }) },
+    tenantBillingProfile: {
+      findFirst: jest.fn().mockImplementation(async () => state.profile ?? null),
+      upsert: jest.fn().mockImplementation(async ({ create, update }) => {
+        state.profile = { ...(state.profile ?? create), ...update };
+        return state.profile;
+      }),
+    },
     coupon: tx.coupon,
     couponRedemption: tx.couponRedemption,
     billingAttempt: {
@@ -131,11 +154,18 @@ function build(world: World = {}) {
 
   const config = {
     get: (key: string) =>
-      ({ FRONTEND_URL: "https://app.marquo.test", ...world.env })[key],
+      ({ FRONTEND_URL: "https://app.marquo.test", DATA_ENCRYPTION_KEY: ENC_KEY, ...world.env })[key],
   } as unknown as ConfigService;
   const planLimit = { assertCanDowngrade: jest.fn().mockResolvedValue(undefined) } as unknown as PlanLimitService;
 
-  const service = new PaymentsService(prisma, asaas as unknown as AsaasClient, config, new CouponsService(), planLimit);
+  const service = new PaymentsService(
+    prisma,
+    asaas as unknown as AsaasClient,
+    config,
+    new CouponsService(),
+    planLimit,
+    new BillingProfileService(prisma, new FieldCryptoService(config)),
+  );
   return { service, tx, prisma, asaas, planLimit, state };
 }
 
@@ -195,7 +225,7 @@ describe("PaymentsService.startPix", () => {
   it("cria a tentativa com os valores do SERVIDOR e gera o Pix com o valor cobrado", async () => {
     const { service, tx, asaas } = build({ coupon: percentCoupon });
 
-    const result = await service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF, "promo20");
+    const result = await service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF }, "promo20");
 
     const attempt = tx.billingAttempt.create.mock.calls[0][0].data;
     expect(attempt).toMatchObject({
@@ -220,7 +250,7 @@ describe("PaymentsService.startPix", () => {
 
   it("o cliente do Asaas nasce com os dados do dono LIDOS DO BANCO e o documento só em dígitos", async () => {
     const { service, prisma, asaas } = build();
-    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF);
+    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF });
 
     // Dono relido com o tenant no WHERE (nome e e-mail nunca vêm do request).
     expect(prisma.user.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: USER, tenantId: TENANT } }));
@@ -234,7 +264,7 @@ describe("PaymentsService.startPix", () => {
 
   it("guarda o id do cliente e da cobrança na tentativa, e NUNCA o documento", async () => {
     const { service, tx } = build();
-    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF);
+    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF });
 
     const writes = tx.billingAttempt.update.mock.calls.map((c) => c[0].data);
     expect(writes).toEqual(expect.arrayContaining([{ providerCustomerId: "cus_1" }, { providerRef: "pay_1" }]));
@@ -243,7 +273,7 @@ describe("PaymentsService.startPix", () => {
 
   it("aceita CNPJ (MEI/empresa)", async () => {
     const { service, asaas } = build();
-    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, CNPJ);
+    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CNPJ });
     expect(asaas.createCustomer).toHaveBeenCalledWith(expect.objectContaining({ cpfCnpj: "11222333000181" }));
   });
 
@@ -251,7 +281,7 @@ describe("PaymentsService.startPix", () => {
     "documento inválido (%s): 400 e nada é criado, nem tentativa nem cliente",
     async (_label, document) => {
       const { service, tx, asaas } = build();
-      await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, document)).rejects.toThrow(BadRequestException);
+      await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: document })).rejects.toThrow(BadRequestException);
       expect(tx.billingAttempt.create).not.toHaveBeenCalled();
       expect(asaas.createCustomer).not.toHaveBeenCalled();
     },
@@ -259,7 +289,7 @@ describe("PaymentsService.startPix", () => {
 
   it("o desconto é uma reserva atômica de um uso do cupom (mesma regra do cadastro)", async () => {
     const { service, tx } = build({ coupon: percentCoupon });
-    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF, "PROMO20");
+    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF }, "PROMO20");
     expect(tx.$executeRaw).toHaveBeenCalled();
     expect(tx.couponRedemption.create).toHaveBeenCalledWith({
       data: { couponId: "c-1", tenantId: TENANT },
@@ -269,20 +299,20 @@ describe("PaymentsService.startPix", () => {
 
   it("sem provedor configurado: 503, sem criar nada", async () => {
     const { service, tx } = build({ configured: false });
-    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF)).rejects.toThrow(/ainda não está disponível/);
+    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF })).rejects.toThrow(/ainda não está disponível/);
     expect(tx.billingAttempt.create).not.toHaveBeenCalled();
   });
 
   it("negócio suspenso não paga (o pagamento não desfaria a suspensão)", async () => {
     const { service, asaas } = build({ suspendedAt: new Date() });
-    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF)).rejects.toThrow(ForbiddenException);
+    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF })).rejects.toThrow(ForbiddenException);
     expect(asaas.createPixPayment).not.toHaveBeenCalled();
   });
 
   it("checa se o plano comporta a equipe ativa antes de cobrar", async () => {
     const { service, planLimit, asaas } = build();
     (planLimit.assertCanDowngrade as jest.Mock).mockRejectedValueOnce(new ConflictException("equipe grande"));
-    await expect(service.startPix(TENANT, USER, "ESSENCIAL" as never, CPF)).rejects.toThrow("equipe grande");
+    await expect(service.startPix(TENANT, USER, "ESSENCIAL" as never, { cpfCnpj: CPF })).rejects.toThrow("equipe grande");
     expect(asaas.createPixPayment).not.toHaveBeenCalled();
   });
 
@@ -294,7 +324,7 @@ describe("PaymentsService.startPix", () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ id: "red-novo", couponId: "c-1", appliedAt: null });
 
-    const attempt = service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF, "PROMO20");
+    const attempt = service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF }, "PROMO20");
 
     await expect(attempt).rejects.toBeInstanceOf(BadGatewayException);
     await expect(attempt).rejects.not.toThrow(/segredo-interno/);
@@ -307,7 +337,7 @@ describe("PaymentsService.startPix", () => {
     const { service, asaas, tx } = build();
     (asaas.getPixQrCode as jest.Mock).mockRejectedValueOnce(new PaymentProviderError(500, "x"));
 
-    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF)).rejects.toBeInstanceOf(BadGatewayException);
+    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF })).rejects.toBeInstanceOf(BadGatewayException);
 
     expect(asaas.deletePayment).toHaveBeenCalledWith("pay_1");
     expect(tx.billingAttempt.update.mock.calls.map((c) => c[0].data.status)).toContain("FAILED");
@@ -319,13 +349,13 @@ describe("PaymentsService.startPix", () => {
     tx.couponRedemption.create.mockRejectedValueOnce(
       new Prisma.PrismaClientKnownRequestError("dup", { code: "P2002", clientVersion: "x" }),
     );
-    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF, "PROMO20")).rejects.toThrow(ConflictException);
+    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF }, "PROMO20")).rejects.toThrow(ConflictException);
     expect(asaas.createPixPayment).not.toHaveBeenCalled();
   });
 
   it("cupom inválido bloqueia a cobrança (400), sem criar tentativa", async () => {
     const { service, tx } = build({ coupon: null });
-    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF, "NAOEXISTE")).rejects.toThrow(BadRequestException);
+    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF }, "NAOEXISTE")).rejects.toThrow(BadRequestException);
     expect(tx.billingAttempt.create).not.toHaveBeenCalled();
   });
 });
@@ -333,7 +363,7 @@ describe("PaymentsService.startPix", () => {
 describe("PaymentsService.startCard", () => {
   it("monta o checkout hospedado com o valor da PRIMEIRA cobrança e devolve o link", async () => {
     const { service, asaas } = build({ coupon: percentCoupon });
-    const result = await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CPF, "PROMO20");
+    const result = await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER, "PROMO20");
 
     expect(asaas.createCustomer).toHaveBeenCalledWith(
       expect.objectContaining({ cpfCnpj: CPF_DIGITS, externalReference: ATTEMPT, email: "dono@salao.com" }),
@@ -354,20 +384,20 @@ describe("PaymentsService.startCard", () => {
 
   it("o cartão nunca passa por aqui: nada de dado de cartão na chamada ao provedor", async () => {
     const { service, asaas } = build();
-    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CPF);
+    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER);
     const payload = JSON.stringify((asaas.createCheckout as jest.Mock).mock.calls[0][0]);
     expect(payload).not.toMatch(/creditCard|ccv|cardNumber|holderName/i);
   });
 
   it("amarra a tentativa ao checkout e ao cliente do provedor", async () => {
     const { service, state } = build();
-    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CPF);
+    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER);
     expect(state.attempt).toMatchObject({ providerRef: "chk_1", providerCustomerId: "cus_1", method: "CARD_RECURRING" });
   });
 
   it("FRONTEND_URL define a base de volta (sem barra dupla)", async () => {
     const { service, asaas } = build({ env: { FRONTEND_URL: "https://marquo.com.br/" } });
-    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CPF);
+    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER);
     expect((asaas.createCheckout as jest.Mock).mock.calls[0][0].successUrl).toMatch(/^https:\/\/marquo\.com\.br\/dashboard\/plano\?/);
   });
 
@@ -376,7 +406,7 @@ describe("PaymentsService.startCard", () => {
     const { service, asaas } = build({
       env: { FRONTEND_URL: "http://localhost:3000", ASAAS_BACK_URL_BASE: "https://abc123.ngrok-free.app/" },
     });
-    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CPF);
+    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER);
     const call = (asaas.createCheckout as jest.Mock).mock.calls[0][0];
     expect(call.successUrl).toBe(`https://abc123.ngrok-free.app/dashboard/plano?checkout=cartao&tentativa=${ATTEMPT}`);
     expect(call.cancelUrl).toBe("https://abc123.ngrok-free.app/dashboard/plano");
@@ -385,7 +415,7 @@ describe("PaymentsService.startCard", () => {
 
   it("sem endereço https de retorno (localhost sem túnel): 503 com o motivo, e NADA é criado nem enviado ao provedor", async () => {
     const { service, tx, asaas } = build({ env: { FRONTEND_URL: "http://localhost:3000" } });
-    await expect(service.startCard(TENANT, USER, "PROFISSIONAL" as never, CPF)).rejects.toThrow(/ASAAS_BACK_URL_BASE/);
+    await expect(service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER)).rejects.toThrow(/ASAAS_BACK_URL_BASE/);
     expect(tx.billingAttempt.create).not.toHaveBeenCalled();
     expect(asaas.createCustomer).not.toHaveBeenCalled();
     expect(asaas.createCheckout).not.toHaveBeenCalled();
@@ -393,13 +423,13 @@ describe("PaymentsService.startCard", () => {
 
   it("o Pix não depende de URL de retorno: funciona em localhost", async () => {
     const { service, asaas } = build({ env: { FRONTEND_URL: "http://localhost:3000" } });
-    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF)).resolves.toBeDefined();
+    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF })).resolves.toBeDefined();
     expect(asaas.createPixPayment).toHaveBeenCalled();
   });
 
   it("documento inválido: 400 e nada é criado", async () => {
     const { service, tx, asaas } = build();
-    await expect(service.startCard(TENANT, USER, "PROFISSIONAL" as never, "123")).rejects.toThrow(BadRequestException);
+    await expect(service.startCard(TENANT, USER, "PROFISSIONAL" as never, { ...CARD_PAYER, cpfCnpj: "123" })).rejects.toThrow(BadRequestException);
     expect(tx.billingAttempt.create).not.toHaveBeenCalled();
     expect(asaas.createCheckout).not.toHaveBeenCalled();
   });
@@ -407,7 +437,7 @@ describe("PaymentsService.startCard", () => {
   it("falha do provedor: tentativa FAILED, 502 genérico", async () => {
     const { service, asaas, tx } = build();
     (asaas.createCheckout as jest.Mock).mockRejectedValueOnce(new PaymentProviderError(400, "segredo-interno"));
-    const attempt = service.startCard(TENANT, USER, "PROFISSIONAL" as never, CPF);
+    const attempt = service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER);
     await expect(attempt).rejects.toBeInstanceOf(BadGatewayException);
     await expect(attempt).rejects.not.toThrow(/segredo-interno/);
     expect(tx.billingAttempt.update.mock.calls.map((c) => c[0].data.status)).toContain("FAILED");
@@ -424,7 +454,7 @@ describe("PaymentsService.startCard", () => {
         currentPeriodEnd: new Date(Date.now() + 5 * DAY),
       },
     });
-    await expect(service.startCard(TENANT, USER, "PROFISSIONAL" as never, CPF)).rejects.toThrow(ConflictException);
+    await expect(service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER)).rejects.toThrow(ConflictException);
     expect(asaas.createCheckout).not.toHaveBeenCalled();
   });
 
@@ -432,7 +462,7 @@ describe("PaymentsService.startCard", () => {
     const { service, asaas } = build({
       subscription: { courtesy: true, method: null, status: "ACTIVE", currentPeriodEnd: new Date(Date.now() + 5 * DAY) },
     });
-    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CPF);
+    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER);
     expect(asaas.createCheckout).toHaveBeenCalled();
   });
 });
@@ -447,19 +477,19 @@ describe("PaymentsService: renovação do Pix", () => {
         currentPeriodEnd: new Date(Date.now() + 25 * DAY),
       },
     });
-    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF)).rejects.toThrow(/ainda está longe/);
+    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF })).rejects.toThrow(/ainda está longe/);
   });
 
   it("Pix perto do vencimento ou vencido: libera a próxima cobrança", async () => {
     const near = build({
       subscription: { courtesy: false, method: "PIX_MONTHLY", status: "ACTIVE", currentPeriodEnd: new Date(Date.now() + 3 * DAY) },
     });
-    await expect(near.service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF)).resolves.toBeDefined();
+    await expect(near.service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF })).resolves.toBeDefined();
 
     const over = build({
       subscription: { courtesy: false, method: "PIX_MONTHLY", status: "ACTIVE", currentPeriodEnd: new Date(Date.now() - DAY) },
     });
-    await expect(over.service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF)).resolves.toBeDefined();
+    await expect(over.service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF })).resolves.toBeDefined();
   });
 });
 
@@ -1501,7 +1531,7 @@ describe("PaymentsService: tentativas de fraude", () => {
 
   it("o valor cobrado vem SEMPRE do catálogo do servidor: o plano é a única entrada e o valor segue para o provedor", async () => {
     const { service, asaas } = build();
-    await service.startPix(TENANT, USER, "ESSENCIAL" as never, CPF);
+    await service.startPix(TENANT, USER, "ESSENCIAL" as never, { cpfCnpj: CPF });
     expect(asaas.createPixPayment).toHaveBeenCalledWith(expect.objectContaining({ amountCents: 4990 }));
     // A assinatura do método não aceita valor: não há por onde um cliente injetar preço.
     expect(service.startPix.length).toBeLessThanOrEqual(5);
@@ -1509,20 +1539,20 @@ describe("PaymentsService: tentativas de fraude", () => {
 
   it("cupom de desconto nunca leva a cobrança abaixo do mínimo (R$ 5,00), nem com desconto fixo absurdo", async () => {
     const { service, tx } = build({ coupon: { ...percentCoupon, kind: "FIXED_CENTS", value: 99_999_999 } });
-    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF, "PROMO20");
+    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF }, "PROMO20");
     expect(tx.billingAttempt.create.mock.calls[0][0].data.chargeCents).toBe(500);
   });
 
   it("cupom de 100% ou acima não zera a cobrança", async () => {
     const { service, tx } = build({ coupon: { ...percentCoupon, value: 100 } });
-    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF, "PROMO20");
+    await service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF }, "PROMO20");
     expect(tx.billingAttempt.create.mock.calls[0][0].data.chargeCents).toBeGreaterThanOrEqual(500);
   });
 
   it("o pagador e o e-mail vêm do banco (tenant no WHERE): usuário de outro negócio não é encontrado", async () => {
     const { service, prisma, asaas } = build();
     (prisma.user.findFirst as jest.Mock).mockResolvedValueOnce(null);
-    await expect(service.startPix(TENANT, "99999999-9999-4999-8999-999999999999", "PROFISSIONAL" as never, CPF)).rejects.toThrow(/Usuário não encontrado/);
+    await expect(service.startPix(TENANT, "99999999-9999-4999-8999-999999999999", "PROFISSIONAL" as never, { cpfCnpj: CPF })).rejects.toThrow(/Usuário não encontrado/);
     expect(asaas.createCustomer).not.toHaveBeenCalled();
     expect(prisma.user.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "99999999-9999-4999-8999-999999999999", tenantId: TENANT } }));
   });
@@ -1632,17 +1662,52 @@ describe("PaymentsService: tentativas de fraude", () => {
 
   it("teto de tentativas em aberto: acima dele, 429 e NADA é criado no provedor (não dá para encher a conta do Asaas)", async () => {
     const { service, tx, asaas } = build({ pendingAttempts: 10 });
-    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF)).rejects.toMatchObject({ status: 429 });
-    await expect(service.startCard(TENANT, USER, "PROFISSIONAL" as never, CPF)).rejects.toMatchObject({ status: 429 });
+    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF })).rejects.toMatchObject({ status: 429 });
+    await expect(service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER)).rejects.toMatchObject({ status: 429 });
     expect(tx.billingAttempt.create).not.toHaveBeenCalled();
     expect(asaas.createCustomer).not.toHaveBeenCalled();
   });
 
   it("abaixo do teto segue normal, e o teto só conta tentativas PENDENTES do próprio negócio na última hora", async () => {
     const { service, tx } = build({ pendingAttempts: 9 });
-    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, CPF)).resolves.toBeDefined();
+    await expect(service.startPix(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF })).resolves.toBeDefined();
     const where = tx.billingAttempt.count.mock.calls[0][0].where;
     expect(where).toMatchObject({ tenantId: TENANT, status: "PENDING" });
     expect(where.createdAt.gte).toBeInstanceOf(Date);
+  });
+});
+
+describe("PaymentsService: dados do pagador no checkout de cartão", () => {
+  it("manda ao Asaas telefone e endereço (o checkout recusa cliente sem eles) e guarda o cadastro", async () => {
+    const { service, asaas, state } = build();
+    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER);
+
+    expect(asaas.createCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cpfCnpj: CPF_DIGITS,
+        phone: "11912345678",
+        postalCode: "01310100",
+        address: "Av. Paulista",
+        addressNumber: "1000",
+        province: "Bela Vista",
+      }),
+    );
+    expect(JSON.stringify(state.profile)).not.toContain(CPF_DIGITS);
+  });
+
+  it("segundo checkout reaproveita o cadastro: não precisa digitar nada de novo", async () => {
+    const { service, asaas } = build();
+    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, CARD_PAYER);
+    asaas.createCustomer.mockClear();
+    await service.startCard(TENANT, USER, "PROFISSIONAL" as never, {});
+    expect(asaas.createCustomer).toHaveBeenCalledWith(expect.objectContaining({ cpfCnpj: CPF_DIGITS, postalCode: "01310100" }));
+  });
+
+  it("endereço incompleto: 400 dizendo o que falta, sem tentativa nem cliente no provedor", async () => {
+    const { service, tx, asaas } = build();
+    await expect(service.startCard(TENANT, USER, "PROFISSIONAL" as never, { cpfCnpj: CPF })).rejects.toThrow(/Preencha para continuar/);
+    expect(tx.billingAttempt.create).not.toHaveBeenCalled();
+    expect(asaas.createCustomer).not.toHaveBeenCalled();
+    expect(asaas.createCheckout).not.toHaveBeenCalled();
   });
 });

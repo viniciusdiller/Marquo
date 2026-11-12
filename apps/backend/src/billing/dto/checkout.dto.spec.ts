@@ -16,14 +16,24 @@ describe("StartCheckoutDto (cartão e Pix)", () => {
     expect(await errorsOf(StartCheckoutDto, { ...ok, cpfCnpj: "  52998224725  " })).toEqual([]);
   });
 
-  it("o documento é obrigatório e precisa ter dígitos verificadores certos", async () => {
-    expect(await errorsOf(StartCheckoutDto, ok)).toContain("cpfCnpj");
-    expect(await errorsOf(StartCheckoutDto, { ...ok, cpfCnpj: "" })).toContain("cpfCnpj");
+  it("o documento é opcional no corpo (vem do cadastro salvo), mas se vier precisa ter dígitos verificadores certos", async () => {
+    expect(await errorsOf(StartCheckoutDto, ok)).toEqual([]);
     expect(await errorsOf(StartCheckoutDto, { ...ok, cpfCnpj: "529.982.247-26" })).toContain("cpfCnpj");
     expect(await errorsOf(StartCheckoutDto, { ...ok, cpfCnpj: "11.222.333/0001-82" })).toContain("cpfCnpj");
     expect(await errorsOf(StartCheckoutDto, { ...ok, cpfCnpj: "111.111.111-11" })).toContain("cpfCnpj");
     expect(await errorsOf(StartCheckoutDto, { ...ok, cpfCnpj: 52998224725 })).toContain("cpfCnpj");
     expect(await errorsOf(StartCheckoutDto, { ...ok, cpfCnpj: "5".repeat(500) })).toContain("cpfCnpj");
+  });
+
+  it("aceita telefone, CEP e endereço do pagador e recusa lixo", async () => {
+    const address = { phone: "(11) 91234-5678", postalCode: "01310-100", address: "Av. Paulista", addressNumber: "1000", complement: "Sala 2", province: "Bela Vista" };
+    expect(await errorsOf(StartCheckoutDto, { ...ok, ...address })).toEqual([]);
+    expect(await errorsOf(StartCheckoutDto, { ...ok, phone: "123" })).toContain("phone");
+    expect(await errorsOf(StartCheckoutDto, { ...ok, postalCode: "123" })).toContain("postalCode");
+    expect(await errorsOf(StartCheckoutDto, { ...ok, postalCode: "abcde-fgh" })).toContain("postalCode");
+    expect(await errorsOf(StartCheckoutDto, { ...ok, address: "x".repeat(121) })).toContain("address");
+    expect(await errorsOf(StartCheckoutDto, { ...ok, addressNumber: "9".repeat(21) })).toContain("addressNumber");
+    expect(await errorsOf(StartCheckoutDto, { ...ok, province: 5 })).toContain("province");
   });
 
   // Confiança no cliente: nenhum campo de valor existe; o forbidNonWhitelisted global devolve 400.

@@ -190,6 +190,7 @@ model Tenant {
   subscription        Subscription?
   couponRedemptions   CouponRedemption[]
   billingAttempts     BillingAttempt[]
+  billingProfile      TenantBillingProfile?
   clients             Client[]
   clubPlans           ClubPlan[]
   clubMemberships     ClubMembership[]
@@ -1343,4 +1344,25 @@ model AccessProfile {
   users  User[]
 
   @@unique([tenantId, name])
+}
+
+// Dados de cobrança do negócio, preenchidos pelo dono no checkout e reaproveitados nas próximas cobranças (o Asaas exige
+// CPF/CNPJ e, para o checkout de cartão, telefone e endereço do pagador). O CPF/CNPJ NUNCA fica em claro: `documentEnc` é
+// AES-256-GCM (chave DATA_ENCRYPTION_KEY, fora do banco) e `documentHint` guarda só os 2 últimos dígitos para mostrar
+// "***.***.***-12". O restante (telefone, endereço) é contato comercial, sem criptografia.
+model TenantBillingProfile {
+  id            String   @id @default(uuid())
+  tenantId      String   @unique
+  documentEnc   String?
+  documentHint  String?
+  phone         String?
+  postalCode    String?
+  address       String?
+  addressNumber String?
+  complement    String?
+  province      String?
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }

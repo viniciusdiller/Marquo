@@ -8,7 +8,8 @@ import { hasCpfOrCnpjLength, onlyDigits } from "@/lib/masks";
 
 // Server Actions da cobrança. O cliente só informa QUAL plano, o código do cupom e (ao pagar) o CPF/CNPJ do pagador, que o
 // Asaas exige para emitir a cobrança: preço, desconto, valor cobrado, e-mail do pagador e tenant são sempre do backend
-// (JWT + catálogo + cupom). O documento vai direto ao backend e dele ao provedor; o Marquo não o guarda.
+// (JWT + catálogo + cupom). Os dados do pagador (documento, telefone, endereço) vão ao backend, que os valida, guarda
+// (o CPF/CNPJ criptografado) e os repassa ao provedor; o que não for digitado sai do cadastro de cobrança salvo.
 
 const TIERS: readonly PlanTier[] = ["ESSENCIAL", "PROFISSIONAL", "PREMIUM"];
 
@@ -51,13 +52,57 @@ function body(tier: PlanTier, coupon: string) {
   return JSON.stringify(code ? { tier, couponCode: code } : { tier });
 }
 
-// Ao pagar o documento é obrigatório. O tamanho é só um aviso rápido; o backend confere os dígitos verificadores.
+// Dados do pagador digitados no checkout. Campo vazio = "usar o cadastro salvo" (não é enviado).
+export interface PayerForm {
+  cpfCnpj: string;
+  phone: string;
+  postalCode: string;
+  address: string;
+  addressNumber: string;
+  complement: string;
+  province: string;
+}
+
+export interface BillingProfileView {
+  documentHint: string | null;
+  phone: string | null;
+  postalCode: string | null;
+  address: string | null;
+  addressNumber: string | null;
+  complement: string | null;
+  province: string | null;
+  canStoreDocument: boolean;
+  missingForCard: string[];
+  missingForPix: string[];
+}
+
+// Só o tamanho é conferido aqui (aviso rápido); o backend confere os dígitos verificadores e tudo mais.
 const DOCUMENT_ERROR = "Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.";
 
-function payBody(tier: PlanTier, coupon: string, cpfCnpj: string) {
+function payBody(tier: PlanTier, coupon: string, payer: Partial<PayerForm>) {
   const code = coupon.trim();
-  const document = onlyDigits(cpfCnpj);
-  return JSON.stringify(code ? { tier, couponCode: code, cpfCnpj: document } : { tier, cpfCnpj: document });
+  const out: Record<string, string> = { tier };
+  if (code) out.couponCode = code;
+  const document = onlyDigits(payer.cpfCnpj ?? "");
+  if (document) out.cpfCnpj = document;
+  const phone = onlyDigits(payer.phone ?? "");
+  if (phone) out.phone = phone;
+  const postal = onlyDigits(payer.postalCode ?? "");
+  if (postal) out.postalCode = postal;
+  for (const key of ["address", "addressNumber", "complement", "province"] as const) {
+    const value = (payer[key] ?? "").trim();
+    if (value) out[key] = value;
+  }
+  return JSON.stringify(out);
+}
+
+export async function billingProfileAction(): Promise<ActionResult<{ profile: BillingProfileView }>> {
+  try {
+    const profile = await authedFetch<BillingProfileView>("/billing/profile");
+    return { ok: true, profile };
+  } catch (err) {
+    return failure(err);
+  }
 }
 
 export async function quoteAction(tier: string, coupon: string): Promise<ActionResult<{ quote: QuoteView }>> {
@@ -73,14 +118,14 @@ export async function quoteAction(tier: string, coupon: string): Promise<ActionR
 export async function startCardAction(
   tier: string,
   coupon: string,
-  cpfCnpj: string,
+  payer: Partial<PayerForm>,
 ): Promise<ActionResult<{ url: string }>> {
   if (!validTier(tier)) return { ok: false, error: "Plano inválido." };
-  if (!hasCpfOrCnpjLength(cpfCnpj)) return { ok: false, error: DOCUMENT_ERROR };
+  if (payer.cpfCnpj && !hasCpfOrCnpjLength(payer.cpfCnpj)) return { ok: false, error: DOCUMENT_ERROR };
   try {
     const result = await authedFetch<{ url: string }>("/billing/checkout/card", {
       method: "POST",
-      body: payBody(tier, coupon, cpfCnpj),
+      body: payBody(tier, coupon, payer),
     });
     // Nunca leva o dono para fora do Asaas, mesmo que a resposta venha adulterada.
     if (!isAsaasCheckoutUrl(result.url)) return { ok: false, error: "Não foi possível abrir o pagamento agora. Tente novamente." };
@@ -93,14 +138,14 @@ export async function startCardAction(
 export async function startPixAction(
   tier: string,
   coupon: string,
-  cpfCnpj: string,
+  payer: Partial<PayerForm>,
 ): Promise<ActionResult<{ pix: PixView }>> {
   if (!validTier(tier)) return { ok: false, error: "Plano inválido." };
-  if (!hasCpfOrCnpjLength(cpfCnpj)) return { ok: false, error: DOCUMENT_ERROR };
+  if (payer.cpfCnpj && !hasCpfOrCnpjLength(payer.cpfCnpj)) return { ok: false, error: DOCUMENT_ERROR };
   try {
     const pix = await authedFetch<PixView>("/billing/checkout/pix", {
       method: "POST",
-      body: payBody(tier, coupon, cpfCnpj),
+      body: payBody(tier, coupon, payer),
     });
     return { ok: true, pix };
   } catch (err) {

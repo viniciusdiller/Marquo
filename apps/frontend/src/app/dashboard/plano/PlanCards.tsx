@@ -12,8 +12,12 @@ import {
 } from "@/lib/billing";
 import { planCatalogEntry } from "@marquo/shared-types";
 import { riseIn } from "@/lib/stagger";
-import { CheckoutDialog } from "./CheckoutDialog";
 import { ChangePlanDialog } from "./ChangePlanDialog";
+
+// Cada plano tem a sua página de checkout (o modo "renovar" sai do estado de cobrança, calculado na própria página).
+function checkoutHref(plan: PlanInfo): string {
+  return `/dashboard/plano/assinar/${plan.tier.toLowerCase()}`;
+}
 
 function limitText(plan: PlanInfo): string {
   return plan.maxProfessionals === null ? "Profissionais ilimitados" : `Até ${plan.maxProfessionals} profissionais`;
@@ -32,7 +36,6 @@ export function PlanCards({
   isOwner: boolean;
   suggestedTier?: PlanTier | null;
 }) {
-  const [open, setOpen] = useState<{ plan: PlanInfo; mode: "new" | "renew" } | null>(null);
   const [changeTo, setChangeTo] = useState<PlanInfo | null>(null);
 
   return (
@@ -89,11 +92,11 @@ export function PlanCards({
                     Trocar para este plano
                   </Button>
                 ) : action === "RENEW_PIX" ? (
-                  <Button type="button" className="w-full" onClick={() => setOpen({ plan, mode: "renew" })}>
+                  <Button href={checkoutHref(plan)} className="w-full">
                     {isCurrent ? "Pagar o próximo mês" : `Assinar ${plan.name}`}
                   </Button>
                 ) : action === "SUBSCRIBE" ? (
-                  <Button type="button" className="w-full" onClick={() => setOpen({ plan, mode: "new" })}>
+                  <Button href={checkoutHref(plan)} className="w-full">
                     Assinar {plan.name}
                   </Button>
                 ) : null}
@@ -111,7 +114,6 @@ export function PlanCards({
         />
       ) : null}
 
-      {open ? <CheckoutDialog plan={open.plan} mode={open.mode} onClose={() => setOpen(null)} /> : null}
     </div>
   );
 }

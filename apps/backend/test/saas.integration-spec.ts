@@ -18,6 +18,8 @@ import { ClubService } from "../src/club/club.service";
 import { ClubAccessService } from "../src/club/club-access.service";
 import { FinanceService } from "../src/finance/finance.service";
 import { PaymentsService } from "../src/billing/payments/payments.service";
+import { BillingProfileService } from "../src/billing/payments/billing-profile.service";
+import { FieldCryptoService } from "../src/common/crypto/field-crypto.service";
 import { AsaasClient } from "../src/billing/payments/asaas.client";
 import { CouponsService } from "../src/coupons/coupons.service";
 import { PlanLimitService } from "../src/billing/plan-limit.service";
@@ -110,7 +112,7 @@ it("replaying a confirmed Pix payment concurrently grants one billing period", a
   const attempt = await db.billingAttempt.create({ data: { tenantId, planId: plan.id, method: "PIX_MONTHLY", listPriceCents: 1000, discountCents: 0, chargeCents: 1000, providerRef: "pay_123", providerCustomerId: "cus_123" } });
   // Only the external provider is stubbed. Transactions, locks and subscription writes use PostgreSQL.
   const mp = { getPayment: async () => ({ id: "pay_123", externalReference: attempt.id, status: "RECEIVED", value: 10 }) } as unknown as AsaasClient;
-  const payments = (p: PrismaService) => new PaymentsService(p, mp, config, new CouponsService(), new PlanLimitService(p));
+  const payments = (p: PrismaService) => new PaymentsService(p, mp, config, new CouponsService(), new PlanLimitService(p), new BillingProfileService(p, new FieldCryptoService(config)));
   await Promise.all([payments(db).syncAttempt(attempt.id), payments(db2).syncAttempt(attempt.id)]);
   const first = await db.subscription.findUniqueOrThrow({ where: { tenantId } });
   await payments(db).syncAttempt(attempt.id);
