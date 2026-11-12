@@ -1,74 +1,70 @@
 import { UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { createHmac } from "crypto";
-import { MercadoPagoWebhookController } from "./mercadopago-webhook.controller";
+import { AsaasWebhookController } from "./asaas-webhook.controller";
 import { PaymentsService } from "./payments.service";
 
-const SECRET = "segredo-do-webhook-1234567890";
+const TOKEN = "token-do-webhook-com-mais-de-32-caracteres";
 
-function build(secret: string | null = SECRET) {
+function build(token: string | null = TOKEN) {
   const payments = { handleNotification: jest.fn().mockResolvedValue(undefined) } as unknown as PaymentsService;
-  const config = { get: (key: string) => (key === "MERCADOPAGO_WEBHOOK_SECRET" ? (secret ?? undefined) : undefined) } as unknown as ConfigService;
-  return { controller: new MercadoPagoWebhookController(payments, config), payments };
+  const config = { get: (key: string) => (key === "ASAAS_WEBHOOK_TOKEN" ? (token ?? undefined) : undefined) } as unknown as ConfigService;
+  return { controller: new AsaasWebhookController(payments, config), payments };
 }
 
-const sign = (manifest: string) => createHmac("sha256", SECRET).update(manifest).digest("hex");
-
-describe("MercadoPagoWebhookController", () => {
-  it("assinatura válida: repassa tipo e id (do query) ao serviço", async () => {
+describe("AsaasWebhookController", () => {
+  it("token certo: repassa o tipo do objeto e o id ao serviço (evento de cobrança)", async () => {
     const { controller, payments } = build();
-    const v1 = sign("id:555;request-id:req-1;ts:1700000000;");
-
-    const result = await controller.receive(
-      { type: "payment", data: { id: "555" } },
-      "555",
-      undefined,
-      undefined,
-      `ts=1700000000,v1=${v1}`,
-      "req-1",
-    );
-
+    const result = await controller.receive({ event: "PAYMENT_RECEIVED", payment: { id: "pay_1" } }, TOKEN);
     expect(result).toEqual({ received: true });
-    expect(payments.handleNotification).toHaveBeenCalledWith("payment", "555");
+    expect(payments.handleNotification).toHaveBeenCalledWith("payment", "pay_1");
   });
 
-  // Corpo forjado com assinatura inválida: recusado antes de qualquer chamada ao provedor.
-  it("assinatura inválida: 401 e nada é processado", async () => {
+  it.each([
+    ["PAYMENT_CONFIRMED", { payment: { id: "pay_2" } }, "payment", "pay_2"],
+    ["PAYMENT_OVERDUE", { payment: { id: "pay_3" } }, "payment", "pay_3"],
+    ["SUBSCRIPTION_DELETED", { subscription: { id: "sub_1" } }, "subscription", "sub_1"],
+    ["SUBSCRIPTION_INACTIVATED", { subscription: { id: "sub_2" } }, "subscription", "sub_2"],
+    ["CHECKOUT_PAID", { checkout: { id: "chk_1" } }, "checkout", "chk_1"],
+    ["CHECKOUT_EXPIRED", { checkout: { id: "chk_2" } }, "checkout", "chk_2"],
+  ])("%s usa o objeto certo do corpo", async (event, rest, kind, id) => {
     const { controller, payments } = build();
-    await expect(
-      controller.receive({ type: "payment", data: { id: "555" } }, "555", undefined, undefined, "ts=1,v1=" + "a".repeat(64), "req-1"),
-    ).rejects.toThrow(UnauthorizedException);
+    await controller.receive({ event, ...rest }, TOKEN);
+    expect(payments.handleNotification).toHaveBeenCalledWith(kind, id);
+  });
+
+  // Quem não tem o token (forjou o corpo) é recusado antes de qualquer chamada ao provedor.
+  it.each([
+    ["token errado", "outro-token-qualquer-com-mais-de-32-chars"],
+    ["token vazio", ""],
+    ["sem cabeçalho", undefined],
+    ["token com o mesmo prefixo", TOKEN.slice(0, 20)],
+    ["token com sufixo extra", TOKEN + "x"],
+  ])("%s: 401 e nada é processado", async (_label, token) => {
+    const { controller, payments } = build();
+    await expect(controller.receive({ event: "PAYMENT_RECEIVED", payment: { id: "pay_1" } }, token)).rejects.toThrow(UnauthorizedException);
     expect(payments.handleNotification).not.toHaveBeenCalled();
   });
 
-  // Assinatura recorrente pode vir sem x-signature: segue (o serviço relê o estado no provedor).
-  it("sem cabeçalho de assinatura: processa (o corpo nunca é confiado, só vira aviso para reler)", async () => {
+  it("sem token configurado (dev) processa: o corpo nunca é confiado, só vira aviso para reler", async () => {
+    const { controller, payments } = build(null);
+    await controller.receive({ event: "PAYMENT_RECEIVED", payment: { id: "pay_1" } }, undefined);
+    expect(payments.handleNotification).toHaveBeenCalledWith("payment", "pay_1");
+  });
+
+  it("evento que não tratamos ou corpo vazio: 200 sem processar (o Asaas pausa a fila se não for 2xx)", async () => {
     const { controller, payments } = build();
-    await controller.receive({ type: "subscription_preapproval", data: { id: "abc" } }, undefined, undefined, undefined, undefined, undefined);
-    expect(payments.handleNotification).toHaveBeenCalledWith("subscription_preapproval", "abc");
-  });
-
-  it("sem segredo configurado (dev) também processa", async () => {
-    const { controller, payments } = build(null);
-    await controller.receive({ type: "payment", data: { id: 9 } }, undefined, undefined, undefined, "ts=1,v1=zz", undefined);
-    expect(payments.handleNotification).toHaveBeenCalledWith("payment", "9");
-  });
-
-  it("aceita o formato antigo (topic + id na query) sem corpo", async () => {
-    const { controller, payments } = build(null);
-    await controller.receive({}, "777", undefined, "payment", undefined, undefined);
-    expect(payments.handleNotification).toHaveBeenCalledWith("payment", "777");
-  });
-
-  it("corpo vazio ou sem id: 200 sem processar", async () => {
-    const { controller, payments } = build(null);
-    await expect(controller.receive({}, undefined, undefined, undefined, undefined, undefined)).resolves.toEqual({ received: true });
+    await expect(controller.receive({ event: "ACCOUNT_STATUS_UPDATED" }, TOKEN)).resolves.toEqual({ received: true });
+    await expect(controller.receive({}, TOKEN)).resolves.toEqual({ received: true });
+    await expect(controller.receive(undefined as never, TOKEN)).resolves.toEqual({ received: true });
     expect(payments.handleNotification).not.toHaveBeenCalled();
   });
 
-  it("id gigante não chega ao serviço", async () => {
-    const { controller, payments } = build(null);
-    await controller.receive({ type: "payment", data: { id: "9".repeat(100) } }, undefined, undefined, undefined, undefined, undefined);
+  it("objeto sem id, id que não é texto ou id gigante não chegam ao serviço", async () => {
+    const { controller, payments } = build();
+    await controller.receive({ event: "PAYMENT_RECEIVED", payment: {} }, TOKEN);
+    await controller.receive({ event: "PAYMENT_RECEIVED", payment: { id: 123 } }, TOKEN);
+    await controller.receive({ event: "PAYMENT_RECEIVED", payment: { id: "9".repeat(100) } }, TOKEN);
+    await controller.receive({ event: "PAYMENT_RECEIVED", subscription: { id: "sub_1" } }, TOKEN);
     expect(payments.handleNotification).not.toHaveBeenCalled();
   });
 });

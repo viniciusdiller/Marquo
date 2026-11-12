@@ -2,52 +2,75 @@ import { BadGatewayException, Injectable, Logger, OnModuleInit, ServiceUnavailab
 import { ConfigService } from "@nestjs/config";
 import { centsToReais } from "./pricing";
 
-const DEFAULT_API_BASE = "https://api.mercadopago.com";
-const REQUEST_TIMEOUT_MS = 10_000;
+const PRODUCTION_API_BASE = "https://api.asaas.com/v3";
+const SANDBOX_API_BASE = "https://api-sandbox.asaas.com/v3";
+const PRODUCTION_CHECKOUT_BASE = "https://asaas.com/checkoutSession/show";
+const SANDBOX_CHECKOUT_BASE = "https://sandbox.asaas.com/checkoutSession/show";
+const REQUEST_TIMEOUT_MS = 15_000;
+// O Asaas exige um User-Agent identificando a integração (contas novas recusam chamadas sem ele).
+const USER_AGENT = "Marquo";
 
-export interface MpPreapproval {
+// Status de cobrança do Asaas. Pagas de verdade: CONFIRMED (cartão aprovado) e RECEIVED (dinheiro disponível, Pix).
+// RECEIVED_IN_CASH é "recebi em dinheiro", marcado À MÃO por quem opera a conta: nunca vem do pagador, então não vale.
+export const ASAAS_PAID_STATUSES = ["CONFIRMED", "RECEIVED"] as const;
+// Cobrança desfeita: devolvida, estornada ou contestada. Não deve mais creditar acesso.
+export const ASAAS_REVERSED_STATUSES = ["REFUNDED", "REFUND_REQUESTED", "REFUND_IN_PROGRESS", "CHARGEBACK_REQUESTED", "CHARGEBACK_DISPUTE"] as const;
+
+export interface AsaasCustomer {
   id: string;
-  status: "pending" | "authorized" | "paused" | "cancelled" | string;
-  init_point?: string;
-  external_reference?: string;
-  payer_email?: string;
-  next_payment_date?: string | null;
-  date_created?: string;
-  auto_recurring?: { transaction_amount?: number; currency_id?: string };
-  summarized?: { charged_quantity?: number | null; last_charged_date?: string | null } | null;
 }
 
-export interface MpPayment {
-  id: number | string;
-  status: "approved" | "pending" | "in_process" | "rejected" | "cancelled" | "refunded" | "charged_back" | string;
-  status_detail?: string;
-  external_reference?: string;
-  transaction_amount?: number;
-  date_approved?: string | null;
-  date_of_expiration?: string | null;
-  point_of_interaction?: {
-    transaction_data?: { qr_code?: string; qr_code_base64?: string; ticket_url?: string };
-  };
+export interface AsaasPayment {
+  id: string;
+  status: string;
+  value?: number;
+  dueDate?: string;
+  confirmedDate?: string | null;
+  paymentDate?: string | null;
+  externalReference?: string | null;
+  subscription?: string | null;
+  customer?: string;
+  deleted?: boolean;
 }
 
-export interface MpAuthorizedPayment {
-  id: number | string;
-  preapproval_id?: string;
-  status?: string;
+export interface AsaasPixQrCode {
+  encodedImage?: string;
+  payload?: string;
+  expirationDate?: string;
 }
 
-// Só identifica de quem é o token, para conferir no log do boot se é a credencial que você pensa que é (teste x produção).
-// Formato do Mercado Pago: APP_USR-<aplicação>-<data>-<hash>-<usuário>. Devolve APENAS os dois números de identificação
-// (não são segredo e aparecem no painel do desenvolvedor); o hash, que é o segredo, nunca sai daqui.
-export function describeAccessToken(token: string): string {
-  const match = /^APP_USR-(\d+)-\d+-[a-f0-9]+-(\d+)$/i.exec(token.trim());
-  if (match) return `aplicação ${match[1]}, usuário ${match[2]}`;
-  if (token.trim().startsWith("TEST-")) return "credencial de teste (prefixo TEST-)";
+export interface AsaasSubscription {
+  id: string;
+  // ACTIVE | INACTIVE | EXPIRED
+  status: string;
+  value?: number;
+  nextDueDate?: string | null;
+  cycle?: string;
+  customer?: string;
+  deleted?: boolean;
+}
+
+export interface AsaasCheckout {
+  id: string;
+  link?: string | null;
+}
+
+interface AsaasList<T> {
+  data?: T[];
+  hasMore?: boolean;
+}
+
+// Só identifica de que ambiente é a chave, para conferir no log do boot se é a credencial que você pensa que é
+// (sandbox x produção). NUNCA devolve a chave nem pedaço dela.
+export function describeApiKey(key: string): "sandbox" | "produção" | "formato não reconhecido" {
+  const trimmed = key.trim();
+  if (/^\$aact_hmlg_/.test(trimmed)) return "sandbox";
+  if (/^\$aact_prod_/.test(trimmed)) return "produção";
   return "formato não reconhecido";
 }
 
 // Falha ao falar com o provedor. A mensagem do provedor/corpo da resposta NUNCA vai para o cliente (pode conter
-// dado interno); ela só é logada, sem o token.
+// dado interno); ela só é logada, sem a chave.
 export class PaymentProviderError extends Error {
   constructor(
     readonly status: number | null,
@@ -57,39 +80,50 @@ export class PaymentProviderError extends Error {
   }
 }
 
-// Cliente HTTP mínimo do Mercado Pago (sem SDK: uma dependência a menos para auditar). Só fala com UM host fixo
-// (api.mercadopago.com), com timeout, e nunca devolve o corpo de erro do provedor ao usuário.
+// Cliente HTTP mínimo do Asaas (sem SDK: uma dependência a menos para auditar). Só fala com UM host fixo (produção ou
+// sandbox, conforme a chave), com timeout, e nunca devolve o corpo de erro do provedor ao usuário.
 @Injectable()
-export class MercadoPagoClient implements OnModuleInit {
-  private readonly logger = new Logger(MercadoPagoClient.name);
-
-  onModuleInit() {
-    const token = this.config.get<string>("MERCADOPAGO_ACCESS_TOKEN");
-    if (token) this.logger.log(`Mercado Pago ligado: ${describeAccessToken(token)}`);
-    else this.logger.log("Mercado Pago desligado (sem MERCADOPAGO_ACCESS_TOKEN): as rotas de cobrança respondem 503.");
-  }
+export class AsaasClient implements OnModuleInit {
+  private readonly logger = new Logger(AsaasClient.name);
 
   constructor(private readonly config: ConfigService) {}
 
+  onModuleInit() {
+    const key = this.config.get<string>("ASAAS_API_KEY");
+    if (key) this.logger.log(`Asaas ligado: ambiente ${describeApiKey(key)}`);
+    else this.logger.log("Asaas desligado (sem ASAAS_API_KEY): as rotas de cobrança respondem 503.");
+  }
+
   isConfigured(): boolean {
-    return Boolean(this.config.get<string>("MERCADOPAGO_ACCESS_TOKEN"));
+    return Boolean(this.config.get<string>("ASAAS_API_KEY"));
   }
 
-  // Base da API. Só dá para sobrescrever fora de produção (testes com um servidor falso): em produção é sempre o
-  // host oficial, então nenhuma configuração aponta o token para outro lugar.
+  private isSandbox(): boolean {
+    const key = this.config.get<string>("ASAAS_API_KEY") ?? "";
+    return describeApiKey(key) === "sandbox";
+  }
+
+  // Base da API. Só dá para sobrescrever fora de produção (testes com um servidor falso): em produção é sempre o host
+  // oficial, então nenhuma configuração aponta a chave para outro lugar.
   private apiBase(): string {
-    if (this.config.get<string>("NODE_ENV") === "production") return DEFAULT_API_BASE;
-    return (this.config.get<string>("MERCADOPAGO_API_BASE") ?? DEFAULT_API_BASE).replace(/\/+$/, "");
+    if (this.config.get<string>("NODE_ENV") !== "production") {
+      const override = this.config.get<string>("ASAAS_API_BASE");
+      if (override) return override.replace(/\/+$/, "");
+    }
+    return this.isSandbox() ? SANDBOX_API_BASE : PRODUCTION_API_BASE;
   }
 
-  private async request<T>(
-    method: "GET" | "POST" | "PUT",
-    path: string,
-    body?: unknown,
-    idempotencyKey?: string,
-  ): Promise<T> {
-    const token = this.config.get<string>("MERCADOPAGO_ACCESS_TOKEN");
-    if (!token) throw new ServiceUnavailableException("Pagamento online indisponível no momento.");
+  // Endereço da página de pagamento hospedada. Usa o `link` que o provedor devolveu quando houver; senão monta a
+  // partir do id (o id é sempre texto vindo do provedor, nunca do usuário).
+  checkoutUrl(checkout: AsaasCheckout): string {
+    if (checkout.link && /^https:\/\//.test(checkout.link)) return checkout.link;
+    const base = this.isSandbox() ? SANDBOX_CHECKOUT_BASE : PRODUCTION_CHECKOUT_BASE;
+    return `${base}?id=${encodeURIComponent(checkout.id)}`;
+  }
+
+  private async request<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
+    const key = this.config.get<string>("ASAAS_API_KEY");
+    if (!key) throw new ServiceUnavailableException("Pagamento online indisponível no momento.");
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -98,103 +132,151 @@ export class MercadoPagoClient implements OnModuleInit {
         method,
         signal: controller.signal,
         headers: {
-          Authorization: `Bearer ${token}`,
+          access_token: key,
+          "User-Agent": USER_AGENT,
           "Content-Type": "application/json",
-          ...(idempotencyKey ? { "X-Idempotency-Key": idempotencyKey } : {}),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
       const text = await response.text();
       if (!response.ok) {
         // Corpo logado só em nível de aviso, truncado, e nunca devolvido ao usuário.
-        this.logger.warn(`Mercado Pago ${method} ${path} -> ${response.status}: ${text.slice(0, 300)}`);
-        throw new PaymentProviderError(response.status, `Mercado Pago respondeu ${response.status}`);
+        this.logger.warn(`Asaas ${method} ${path} -> ${response.status}: ${text.slice(0, 300)}`);
+        throw new PaymentProviderError(response.status, `Asaas respondeu ${response.status}`);
       }
       return (text ? JSON.parse(text) : undefined) as T;
     } catch (error) {
       if (error instanceof PaymentProviderError) throw error;
-      this.logger.warn(`Mercado Pago ${method} ${path} falhou: ${(error as Error).name}`);
-      throw new PaymentProviderError(null, "Falha de comunicação com o Mercado Pago");
+      this.logger.warn(`Asaas ${method} ${path} falhou: ${(error as Error).name}`);
+      throw new PaymentProviderError(null, "Falha de comunicação com o Asaas");
     } finally {
       clearTimeout(timer);
     }
   }
 
-  createPreapproval(input: {
-    reason: string;
-    externalReference: string;
-    payerEmail: string;
-    amountCents: number;
-    backUrl: string;
-    notificationUrl: string | null;
-    idempotencyKey: string;
-  }): Promise<MpPreapproval> {
-    return this.request<MpPreapproval>(
-      "POST",
-      "/preapproval",
-      {
-        reason: input.reason,
-        external_reference: input.externalReference,
-        payer_email: input.payerEmail,
-        auto_recurring: {
-          frequency: 1,
-          frequency_type: "months",
-          transaction_amount: centsToReais(input.amountCents),
-          currency_id: "BRL",
-        },
-        back_url: input.backUrl,
-        ...(input.notificationUrl ? { notification_url: input.notificationUrl } : {}),
-        status: "pending",
-      },
-      input.idempotencyKey,
-    );
-  }
+  // ── Cliente ──────────────────────────────────────────────
 
-  getPreapproval(id: string): Promise<MpPreapproval> {
-    return this.request<MpPreapproval>("GET", `/preapproval/${encodeURIComponent(id)}`);
-  }
-
-  updatePreapprovalAmount(id: string, amountCents: number): Promise<MpPreapproval> {
-    return this.request<MpPreapproval>("PUT", `/preapproval/${encodeURIComponent(id)}`, {
-      auto_recurring: { transaction_amount: centsToReais(amountCents), currency_id: "BRL" },
+  // O Asaas só emite cobrança para cliente com CPF/CNPJ. `externalReference` amarra o cliente à tentativa nossa.
+  createCustomer(input: { name: string; email: string; cpfCnpj: string; externalReference: string }): Promise<AsaasCustomer> {
+    return this.request<AsaasCustomer>("POST", "/customers", {
+      name: input.name,
+      email: input.email,
+      cpfCnpj: input.cpfCnpj,
+      externalReference: input.externalReference,
+      // O Marquo é quem avisa o dono; sem isto o Asaas manda e-mail e SMS próprios a cada cobrança.
+      notificationDisabled: true,
     });
   }
 
-  cancelPreapproval(id: string): Promise<MpPreapproval> {
-    return this.request<MpPreapproval>("PUT", `/preapproval/${encodeURIComponent(id)}`, { status: "cancelled" });
-  }
+  // ── Pix (uma cobrança por mês) ───────────────────────────
 
   createPixPayment(input: {
+    customerId: string;
+    amountCents: number;
+    dueDate: string;
     description: string;
     externalReference: string;
-    payerEmail: string;
+  }): Promise<AsaasPayment> {
+    return this.request<AsaasPayment>("POST", "/payments", {
+      customer: input.customerId,
+      billingType: "PIX",
+      value: centsToReais(input.amountCents),
+      dueDate: input.dueDate,
+      description: input.description,
+      externalReference: input.externalReference,
+    });
+  }
+
+  getPixQrCode(paymentId: string): Promise<AsaasPixQrCode> {
+    return this.request<AsaasPixQrCode>("GET", `/payments/${encodeURIComponent(paymentId)}/pixQrCode`);
+  }
+
+  getPayment(id: string): Promise<AsaasPayment> {
+    return this.request<AsaasPayment>("GET", `/payments/${encodeURIComponent(id)}`);
+  }
+
+  // Remove uma cobrança ainda não paga (Pix que expirou na nossa conta não pode ser pago depois). "Já não existe" (404)
+  // conta como feito.
+  async deletePayment(id: string): Promise<void> {
+    try {
+      await this.request("DELETE", `/payments/${encodeURIComponent(id)}`);
+    } catch (error) {
+      if (error instanceof PaymentProviderError && error.status === 404) return;
+      throw error;
+    }
+  }
+
+  // ── Cartão recorrente (Checkout hospedado + assinatura) ──
+
+  // O pagador digita o cartão na página do Asaas: o cartão nunca passa por aqui. Concluído o checkout, o Asaas cria a
+  // assinatura mensal sozinho. `customerId` já tem os dados do pagador (e o CPF/CNPJ), então a tela não os pede de novo.
+  createCheckout(input: {
+    customerId: string;
+    itemName: string;
+    itemDescription: string;
     amountCents: number;
-    expiresAt: string;
-    notificationUrl: string | null;
-    idempotencyKey: string;
-  }): Promise<MpPayment> {
-    return this.request<MpPayment>(
-      "POST",
-      "/v1/payments",
-      {
-        transaction_amount: centsToReais(input.amountCents),
-        description: input.description,
-        payment_method_id: "pix",
-        payer: { email: input.payerEmail },
-        external_reference: input.externalReference,
-        date_of_expiration: input.expiresAt,
-        ...(input.notificationUrl ? { notification_url: input.notificationUrl } : {}),
-      },
-      input.idempotencyKey,
+    nextDueDate: string;
+    minutesToExpire: number;
+    successUrl: string;
+    cancelUrl: string;
+    expiredUrl: string;
+  }): Promise<AsaasCheckout> {
+    return this.request<AsaasCheckout>("POST", "/checkouts", {
+      billingTypes: ["CREDIT_CARD"],
+      chargeTypes: ["RECURRENT"],
+      minutesToExpire: input.minutesToExpire,
+      customer: input.customerId,
+      callback: { successUrl: input.successUrl, cancelUrl: input.cancelUrl, expiredUrl: input.expiredUrl },
+      items: [
+        {
+          name: input.itemName,
+          description: input.itemDescription,
+          quantity: 1,
+          value: centsToReais(input.amountCents),
+        },
+      ],
+      subscription: { cycle: "MONTHLY", nextDueDate: input.nextDueDate },
+    });
+  }
+
+  async listSubscriptionsByCustomer(customerId: string): Promise<AsaasSubscription[]> {
+    const result = await this.request<AsaasList<AsaasSubscription>>(
+      "GET",
+      `/subscriptions?customer=${encodeURIComponent(customerId)}&limit=10`,
     );
+    return result?.data ?? [];
   }
 
-  getPayment(id: string): Promise<MpPayment> {
-    return this.request<MpPayment>("GET", `/v1/payments/${encodeURIComponent(id)}`);
+  getSubscription(id: string): Promise<AsaasSubscription> {
+    return this.request<AsaasSubscription>("GET", `/subscriptions/${encodeURIComponent(id)}`);
   }
 
-  getAuthorizedPayment(id: string): Promise<MpAuthorizedPayment> {
-    return this.request<MpAuthorizedPayment>("GET", `/authorized_payments/${encodeURIComponent(id)}`);
+  async listSubscriptionPayments(id: string): Promise<AsaasPayment[]> {
+    const result = await this.request<AsaasList<AsaasPayment>>(
+      "GET",
+      `/subscriptions/${encodeURIComponent(id)}/payments?limit=100`,
+    );
+    return result?.data ?? [];
+  }
+
+  // Muda o valor da recorrência. `updatePendingPayments` leva a mudança também à cobrança do próximo mês, que o Asaas já
+  // gerou com antecedência. Em assinatura de cartão o Asaas exige a tokenização habilitada na conta.
+  updateSubscriptionValue(id: string, amountCents: number): Promise<AsaasSubscription> {
+    return this.request<AsaasSubscription>("PUT", `/subscriptions/${encodeURIComponent(id)}`, {
+      value: centsToReais(amountCents),
+      updatePendingPayments: true,
+    });
+  }
+
+  // Encerra a recorrência de vez (e remove as cobranças pendentes/vencidas dela). O que já foi pago fica. "Já não
+  // existe" (404) conta como feito.
+  async deleteSubscription(id: string): Promise<void> {
+    try {
+      await this.request("DELETE", `/subscriptions/${encodeURIComponent(id)}`);
+    } catch (error) {
+      if (error instanceof PaymentProviderError && error.status === 404) return;
+      throw error;
+    }
   }
 }
 

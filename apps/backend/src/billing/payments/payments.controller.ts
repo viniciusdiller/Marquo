@@ -5,7 +5,7 @@ import { Roles } from "../../common/decorators/roles.decorator";
 import { SkipBillingCheck } from "../../common/decorators/skip-billing-check.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { AuthenticatedUser } from "../../auth/types/auth-user";
-import { ChangePlanDto, CheckoutDto } from "../dto/checkout.dto";
+import { ChangePlanDto, CheckoutDto, StartCheckoutDto } from "../dto/checkout.dto";
 import { PaymentsService } from "./payments.service";
 
 // Rotas do OWNER, que funcionam mesmo com o acesso bloqueado (@SkipBillingCheck): quem está bloqueado precisa
@@ -32,8 +32,8 @@ export class PaymentsController {
   @Throttle(START_THROTTLE)
   @HttpCode(200)
   @Post("checkout/card")
-  card(@CurrentUser() user: AuthenticatedUser, @Body() dto: CheckoutDto) {
-    return this.payments.startCard(user.tenantId, user.userId, dto.tier, dto.couponCode);
+  card(@CurrentUser() user: AuthenticatedUser, @Body() dto: StartCheckoutDto) {
+    return this.payments.startCard(user.tenantId, user.userId, dto.tier, dto.cpfCnpj, dto.couponCode);
   }
 
   @Roles(Role.OWNER)
@@ -41,8 +41,8 @@ export class PaymentsController {
   @Throttle(START_THROTTLE)
   @HttpCode(200)
   @Post("checkout/pix")
-  pix(@CurrentUser() user: AuthenticatedUser, @Body() dto: CheckoutDto) {
-    return this.payments.startPix(user.tenantId, user.userId, dto.tier, dto.couponCode);
+  pix(@CurrentUser() user: AuthenticatedUser, @Body() dto: StartCheckoutDto) {
+    return this.payments.startPix(user.tenantId, user.userId, dto.tier, dto.cpfCnpj, dto.couponCode);
   }
 
   @Roles(Role.OWNER)

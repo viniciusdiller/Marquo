@@ -1,4 +1,5 @@
 import { ValidationOptions, registerDecorator } from "class-validator";
+import { isValidCnpj } from "../utils/cnpj.util";
 import { isValidCpf } from "../utils/cpf.util";
 import { isPlausibleBrazilianPhone, normalizePhone } from "../utils/phone.util";
 
@@ -30,6 +31,15 @@ export const IsBrazilianPhone = (options?: ValidationOptions) =>
 
 export const IsCpf = (options?: ValidationOptions) =>
   decorate("isCpf", (v) => typeof v === "string" && v.length <= 20 && isValidCpf(v), "CPF inválido.", options);
+
+// Documento do pagador da cobrança: CPF (pessoa física) ou CNPJ (MEI/empresa), com ou sem máscara.
+export const IsCpfOrCnpj = (options?: ValidationOptions) =>
+  decorate(
+    "isCpfOrCnpj",
+    (v) => typeof v === "string" && v.length <= 20 && (isValidCpf(v) || isValidCnpj(v)),
+    "CPF ou CNPJ inválido.",
+    options,
+  );
 
 // Data de nascimento: data real, não no futuro e não anterior a 1900 (IsDateString aceitava
 // "0001-01-01" e "9999-12-31").

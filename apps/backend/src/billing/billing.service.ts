@@ -1,13 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { computeBillingStatus } from "./billing-status.util";
-import { MercadoPagoClient } from "./payments/mercadopago.client";
+import { AsaasClient } from "./payments/asaas.client";
 
 @Injectable()
 export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mp: MercadoPagoClient,
+    private readonly asaas: AsaasClient,
   ) {}
 
   listPlans() {
@@ -30,7 +30,7 @@ export class BillingService {
       status: computeBillingStatus(tenant, subscription),
       trialEndsAt: tenant.trialEndsAt,
       // Há provedor de pagamento configurado? Sem ele a tela só informa ("fale com a equipe").
-      paymentsEnabled: this.mp.isConfigured(),
+      paymentsEnabled: this.asaas.isConfigured(),
       subscription: subscription
         ? {
             status: subscription.status,

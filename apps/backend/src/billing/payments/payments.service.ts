@@ -22,17 +22,22 @@ import { CouponsService } from "../../coupons/coupons.service";
 import { couponState, isValidCouponCode, normalizeCouponCode } from "../../coupons/coupon.util";
 import { billingBlockMessage } from "../billing-status.util";
 import { PlanLimitService } from "../plan-limit.service";
+import { isValidCnpj, normalizeCnpj } from "../../common/utils/cnpj.util";
+import { isValidCpf, normalizeCpf } from "../../common/utils/cpf.util";
 import {
-  MercadoPagoClient,
-  MpPayment,
-  MpPreapproval,
+  ASAAS_PAID_STATUSES,
+  ASAAS_REVERSED_STATUSES,
+  AsaasClient,
+  AsaasPayment,
+  AsaasSubscription,
   PaymentProviderError,
   toBadGateway,
-} from "./mercadopago.client";
+} from "./asaas.client";
 import {
   addOneMonth,
-  mpDateTime,
+  asaasDate,
   nextPeriodStart,
+  parseAsaasDate,
   priceWithCoupon,
   reaisToCents,
   type PriceQuote,
@@ -43,6 +48,8 @@ const PIX_VALIDITY_MS = 24 * 60 * 60 * 1000;
 const RENEWAL_WINDOW_MS = 10 * 24 * 60 * 60 * 1000;
 // Checkout de cartão abandonado: depois disto a tentativa expira e o uso do cupom volta.
 const CARD_ATTEMPT_TTL_MS = 48 * 60 * 60 * 1000;
+// O checkout hospedado do Asaas aceita de 10 a 1440 minutos de validade.
+const CHECKOUT_MINUTES_TO_EXPIRE = 1440;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const COUPON_ALREADY_USED_MESSAGE = "Este negócio já usou este cupom.";
@@ -76,32 +83,26 @@ export class PaymentsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mp: MercadoPagoClient,
+    private readonly asaas: AsaasClient,
     private readonly config: ConfigService,
     private readonly coupons: CouponsService,
     private readonly planLimit: PlanLimitService,
   ) {}
 
   isEnabled(): boolean {
-    return this.mp.isConfigured();
+    return this.asaas.isConfigured();
   }
 
   private requireEnabled() {
-    if (!this.mp.isConfigured()) {
+    if (!this.asaas.isConfigured()) {
       throw new ServiceUnavailableException("O pagamento online ainda não está disponível. Fale com a equipe do Marquo.");
     }
   }
 
-  private notificationUrl(): string | null {
-    const base = this.config.get<string>("BACKEND_PUBLIC_URL");
-    return base ? `${base.replace(/\/+$/, "")}/webhooks/mercadopago` : null;
-  }
-
-  // Base do endereço de volta do checkout do cartão (back_url). O Mercado Pago só aceita https público, então em dev
-  // (FRONTEND_URL=http://localhost:3000) o cartão falha com "Invalid value for back_url": aponte MERCADOPAGO_BACK_URL_BASE
-  // para um túnel https do frontend. FRONTEND_URL fica como está porque também é a origem liberada no CORS.
+  // Base do endereço de volta do checkout do cartão. O Asaas só aceita https público: em dev (FRONTEND_URL=http://localhost:3000)
+  // o checkout falha com "O campo successUrl é inválido", então ASAAS_BACK_URL_BASE aponta para um túnel https do frontend.
   private backUrlBase(): string {
-    const override = this.config.get<string>("MERCADOPAGO_BACK_URL_BASE");
+    const override = this.config.get<string>("ASAAS_BACK_URL_BASE");
     return (override ?? this.frontendUrl()).replace(/\/+$/, "");
   }
 
@@ -292,34 +293,68 @@ export class PaymentsService {
     });
   }
 
-  private async ownerEmail(tenantId: string, userId: string): Promise<string> {
-    const user = await this.prisma.user.findFirst({ where: { id: userId, tenantId }, select: { email: true } });
+  // Quem paga: o dono, relido do banco com o tenant no WHERE (nome e e-mail nunca vêm do request).
+  private async owner(tenantId: string, userId: string): Promise<{ name: string; email: string }> {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, tenantId }, select: { name: true, email: true } });
     if (!user) throw new NotFoundException("Usuário não encontrado.");
-    // Só em desenvolvimento: com credenciais de TESTE o Mercado Pago exige um comprador de teste ("Contas de teste" no painel);
-    // com o e-mail real do dono responde "Unauthorized use of live credentials". Em produção é sempre o e-mail do dono.
-    const testPayer = this.config.get<string>("MERCADOPAGO_TEST_PAYER_EMAIL");
-    if (testPayer && this.config.get<string>("NODE_ENV") !== "production") return testPayer;
-    return user.email;
+    return user;
   }
 
-  async startCard(tenantId: string, userId: string, tier: PlanTier, couponCode?: string) {
+  // O Asaas só emite cobrança para cliente com CPF/CNPJ. O DTO já recusa documento inválido; o serviço repete a
+  // conferência (o DTO não é a última linha) e manda ao provedor só os dígitos.
+  private normalizeDocument(raw: string): string {
+    if (isValidCpf(raw)) return normalizeCpf(raw);
+    if (isValidCnpj(raw)) return normalizeCnpj(raw);
+    throw new BadRequestException("CPF ou CNPJ inválido.");
+  }
+
+  // Cria no Asaas o cliente DESTA tentativa e grava o id: é a ligação entre o provedor e o negócio. O documento vai
+  // direto ao provedor e não fica no nosso banco.
+  private async createProviderCustomer(attemptId: string, owner: { name: string; email: string }, document: string) {
+    const customer = await this.asaas.createCustomer({
+      name: owner.name,
+      email: owner.email,
+      cpfCnpj: document,
+      externalReference: attemptId,
+    });
+    if (!customer.id) throw new PaymentProviderError(null, "Resposta sem id de cliente");
+    await this.prisma.billingAttempt.update({ where: { id: attemptId }, data: { providerCustomerId: customer.id } });
+    return customer.id;
+  }
+
+  // Cartão: o dono vai para o checkout hospedado do Asaas e digita o cartão LÁ (nunca passa por aqui). Concluído, o
+  // Asaas cria a assinatura mensal para o cliente que montamos, e é por esse cliente que ela volta a este negócio.
+  async startCard(tenantId: string, userId: string, tier: PlanTier, cpfCnpj: string, couponCode?: string) {
     this.requireEnabled();
-    const email = await this.ownerEmail(tenantId, userId);
+    const document = this.normalizeDocument(cpfCnpj);
+    // Falha cedo e com motivo claro (em vez de criar tentativa/cliente e receber um 400 do provedor). Em produção o
+    // FRONTEND_URL é https, então isto só aparece em desenvolvimento.
+    const back = `${this.backUrlBase()}/dashboard/plano`;
+    if (!back.startsWith("https://")) {
+      throw new ServiceUnavailableException(
+        "O checkout de cartão do Asaas exige um endereço https público de retorno. Em desenvolvimento, defina ASAAS_BACK_URL_BASE com um túnel https do frontend, ou teste com Pix.",
+      );
+    }
+    const owner = await this.owner(tenantId, userId);
     const { attempt, planName } = await this.createAttempt(tenantId, tier, BillingMethod.CARD_RECURRING, couponCode);
 
     try {
-      const preapproval = await this.mp.createPreapproval({
-        reason: `Marquo - Plano ${planName}`,
-        externalReference: attempt.id,
-        payerEmail: email,
+      const customerId = await this.createProviderCustomer(attempt.id, owner, document);
+      const checkout = await this.asaas.createCheckout({
+        customerId,
+        itemName: `Marquo - Plano ${planName}`,
+        itemDescription: `Assinatura mensal do plano ${planName}`,
         amountCents: attempt.chargeCents,
-        backUrl: `${this.backUrlBase()}/dashboard/plano?checkout=cartao&tentativa=${attempt.id}`,
-        notificationUrl: this.notificationUrl(),
-        idempotencyKey: attempt.id,
+        // Primeira cobrança hoje (o cartão é cobrado ao concluir o checkout); as seguintes, todo mês.
+        nextDueDate: `${asaasDate(new Date())} 23:59:59`,
+        minutesToExpire: CHECKOUT_MINUTES_TO_EXPIRE,
+        successUrl: `${back}?checkout=cartao&tentativa=${attempt.id}`,
+        cancelUrl: back,
+        expiredUrl: back,
       });
-      if (!preapproval.id || !preapproval.init_point) throw new PaymentProviderError(null, "Resposta sem link de pagamento");
-      await this.prisma.billingAttempt.update({ where: { id: attempt.id }, data: { providerRef: String(preapproval.id) } });
-      return { attemptId: attempt.id, url: preapproval.init_point, chargeCents: attempt.chargeCents };
+      if (!checkout.id) throw new PaymentProviderError(null, "Resposta sem checkout");
+      await this.prisma.billingAttempt.update({ where: { id: attempt.id }, data: { providerRef: String(checkout.id) } });
+      return { attemptId: attempt.id, url: this.asaas.checkoutUrl(checkout), chargeCents: attempt.chargeCents };
     } catch (error) {
       await this.failAttempt(attempt.id);
       this.logger.warn(`Checkout de cartão falhou (tentativa ${attempt.id}): ${(error as Error).message}`);
@@ -327,37 +362,51 @@ export class PaymentsService {
     }
   }
 
-  async startPix(tenantId: string, userId: string, tier: PlanTier, couponCode?: string) {
+  async startPix(tenantId: string, userId: string, tier: PlanTier, cpfCnpj: string, couponCode?: string) {
     this.requireEnabled();
-    const email = await this.ownerEmail(tenantId, userId);
+    const document = this.normalizeDocument(cpfCnpj);
+    const owner = await this.owner(tenantId, userId);
     const { attempt, planName } = await this.createAttempt(tenantId, tier, BillingMethod.PIX_MONTHLY, couponCode);
     const expiresAt = attempt.expiresAt ?? new Date(Date.now() + PIX_VALIDITY_MS);
+    let paymentId: string | null = null;
 
     try {
-      const payment = await this.mp.createPixPayment({
+      const customerId = await this.createProviderCustomer(attempt.id, owner, document);
+      const payment = await this.asaas.createPixPayment({
+        customerId,
+        amountCents: attempt.chargeCents,
+        dueDate: asaasDate(new Date()),
         description: `Marquo - Plano ${planName} (1 mês)`,
         externalReference: attempt.id,
-        payerEmail: email,
-        amountCents: attempt.chargeCents,
-        expiresAt: mpDateTime(expiresAt),
-        notificationUrl: this.notificationUrl(),
-        idempotencyKey: attempt.id,
       });
-      const data = payment.point_of_interaction?.transaction_data;
-      if (!payment.id || !data?.qr_code) throw new PaymentProviderError(null, "Resposta sem QR Code");
-      await this.prisma.billingAttempt.update({ where: { id: attempt.id }, data: { providerRef: String(payment.id) } });
+      if (!payment.id) throw new PaymentProviderError(null, "Resposta sem cobrança");
+      paymentId = String(payment.id);
+      await this.prisma.billingAttempt.update({ where: { id: attempt.id }, data: { providerRef: paymentId } });
+
+      const qr = await this.asaas.getPixQrCode(paymentId);
+      if (!qr.payload) throw new PaymentProviderError(null, "Resposta sem QR Code");
       return {
         attemptId: attempt.id,
         chargeCents: attempt.chargeCents,
         expiresAt,
-        qrCode: data.qr_code,
-        qrCodeBase64: data.qr_code_base64 ?? null,
-        ticketUrl: data.ticket_url ?? null,
+        qrCode: qr.payload,
+        qrCodeBase64: qr.encodedImage ?? null,
+        ticketUrl: null,
       };
     } catch (error) {
       await this.failAttempt(attempt.id);
+      // Cobrança criada mas QR indisponível: tira do ar, senão ficaria uma cobrança paga sem tentativa viva.
+      if (paymentId) await this.deletePaymentQuietly(paymentId);
       this.logger.warn(`Pix falhou (tentativa ${attempt.id}): ${(error as Error).message}`);
       throw toBadGateway();
+    }
+  }
+
+  private async deletePaymentQuietly(paymentId: string): Promise<void> {
+    try {
+      await this.asaas.deletePayment(paymentId);
+    } catch (error) {
+      this.logger.error(`Não foi possível remover a cobrança ${paymentId} no provedor: ${(error as Error).message}`);
     }
   }
 
@@ -371,7 +420,7 @@ export class PaymentsService {
     const attempt = await this.prisma.billingAttempt.findFirst({ where: { id: attemptId, tenantId } });
     if (!attempt) throw new NotFoundException("Tentativa não encontrada.");
 
-    if (attempt.status === BillingAttemptStatus.PENDING && attempt.providerRef && this.mp.isConfigured()) {
+    if (attempt.status === BillingAttemptStatus.PENDING && attempt.providerRef && this.asaas.isConfigured()) {
       await this.syncAttemptSafely(attempt.id);
       const fresh = await this.prisma.billingAttempt.findFirstOrThrow({ where: { id: attemptId, tenantId } });
       return this.view(fresh);
@@ -411,30 +460,37 @@ export class PaymentsService {
     if (!attempt?.providerRef) return;
 
     if (attempt.method === BillingMethod.PIX_MONTHLY) {
-      const payment = await this.mp.getPayment(attempt.providerRef);
+      const payment = await this.asaas.getPayment(attempt.providerRef);
       await this.applyPixPayment(attempt.id, payment);
-    } else {
-      const preapproval = await this.mp.getPreapproval(attempt.providerRef);
-      await this.applyPreapproval(attempt.id, preapproval);
+      return;
     }
+    // Cartão: o checkout cria a assinatura para o cliente desta tentativa. Sem assinatura ainda = o dono não terminou.
+    if (!attempt.providerCustomerId) return;
+    const subscriptions = await this.asaas.listSubscriptionsByCustomer(attempt.providerCustomerId);
+    const subscription = subscriptions.find((s) => !s.deleted && s.status === "ACTIVE") ?? subscriptions.find((s) => !s.deleted);
+    if (!subscription) {
+      // Todas removidas: se esta tentativa é dona de uma assinatura que foi encerrada, trata como cancelada.
+      const removed = subscriptions.find((s) => s.deleted);
+      if (removed) await this.applyCardSubscription(attempt.id, removed, []);
+      return;
+    }
+    const payments = await this.asaas.listSubscriptionPayments(subscription.id);
+    await this.applyCardSubscription(attempt.id, subscription, payments);
   }
 
-  // Sincroniza o cartão do negócio (botão "já paguei" / retorno do checkout).
+  // Sincroniza o cartão do negócio (botão "já paguei" / retorno do checkout): as tentativas de cartão mais recentes.
   async syncCardForTenant(tenantId: string): Promise<void> {
-    const sub = await this.prisma.subscription.findUnique({ where: { tenantId }, select: { providerSubscriptionId: true } });
-    const attempt = await this.prisma.billingAttempt.findFirst({
-      where: {
-        tenantId,
-        method: BillingMethod.CARD_RECURRING,
-        providerRef: sub?.providerSubscriptionId ?? { not: null },
-      },
+    const attempts = await this.prisma.billingAttempt.findMany({
+      where: { tenantId, method: BillingMethod.CARD_RECURRING, providerCustomerId: { not: null } },
       orderBy: { createdAt: "desc" },
+      take: 3,
+      select: { id: true },
     });
-    if (attempt) await this.syncAttemptSafely(attempt.id);
+    for (const { id } of attempts) await this.syncAttemptSafely(id);
   }
 
-  private async applyPixPayment(attemptId: string, payment: MpPayment): Promise<void> {
-    let previousPreapproval: string | null = null;
+  private async applyPixPayment(attemptId: string, payment: AsaasPayment): Promise<void> {
+    let previousSubscription: string | null = null;
 
     await this.prisma.$transaction(async (tx) => {
       const attempt = await tx.billingAttempt.findUnique({ where: { id: attemptId } });
@@ -444,22 +500,22 @@ export class PaymentsService {
       const current = await tx.billingAttempt.findUniqueOrThrow({ where: { id: attemptId } });
       if (current.status !== BillingAttemptStatus.PENDING) return;
 
-      // O pagamento do provedor precisa ser DESTA tentativa e do valor que cobramos (nunca confiar só no id).
-      if (String(payment.id) !== current.providerRef || payment.external_reference !== current.id) {
-        this.logger.error(`Pagamento ${payment.id} não confere com a tentativa ${current.id}; ignorado.`);
+      // A cobrança do provedor precisa ser DESTA tentativa e do valor que cobramos (nunca confiar só no id).
+      if (String(payment.id) !== current.providerRef || payment.externalReference !== current.id) {
+        this.logger.error(`Cobrança ${payment.id} não confere com a tentativa ${current.id}; ignorada.`);
         return;
       }
 
-      if (payment.status === "approved") {
-        if (payment.transaction_amount === undefined || reaisToCents(payment.transaction_amount) !== current.chargeCents) {
-          this.logger.error(`Valor pago (${payment.transaction_amount}) difere do cobrado na tentativa ${current.id}; ignorado.`);
+      if ((ASAAS_PAID_STATUSES as readonly string[]).includes(payment.status)) {
+        if (payment.value === undefined || reaisToCents(payment.value) !== current.chargeCents) {
+          this.logger.error(`Valor pago (${payment.value}) difere do cobrado na tentativa ${current.id}; ignorado.`);
           return;
         }
         const existing = await tx.subscription.findUnique({ where: { tenantId: current.tenantId } });
         const keepsPix = existing && !existing.courtesy && existing.method === BillingMethod.PIX_MONTHLY;
         const start = nextPeriodStart(keepsPix ? existing.currentPeriodEnd : null);
         const end = addOneMonth(start);
-        previousPreapproval = existing?.providerSubscriptionId ?? null;
+        previousSubscription = existing?.providerSubscriptionId ?? null;
 
         const values = {
           planId: current.planId,
@@ -488,24 +544,31 @@ export class PaymentsService {
         return;
       }
 
-      if (["rejected", "cancelled", "refunded", "charged_back"].includes(payment.status)) {
+      if (payment.deleted || (ASAAS_REVERSED_STATUSES as readonly string[]).includes(payment.status)) {
         await this.releaseCoupon(tx, current);
         await tx.billingAttempt.update({ where: { id: current.id }, data: { status: BillingAttemptStatus.FAILED } });
       }
     });
 
     // Trocou de cartão para Pix: encerra a recorrência antiga para não cobrar nos dois (melhor esforço).
-    if (previousPreapproval) {
+    if (previousSubscription) {
       try {
-        await this.mp.cancelPreapproval(previousPreapproval);
+        await this.asaas.deleteSubscription(previousSubscription);
       } catch (error) {
-        this.logger.error(`Não foi possível cancelar a assinatura ${previousPreapproval} ao migrar para Pix: ${(error as Error).message}`);
+        this.logger.error(`Não foi possível cancelar a assinatura ${previousSubscription} ao migrar para Pix: ${(error as Error).message}`);
       }
     }
   }
 
-  private async applyPreapproval(attemptId: string, preapproval: MpPreapproval): Promise<void> {
-    let restorePrice: { providerRef: string; listPriceCents: number } | null = null;
+  // Aplica o estado RELIDO da assinatura (e das cobranças dela) no negócio. A assinatura do Asaas já nasce ACTIVE ao
+  // concluir o checkout, então "pago" é decidido pelas COBRANÇAS: a primeira confirmada ativa o acesso; cada mês
+  // seguinte confirmado renova o período; cobrança vencida sem pagamento põe em atraso.
+  private async applyCardSubscription(
+    attemptId: string,
+    subscription: AsaasSubscription,
+    payments: AsaasPayment[],
+  ): Promise<void> {
+    let restorePrice: { subscriptionId: string; listPriceCents: number } | null = null;
 
     await this.prisma.$transaction(async (tx) => {
       const attempt = await tx.billingAttempt.findUnique({ where: { id: attemptId } });
@@ -513,88 +576,103 @@ export class PaymentsService {
       await this.lockTenant(tx, attempt.tenantId);
       const current = await tx.billingAttempt.findUniqueOrThrow({ where: { id: attemptId } });
 
-      if (String(preapproval.id) !== current.providerRef || preapproval.external_reference !== current.id) {
-        this.logger.error(`Assinatura ${preapproval.id} não confere com a tentativa ${current.id}; ignorada.`);
+      // A assinatura precisa ser do cliente que criamos para ESTA tentativa (nunca de outro negócio).
+      if (!current.providerCustomerId || subscription.customer !== current.providerCustomerId) {
+        this.logger.error(`Assinatura ${subscription.id} não confere com a tentativa ${current.id}; ignorada.`);
         return;
       }
 
       const sub = await tx.subscription.findUnique({ where: { tenantId: current.tenantId } });
-      const ownsSub = sub?.providerSubscriptionId === current.providerRef;
-      const next = preapproval.next_payment_date ? new Date(preapproval.next_payment_date) : null;
-      const nextValid = next && !Number.isNaN(next.getTime()) ? next : null;
+      const ownsSub = sub?.providerSubscriptionId === subscription.id;
+      // Tentativa já encerrada (falhou/expirou) e que nunca virou a assinatura do negócio: nada a aplicar.
+      if (current.status !== BillingAttemptStatus.PENDING && !ownsSub) return;
 
-      if (preapproval.status === "authorized") {
-        // Se esta assinatura já é do negócio, o plano vigente é o da Subscription (o dono pode ter trocado de plano
-        // depois da tentativa): a releitura nunca o regrava com o plano da tentativa original.
-        const values = {
-          planId: ownsSub ? sub.planId : current.planId,
-          status: SubscriptionStatus.ACTIVE,
-          courtesy: false,
-          method: BillingMethod.CARD_RECURRING,
-          providerSubscriptionId: current.providerRef,
-          currentPeriodEnd: nextValid ?? (ownsSub ? sub.currentPeriodEnd : addOneMonth(new Date())),
-          cancelAtPeriodEnd: false,
-        };
-        await tx.subscription.upsert({
-          where: { tenantId: current.tenantId },
-          create: { tenantId: current.tenantId, ...values },
-          update: values,
-        });
-        if (current.status === BillingAttemptStatus.PENDING) {
-          await tx.billingAttempt.update({
-            where: { id: current.id },
-            data: { status: BillingAttemptStatus.APPROVED, approvedAt: new Date() },
-          });
-          if (current.couponRedemptionId) {
-            await tx.couponRedemption.updateMany({
-              where: { id: current.couponRedemptionId, appliedAt: null },
-              data: { appliedAt: new Date() },
-            });
-          }
-        }
-        // Com desconto na primeira cobrança, depois que ela saiu o valor volta ao preço cheio.
-        const charged = preapproval.summarized?.charged_quantity ?? 0;
-        const amountNow = preapproval.auto_recurring?.transaction_amount;
-        // (Só se o plano ainda é o da tentativa: depois de uma troca de plano o valor certo é o do plano novo.)
-        const samePlan = !ownsSub || sub.planId === current.planId;
-        if (
-          samePlan &&
-          current.discountCents > 0 &&
-          charged >= 1 &&
-          amountNow !== undefined &&
-          reaisToCents(amountNow) !== current.listPriceCents
-        ) {
-          restorePrice = { providerRef: current.providerRef as string, listPriceCents: current.listPriceCents };
-        }
-        return;
-      }
+      const live = payments.filter((p) => !p.deleted);
+      const paid = live
+        .filter((p) => (ASAAS_PAID_STATUSES as readonly string[]).includes(p.status))
+        .sort((a, b) => (b.dueDate ?? "").localeCompare(a.dueDate ?? ""));
 
-      if (preapproval.status === "paused" && ownsSub) {
-        await tx.subscription.update({
-          where: { tenantId: current.tenantId },
-          data: { status: SubscriptionStatus.PAST_DUE, ...(nextValid ? { currentPeriodEnd: nextValid } : {}) },
-        });
-        return;
-      }
-
-      if (preapproval.status === "cancelled") {
+      if (subscription.deleted || subscription.status !== "ACTIVE") {
         if (ownsSub) {
-          // Cancelada: o que já foi pago vale até o fim do período; depois disso o acesso termina.
+          // Encerrada: o que já foi pago vale até o fim do período; depois disso o acesso termina.
           await tx.subscription.update({ where: { tenantId: current.tenantId }, data: { cancelAtPeriodEnd: true } });
-        } else if (current.status === BillingAttemptStatus.PENDING) {
+        } else if (current.status === BillingAttemptStatus.PENDING && paid.length === 0) {
           await this.releaseCoupon(tx, current);
           await tx.billingAttempt.update({ where: { id: current.id }, data: { status: BillingAttemptStatus.FAILED } });
         }
+        return;
+      }
+
+      if (paid.length === 0) {
+        // Ainda sem pagamento confirmado. Se já era assinante e a cobrança do mês venceu, fica em atraso.
+        if (ownsSub && live.some((p) => p.status === "OVERDUE")) {
+          await tx.subscription.update({ where: { tenantId: current.tenantId }, data: { status: SubscriptionStatus.PAST_DUE } });
+        }
+        return;
+      }
+
+      // Primeira ativação: a cobrança paga precisa ter o valor que cobramos (nunca confiar só no que o provedor diz).
+      if (!ownsSub) {
+        const first = paid[paid.length - 1];
+        if (first.value === undefined || reaisToCents(first.value) !== current.chargeCents) {
+          this.logger.error(`Valor pago (${first.value}) difere do cobrado na tentativa ${current.id}; ignorado.`);
+          return;
+        }
+      }
+
+      // O período vai até um mês depois do vencimento da cobrança paga mais recente.
+      const latestDue = parseAsaasDate(paid[0].dueDate);
+      const end = addOneMonth(latestDue ?? new Date());
+      const values = {
+        // Se esta assinatura já é do negócio, o plano vigente é o da Subscription (o dono pode ter trocado de plano
+        // depois da tentativa): a releitura nunca o regrava com o plano da tentativa original.
+        planId: ownsSub ? sub.planId : current.planId,
+        status: SubscriptionStatus.ACTIVE,
+        courtesy: false,
+        method: BillingMethod.CARD_RECURRING,
+        providerSubscriptionId: subscription.id,
+        currentPeriodEnd: ownsSub && sub.currentPeriodEnd && sub.currentPeriodEnd > end ? sub.currentPeriodEnd : end,
+        cancelAtPeriodEnd: false,
+      };
+      await tx.subscription.upsert({
+        where: { tenantId: current.tenantId },
+        create: { tenantId: current.tenantId, ...values },
+        update: values,
+      });
+      if (current.status === BillingAttemptStatus.PENDING) {
+        await tx.billingAttempt.update({
+          where: { id: current.id },
+          data: { status: BillingAttemptStatus.APPROVED, approvedAt: new Date() },
+        });
+        if (current.couponRedemptionId) {
+          await tx.couponRedemption.updateMany({
+            where: { id: current.couponRedemptionId, appliedAt: null },
+            data: { appliedAt: new Date() },
+          });
+        }
+      }
+
+      // Com desconto na primeira cobrança, depois que ela saiu o valor volta ao preço cheio (só se o plano ainda é o
+      // da tentativa: depois de uma troca de plano o valor certo é o do plano novo).
+      const samePlan = !ownsSub || sub.planId === current.planId;
+      if (
+        samePlan &&
+        current.discountCents > 0 &&
+        subscription.value !== undefined &&
+        reaisToCents(subscription.value) !== current.listPriceCents
+      ) {
+        restorePrice = { subscriptionId: subscription.id, listPriceCents: current.listPriceCents };
       }
     });
 
     if (restorePrice) {
-      const target = restorePrice as { providerRef: string; listPriceCents: number };
+      const target = restorePrice as { subscriptionId: string; listPriceCents: number };
       try {
-        await this.mp.updatePreapprovalAmount(target.providerRef, target.listPriceCents);
+        await this.asaas.updateSubscriptionValue(target.subscriptionId, target.listPriceCents);
       } catch (error) {
-        // A próxima sincronização tenta de novo. Fica no log para a equipe conferir se persistir.
-        this.logger.error(`Não foi possível voltar ao preço cheio na assinatura ${target.providerRef}: ${(error as Error).message}`);
+        // A próxima sincronização tenta de novo. Fica no log para a equipe conferir se persistir (o Asaas só permite
+        // mudar o valor de assinatura de cartão com a tokenização habilitada na conta).
+        this.logger.error(`Não foi possível voltar ao preço cheio na assinatura ${target.subscriptionId}: ${(error as Error).message}`);
       }
     }
   }
@@ -633,12 +711,14 @@ export class PaymentsService {
       this.requireEnabled();
       if (!sub.providerSubscriptionId) throw new ConflictException("Assinatura sem vínculo com o provedor.");
       try {
-        // Antes da 1ª cobrança a assinatura ainda está com o valor do cupom: trocar agora faria o valor errado valer.
-        const preapproval = await this.mp.getPreapproval(sub.providerSubscriptionId);
-        if ((preapproval.summarized?.charged_quantity ?? 0) < 1) {
+        // Antes da 1ª cobrança confirmada a assinatura ainda está com o valor do cupom: trocar agora faria o valor
+        // errado valer.
+        const payments = await this.asaas.listSubscriptionPayments(sub.providerSubscriptionId);
+        const charged = payments.some((p) => !p.deleted && (ASAAS_PAID_STATUSES as readonly string[]).includes(p.status));
+        if (!charged) {
           throw new ConflictException("Aguarde a primeira cobrança ser confirmada para trocar de plano.");
         }
-        await this.mp.updatePreapprovalAmount(sub.providerSubscriptionId, plan.priceCents);
+        await this.asaas.updateSubscriptionValue(sub.providerSubscriptionId, plan.priceCents);
       } catch (error) {
         if (error instanceof ConflictException) throw error;
         this.logger.warn(`Troca de plano (tenant ${tenantId}) falhou no provedor: ${(error as Error).message}`);
@@ -680,7 +760,7 @@ export class PaymentsService {
     if (sub.method === BillingMethod.CARD_RECURRING && sub.providerSubscriptionId) {
       this.requireEnabled();
       try {
-        await this.mp.cancelPreapproval(sub.providerSubscriptionId);
+        await this.asaas.deleteSubscription(sub.providerSubscriptionId);
       } catch (error) {
         this.logger.warn(`Cancelamento da assinatura ${sub.providerSubscriptionId} falhou: ${(error as Error).message}`);
         throw toBadGateway();
@@ -720,10 +800,11 @@ export class PaymentsService {
   }
 
   // Todo mês de hora em hora: tentativa pendente vencida é relida no provedor (pode ter sido paga sem o
-  // webhook chegar) e, se continua pendente, expira — e o uso do cupom volta.
+  // webhook chegar) e, se continua pendente, expira — e o uso do cupom volta. O Pix expirado é removido no provedor
+  // para não poder ser pago depois, quando já não haveria tentativa viva para creditá-lo.
   @Cron(CronExpression.EVERY_HOUR)
   async expireStaleAttempts(): Promise<void> {
-    if (!this.mp.isConfigured()) return;
+    if (!this.asaas.isConfigured()) return;
     const stale = await this.prisma.billingAttempt.findMany({
       where: { status: BillingAttemptStatus.PENDING, expiresAt: { lt: new Date() } },
       select: { id: true },
@@ -731,12 +812,15 @@ export class PaymentsService {
     });
     for (const { id } of stale) {
       await this.syncAttemptSafely(id);
+      let expiredPixRef: string | null = null;
       await this.prisma.$transaction(async (tx) => {
         const attempt = await tx.billingAttempt.findUnique({ where: { id } });
         if (!attempt || attempt.status !== BillingAttemptStatus.PENDING) return;
         await this.releaseCoupon(tx, attempt);
         await tx.billingAttempt.update({ where: { id }, data: { status: BillingAttemptStatus.EXPIRED } });
+        if (attempt.method === BillingMethod.PIX_MONTHLY) expiredPixRef = attempt.providerRef;
       });
+      if (expiredPixRef) await this.deletePaymentQuietly(expiredPixRef);
     }
     if (stale.length > 0) this.logger.log(`Tentativas de pagamento expiradas: ${stale.length}.`);
   }
@@ -745,18 +829,19 @@ export class PaymentsService {
   // Webhook
   // ─────────────────────────────────────────────
 
-  // O corpo do webhook é só um AVISO ("algo mudou neste id"). Tudo é relido na API do provedor com o nosso token
-  // e só então aplicado, então notificações repetidas, fora de ordem ou forjadas convergem para o estado real.
-  async handleNotification(type: string, dataId: string): Promise<void> {
-    if (!this.mp.isConfigured() || !dataId || dataId.length > 64) return;
+  // O corpo do webhook é só um AVISO ("algo mudou neste id"). Tudo é relido na API do provedor com a nossa chave e só
+  // então aplicado, então notificações repetidas, fora de ordem ou forjadas convergem para o estado real.
+  // `kind`: "payment" | "subscription" | "checkout" (o objeto que veio no aviso).
+  async handleNotification(kind: string, dataId: string): Promise<void> {
+    if (!this.asaas.isConfigured() || !dataId || dataId.length > 64) return;
 
     try {
-      await this.processNotification(type, dataId);
+      await this.processNotification(kind, dataId);
     } catch (error) {
       // O provedor não conhece este id (notificação forjada, de outra conta ou de teste): não há o que reentregar,
       // então 200. Falha do provedor/rede: 503, para ele tentar de novo mais tarde.
       if (error instanceof PaymentProviderError && error.status === 404) {
-        this.logger.warn(`Notificação ${type} para id desconhecido no provedor (${dataId}); ignorada.`);
+        this.logger.warn(`Notificação ${kind} para id desconhecido no provedor (${dataId}); ignorada.`);
         return;
       }
       if (error instanceof PaymentProviderError) {
@@ -766,29 +851,39 @@ export class PaymentsService {
     }
   }
 
-  private async processNotification(type: string, dataId: string): Promise<void> {
-    if (type === "payment") {
-      const payment = await this.mp.getPayment(dataId);
-      const attemptId = this.attemptIdFrom(payment.external_reference);
+  private async processNotification(kind: string, dataId: string): Promise<void> {
+    if (kind === "payment") {
+      const payment = await this.asaas.getPayment(dataId);
+      // Pix: a referência é a tentativa. Mensalidade do cartão: a cobrança vem do cliente da tentativa.
+      const attemptId = this.attemptIdFrom(payment.externalReference) ?? (await this.attemptIdForCustomer(payment.customer));
       if (attemptId) await this.syncAttempt(attemptId);
       return;
     }
-    if (type === "subscription_preapproval") {
-      const preapproval = await this.mp.getPreapproval(dataId);
-      const attemptId = this.attemptIdFrom(preapproval.external_reference);
+    if (kind === "subscription") {
+      const subscription = await this.asaas.getSubscription(dataId);
+      const attemptId = await this.attemptIdForCustomer(subscription.customer);
       if (attemptId) await this.syncAttempt(attemptId);
       return;
     }
-    if (type === "subscription_authorized_payment") {
-      const authorized = await this.mp.getAuthorizedPayment(dataId);
-      if (!authorized.preapproval_id) return;
-      const preapproval = await this.mp.getPreapproval(authorized.preapproval_id);
-      const attemptId = this.attemptIdFrom(preapproval.external_reference);
-      if (attemptId) await this.syncAttempt(attemptId);
+    if (kind === "checkout") {
+      // O id só serve para achar a tentativa no NOSSO banco; o estado vem da releitura em syncAttempt.
+      const attempt = await this.prisma.billingAttempt.findUnique({ where: { providerRef: dataId }, select: { id: true } });
+      if (attempt) await this.syncAttempt(attempt.id);
     }
   }
 
-  private attemptIdFrom(reference: string | undefined): string | null {
+  private attemptIdFrom(reference: string | null | undefined): string | null {
     return reference && UUID.test(reference) ? reference : null;
+  }
+
+  // A tentativa mais recente do cliente (o id do cliente vem da releitura no provedor, nunca do corpo do aviso).
+  private async attemptIdForCustomer(customerId: string | undefined): Promise<string | null> {
+    if (!customerId) return null;
+    const attempt = await this.prisma.billingAttempt.findFirst({
+      where: { providerCustomerId: customerId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    return attempt?.id ?? null;
   }
 }

@@ -3,7 +3,7 @@ import { rm } from "fs/promises";
 import { join } from "path";
 import { BillingMethod, Prisma, SubscriptionStatus } from "@marquo/database";
 import { PrismaService } from "../prisma/prisma.service";
-import { MercadoPagoClient, toBadGateway } from "../billing/payments/mercadopago.client";
+import { AsaasClient, toBadGateway } from "../billing/payments/asaas.client";
 import { UPLOADS_DIR } from "../common/constants/uploads";
 import { resolvePagination, toPage } from "../common/pagination/paginate";
 import { PaginationQueryDto } from "../common/pagination/pagination-query.dto";
@@ -135,7 +135,7 @@ const SUBSCRIPTION_SELECT = {
 // Exclusão dos dados de um negócio, na hora e sem esperar prazo (os 90 dias dos termos são o MÁXIMO que se guarda, não
 // um mínimo: a plataforma pode apagar antes). Vale para qualquer negócio, com acesso ou não (teste, cortesia, suspenso,
 // com assinatura paga...). Exige a confirmação digitada do endereço; o motivo é opcional e vai para a auditoria junto
-// com o autor. Se o negócio paga no CARTÃO, a recorrência é cancelada no Mercado Pago ANTES de apagar (senão o provedor
+// com o autor. Se o negócio paga no CARTÃO, a recorrência é cancelada no Asaas ANTES de apagar (senão o provedor
 // seguiria cobrando um negócio que não existe mais); se o cancelamento falhar, nada é apagado.
 //
 // NADA é apagado sozinho: a plataforma vê a lista, simula e confirma digitando o endereço do negócio. Apaga tudo o que é
@@ -148,7 +148,7 @@ export class TenantDeletionService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mp: MercadoPagoClient,
+    private readonly asaas: AsaasClient,
   ) {}
 
   async listCandidates(query: PaginationQueryDto, now: Date = new Date()) {
@@ -217,7 +217,7 @@ export class TenantDeletionService {
       ...status,
       // Pode ser excluído agora (só não pode o que já foi excluído). `deletable`/`eligible` seguem sendo só a regra dos 90 dias.
       purgeable: blockedReason === null,
-      // Paga no cartão: a recorrência será cancelada no Mercado Pago junto com a exclusão.
+      // Paga no cartão: a recorrência será cancelada no Asaas junto com a exclusão.
       cancelsCardSubscription: this.hasCardRecurrence(tenant.subscription),
       blockedReason,
       hasAccess: !status.deletable && !tenant.deletedAt,
@@ -374,23 +374,17 @@ export class TenantDeletionService {
   private async cancelCardRecurrence(subscription: SubscriptionForStatus): Promise<boolean> {
     if (!this.hasCardRecurrence(subscription)) return false;
     const providerId = subscription!.providerSubscriptionId as string;
-    if (!this.mp.isConfigured()) {
+    if (!this.asaas.isConfigured()) {
       throw new ServiceUnavailableException(
-        "Este negócio paga no cartão, mas o Mercado Pago não está configurado neste servidor para cancelar a cobrança. Nada foi excluído.",
+        "Este negócio paga no cartão, mas o Asaas não está configurado neste servidor para cancelar a cobrança. Nada foi excluído.",
       );
     }
     try {
-      await this.mp.cancelPreapproval(providerId);
+      // "Já não existe" no provedor (exclusão repetida) conta como cancelada; qualquer outra falha interrompe antes de apagar.
+      await this.asaas.deleteSubscription(providerId);
     } catch (error) {
-      // Já estava cancelada (exclusão repetida)? Então segue; qualquer outra falha interrompe antes de apagar.
-      const already = await this.mp
-        .getPreapproval(providerId)
-        .then((p) => p.status === "cancelled")
-        .catch(() => false);
-      if (!already) {
-        this.logger.warn(`Cancelamento da recorrência ${providerId} falhou na exclusão do negócio: ${(error as Error).message}`);
-        throw toBadGateway();
-      }
+      this.logger.warn(`Cancelamento da recorrência ${providerId} falhou na exclusão do negócio: ${(error as Error).message}`);
+      throw toBadGateway();
     }
     return true;
   }

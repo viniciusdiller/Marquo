@@ -130,7 +130,7 @@ describe("billingBlockMessage", () => {
     const blocked: BillingStatus[] = ["TRIAL_EXPIRED", "CANCELED", "UNPAID", "INCOMPLETE", "SUSPENDED", "EXPIRED", "PERIOD_ENDED"];
     for (const status of blocked) {
       expect(billingBlockMessage(status)).toMatch(/Plano e cobrança|suporte/);
-      expect(billingBlockMessage(status)).not.toMatch(/stripe|mercado/i);
+      expect(billingBlockMessage(status)).not.toMatch(/stripe|mercado|asaas/i);
     }
   });
 
