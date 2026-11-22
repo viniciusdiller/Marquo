@@ -7,6 +7,7 @@ const actions = vi.hoisted(() => ({
   startCardAction: vi.fn(),
   startPixAction: vi.fn(),
   billingProfileAction: vi.fn(),
+  cepAction: vi.fn(),
   attemptStatusAction: vi.fn(),
 }));
 vi.mock("./actions", () => actions);
@@ -36,6 +37,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   actions.quoteAction.mockResolvedValue({ ok: true, quote });
   actions.billingProfileAction.mockResolvedValue({ ok: true, profile: EMPTY_PROFILE });
+  actions.cepAction.mockResolvedValue({ ok: true, found: false });
 });
 
 const document = () => screen.getByLabelText(/CPF ou CNPJ de quem paga/);
@@ -187,5 +189,75 @@ describe("CheckoutForm (página de checkout): documento do pagador", () => {
     await waitFor(() => expect(actions.quoteAction).toHaveBeenLastCalledWith("PROFISSIONAL", "PROMO20"));
     expect(await screen.findByText(/Cupom PROMO20/)).toBeInTheDocument();
     expect(screen.getByText(/Primeira cobrança/)).toBeInTheDocument();
+  });
+
+  describe("endereço pelo CEP", () => {
+    it("ao completar o CEP preenche rua e bairro, mostra cidade/UF e leva o foco ao número", async () => {
+      const user = userEvent.setup();
+      actions.cepAction.mockResolvedValue({
+        ok: true,
+        found: true,
+        data: { address: "Avenida Paulista", province: "Bela Vista", city: "São Paulo", state: "SP" },
+      });
+      render(<CheckoutForm plan={PLAN} />);
+
+      await user.type(screen.getByLabelText("CEP"), "01310100");
+
+      await waitFor(() => expect(screen.getByLabelText("Rua")).toHaveValue("Avenida Paulista"));
+      expect(screen.getByLabelText("Bairro")).toHaveValue("Bela Vista");
+      expect(await screen.findByText("São Paulo / SP")).toBeInTheDocument();
+      expect(screen.getByLabelText("Número")).toHaveFocus();
+      expect(actions.cepAction).toHaveBeenCalledTimes(1);
+      expect(actions.cepAction).toHaveBeenCalledWith("01310100");
+    });
+
+    it("não consulta com CEP incompleto", async () => {
+      const user = userEvent.setup();
+      render(<CheckoutForm plan={PLAN} />);
+      await user.type(screen.getByLabelText("CEP"), "0131");
+      expect(actions.cepAction).not.toHaveBeenCalled();
+    });
+
+    it("não sobrescreve a rua que o dono já digitou", async () => {
+      const user = userEvent.setup();
+      actions.cepAction.mockResolvedValue({
+        ok: true,
+        found: true,
+        data: { address: "Avenida Paulista", province: "Bela Vista", city: "São Paulo", state: "SP" },
+      });
+      render(<CheckoutForm plan={PLAN} />);
+
+      await user.type(screen.getByLabelText("Rua"), "Minha rua");
+      await user.type(screen.getByLabelText("CEP"), "01310100");
+
+      await waitFor(() => expect(screen.getByLabelText("Bairro")).toHaveValue("Bela Vista"));
+      expect(screen.getByLabelText("Rua")).toHaveValue("Minha rua");
+    });
+
+    it("CEP inexistente e serviço fora do ar avisam e deixam digitar à mão", async () => {
+      const user = userEvent.setup();
+      actions.cepAction.mockResolvedValueOnce({ ok: true, found: false });
+      render(<CheckoutForm plan={PLAN} />);
+
+      await user.type(screen.getByLabelText("CEP"), "99999999");
+      expect(await screen.findByText(/CEP não encontrado/)).toBeInTheDocument();
+
+      actions.cepAction.mockResolvedValueOnce({ ok: false });
+      await user.clear(screen.getByLabelText("CEP"));
+      await user.type(screen.getByLabelText("CEP"), "88888888");
+      expect(await screen.findByText(/Não foi possível buscar o CEP/)).toBeInTheDocument();
+      await user.type(screen.getByLabelText("Rua"), "Rua à mão");
+      expect(screen.getByLabelText("Rua")).toHaveValue("Rua à mão");
+    });
+
+    it("CEP que veio do cadastro salvo não é consultado de novo", async () => {
+      actions.billingProfileAction.mockResolvedValue({
+        ok: true,
+        profile: { ...EMPTY_PROFILE, postalCode: "01310100", address: "Av. Paulista", province: "Bela Vista" },
+      });
+      render(<CheckoutForm plan={PLAN} />);
+      await waitFor(() => expect(screen.getByLabelText("CEP")).toHaveValue("01310-100"));
+      expect(actions.cepAction).not.toHaveBeenCalled();
+    });
   });
 });
