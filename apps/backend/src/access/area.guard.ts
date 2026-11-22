@@ -32,6 +32,9 @@ export class AreaGuard implements CanActivate {
     // Autoatendimento: o profissional mexe no que é DELE (foto, horários) com qualquer perfil.
     if (requirement.selfParam && user.professionalId && request.params?.[requirement.selfParam] === user.professionalId) return true;
 
+    // Dados do próprio profissional (ex.: "Meus ganhos"): o service filtra pelo professionalId do token, nunca pelo request.
+    if (requirement.professionalSelf && user.role === Role.PROFESSIONAL && user.professionalId) return true;
+
     const need = requiredLevel(requirement, request.method);
     const areas = Array.isArray(requirement.area) ? requirement.area : [requirement.area];
     if (areas.some((area) => levelAtLeast(user.permissions?.[area], need))) return true;

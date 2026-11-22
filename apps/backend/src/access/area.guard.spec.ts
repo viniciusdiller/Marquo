@@ -19,6 +19,8 @@ class CaixaController {
   photo() {}
   @Area(["clientes", "comandas"], "VIEW")
   search() {}
+  @Area("comissoes", undefined, { professionalSelf: true })
+  myEarnings() {}
 }
 class SemAreaController {
   open() {}
@@ -120,6 +122,28 @@ describe("AreaGuard", () => {
     });
   });
 
+  describe("dados do próprio profissional (professionalSelf)", () => {
+    it("o profissional passa sem a área (o service filtra pelo professionalId do token)", () => {
+      const pro = staff({}, { role: Role.PROFESSIONAL, professionalId: "prof-1" });
+      expect(guard.canActivate(ctx(CaixaController, "myEarnings", pro))).toBe(true);
+    });
+
+    it("conta de profissional sem professionalId não passa", () => {
+      const pro = staff({}, { role: Role.PROFESSIONAL });
+      expect(() => guard.canActivate(ctx(CaixaController, "myEarnings", pro))).toThrow(ForbiddenException);
+    });
+
+    it("a Recepção continua precisando da área (não existe 'próprio' para ela)", () => {
+      expect(() => guard.canActivate(ctx(CaixaController, "myEarnings", staff({})))).toThrow(ForbiddenException);
+      expect(guard.canActivate(ctx(CaixaController, "myEarnings", staff({ comissoes: "VIEW" })))).toBe(true);
+    });
+
+    it("rota SEM a opção não abre para o profissional", () => {
+      const pro = staff({}, { role: Role.PROFESSIONAL, professionalId: "prof-1" });
+      expect(() => guard.canActivate(ctx(CaixaController, "list", pro))).toThrow(ForbiddenException);
+    });
+  });
+
   describe("fecha por padrão", () => {
     it("usuário sem permissions (ex.: montado à mão) é tratado como SEM acesso", () => {
       expect(() => guard.canActivate(ctx(CaixaController, "list", { userId: "u", tenantId: "t", role: Role.RECEPTIONIST }))).toThrow(ForbiddenException);
@@ -139,6 +163,6 @@ describe("AreaGuard", () => {
   });
 
   it("o decorator grava a exigência no metadado esperado", () => {
-    expect(Reflect.getMetadata(AREA_KEY, CaixaController)).toEqual({ area: "caixa", level: undefined, selfParam: undefined });
+    expect(Reflect.getMetadata(AREA_KEY, CaixaController)).toEqual({ area: "caixa", level: undefined, selfParam: undefined, professionalSelf: undefined });
   });
 });

@@ -64,7 +64,7 @@ export default async function ConfiguracoesPage() {
         <ul className="list-disc space-y-1 pl-5">
           <li>Descrição, endereço, horário e contatos aparecem na página. WhatsApp e Instagram viram botões.</li>
           <li><strong>Seções visíveis</strong> liga e desliga blocos (serviços, equipe, galeria, contato). Uma seção só aparece se tiver conteúdo cadastrado.</li>
-          <li>A <strong>galeria</strong> aceita até 12 fotos. Passe o mouse numa foto para removê-la.</li>
+          <li>A <strong>galeria</strong> aceita até 12 fotos e dá para escolher várias de uma vez. Passe o mouse numa foto para removê-la.</li>
           <li>Esta tela não altera plano nem cobrança; isso fica em Plano e cobrança.</li>
         </ul>
       </HowItWorks>

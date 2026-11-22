@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { motion } from "motion/react";
-import type { AccessAreaKey, AccessPermissions } from "@marquo/shared-types";
-import { canAccess } from "@/lib/access";
+import type { AccessAreaKey, AccessMe, AccessPermissions } from "@marquo/shared-types";
+import { canAccess, ownEarningsOnly } from "@/lib/access";
 import {
   CalendarBlank,
   CashRegister,
@@ -36,6 +36,8 @@ interface NavLink {
   // Área de acesso que libera o item. `owner` = só o dono (Plano, Configurações, Acessos).
   area?: AccessAreaKey;
   owner?: true;
+  // Profissional SEM a área: o item aparece com outro nome e mostra só os dados dele (ex.: "Meus ganhos").
+  self?: { label: string; description: string };
 }
 
 // Agrupado por fluxo de trabalho (não ordem alfabética) — com 14 destinos, uma lista plana
@@ -142,6 +144,7 @@ const sections: { label: string; links: NavLink[] }[] = [
         label: "Comissões",
         icon: Percent,
         description: "Regras de comissão por profissional sobre o que é vendido",
+        self: { label: "Meus ganhos", description: "Quanto você faturou e sua comissão no período" },
       },
       {
         href: "/dashboard/financeiro",
@@ -195,7 +198,7 @@ interface SidebarNavProps {
   // pill entre os dois lugares — e travava a entrada do drawer e do backdrop junto.
   scope?: "desktop" | "mobile";
   // Sem `access`, mostra tudo (testes e telas sem sessão); o layout sempre informa.
-  access?: { isOwner: boolean; permissions: AccessPermissions };
+  access?: { isOwner: boolean; permissions: AccessPermissions; role?: AccessMe["role"] };
 }
 
 export function SidebarNav({ onNavigate, scope = "desktop", access }: SidebarNavProps) {
@@ -203,12 +206,16 @@ export function SidebarNav({ onNavigate, scope = "desktop", access }: SidebarNav
   const visible = (link: NavLink) => {
     if (!access) return true;
     if (link.owner) return access.isOwner;
+    if (link.self && ownEarningsOnly(access)) return true;
     return link.area ? canAccess(access, link.area) : false;
   };
+  // Mesmo destino, outro nome: para o profissional sem a área, o item mostra só os dados dele.
+  const present = (link: NavLink): NavLink =>
+    link.self && access && ownEarningsOnly(access) ? { ...link, ...link.self } : link;
 
   return (
     <nav className="flex flex-col gap-5">
-      {sections.map((section) => ({ ...section, links: section.links.filter(visible) })).filter((section) => section.links.length > 0).map((section) => (
+      {sections.map((section) => ({ ...section, links: section.links.filter(visible).map(present) })).filter((section) => section.links.length > 0).map((section) => (
         <div key={section.label}>
           <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-wider text-zinc-400 uppercase dark:text-stone-500">
             {section.label}

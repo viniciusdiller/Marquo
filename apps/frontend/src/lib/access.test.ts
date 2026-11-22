@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { canAccess, fallbackAccess, firstAllowedHref } from "./access.ts";
+import { canAccess, fallbackAccess, firstAllowedHref, ownEarningsOnly } from "./access.ts";
 import { normalizePermissions } from "@marquo/shared-types";
 
 const none = normalizePermissions({});
@@ -36,5 +36,18 @@ describe("fallbackAccess / firstAllowedHref", () => {
   });
   it("dono sempre tem para onde ir", () => {
     assert.equal(firstAllowedHref(fallbackAccess("OWNER")), "/dashboard/agenda");
+  });
+});
+
+describe("ownEarningsOnly", () => {
+  it("profissional padrão vê só os próprios ganhos", () => {
+    assert.equal(ownEarningsOnly(fallbackAccess("PROFESSIONAL")), true);
+  });
+  it("profissional com a área Comissões vê a tela completa", () => {
+    assert.equal(ownEarningsOnly({ role: "PROFESSIONAL", ...me({ comissoes: "VIEW" }) }), false);
+  });
+  it("recepção e dono nunca caem no modo 'meus ganhos'", () => {
+    assert.equal(ownEarningsOnly(fallbackAccess("RECEPTIONIST")), false);
+    assert.equal(ownEarningsOnly(fallbackAccess("OWNER")), false);
   });
 });

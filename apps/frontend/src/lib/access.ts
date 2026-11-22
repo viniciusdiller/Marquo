@@ -16,6 +16,11 @@ export function canAccess(access: Pick<AccessMe, "permissions" | "isOwner">, are
   return levelAtLeast(access.permissions[area], level);
 }
 
+// Profissional sem a área Comissões: vê só os PRÓPRIOS ganhos ("Meus ganhos"). O backend força o mesmo filtro pelo token.
+export function ownEarningsOnly(access: Pick<AccessMe, "permissions" | "isOwner"> & { role?: AccessMe["role"] }): boolean {
+  return access.role === "PROFESSIONAL" && !canAccess(access, "comissoes");
+}
+
 // Quando a leitura de /access/me falha, cai no perfil padrão do papel (o backend segue mandando).
 export function fallbackAccess(role: AccessMe["role"]): AccessMe {
   return {

@@ -92,8 +92,8 @@ const CHANGES: Record<string, { REC?: boolean; PRO?: boolean; why: string }> = {
   "WaitlistController.updateStatus": { REC: true, why: "Mesmo motivo de findAll: a Recepção padrão dá andamento na lista de espera." },
   "ProductsController.create": { REC: true, why: "Produtos é uma área só: quem ajustava estoque (Recepção) passa a poder cadastrar produto. Já podia lançar item avulso a qualquer preço." },
   "ProductsController.update": { REC: true, why: "Mesmo motivo de create: produtos é uma área só, e a Recepção já tem permissão de editar o catálogo de estoque." },
-  "CommissionsController.report": { REC: false, PRO: false, why: "Era uma rota aberta a todo staff que devolvia os ganhos de TODOS à Recepção; agora exige a área Comissões (a tela já era só do dono)." },
-  "CommissionsController.earnings": { REC: false, PRO: false, why: "Mesmo motivo de report: os ganhos de todos só com a área Comissões (a tela já era só do dono)." },
+  "CommissionsController.report": { REC: false, PRO: true, why: "Era aberta a todo staff e devolvia os ganhos de TODOS à Recepção; agora a Recepção precisa da área Comissões. O profissional segue vendo só os PRÓPRIOS ganhos (o service força o filtro), base da tela 'Meus ganhos'." },
+  "CommissionsController.earnings": { REC: false, PRO: true, why: "Mesmo motivo de report: Recepção só com a área Comissões; o profissional vê só os próprios ganhos em 'Meus ganhos' (filtro forçado no service)." },
 };
 
 describe("Perfis padrão preservam o acesso que cada papel já tinha", () => {
