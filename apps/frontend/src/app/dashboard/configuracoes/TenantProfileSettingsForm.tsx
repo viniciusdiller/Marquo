@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/Input";
@@ -81,8 +81,16 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
   const [removeLogoState, removeLogoFormAction] = useActionState(removeLogoAction, {});
   const [compressing, setCompressing] = useState(false);
   const [logoChosen, setLogoChosen] = useState(false);
+  // Prévia local da imagem escolhida, antes de enviar (URL temporária do navegador, nada sai da máquina).
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const removeLogoFormRef = useRef<HTMLFormElement>(null);
   const [confirmingRemoveLogo, setConfirmingRemoveLogo] = useState(false);
+
+  // Libera a URL temporária anterior sempre que a prévia troca ou o componente sai da tela.
+  useEffect(() => {
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -93,6 +101,7 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
     const dataTransfer = new DataTransfer();
     dataTransfer.items.add(compressed);
     e.target.files = dataTransfer.files;
+    setPreviewUrl(URL.createObjectURL(compressed));
   }
 
   return (
@@ -103,8 +112,15 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
           Aparece na página pública do seu negócio.
         </p>
 
-        <div className="mt-4 flex items-center gap-4">
-          {tenant.logoUrl ? (
+        <div className="mt-4 flex min-w-0 items-center gap-4">
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={previewUrl}
+              alt="Prévia da nova logo"
+              className="h-16 w-16 shrink-0 rounded-xl object-cover ring-2 ring-accent-500/60"
+            />
+          ) : tenant.logoUrl ? (
             // Nome de arquivo fixo por tenant (ver TenantsService.updateLogo) — sem o
             // parametro de versao aqui, o navegador continuaria mostrando a logo antiga em
             // cache depois de um reenvio, mesmo com o backend ja tendo trocado o arquivo.
@@ -112,17 +128,21 @@ export function TenantProfileSettingsForm({ tenant }: { tenant: TenantProfile })
             <img
               src={`${API_URL}${tenant.logoUrl}?v=${encodeURIComponent(tenant.updatedAt)}`}
               alt="Logo do negócio"
-              className="h-16 w-16 rounded-xl object-cover ring-1 ring-zinc-900/5 dark:ring-white/10"
+              className="h-16 w-16 shrink-0 rounded-xl object-cover ring-1 ring-zinc-900/5 dark:ring-white/10"
             />
           ) : (
-            <div className="h-16 w-16 rounded-xl bg-zinc-100 dark:bg-white/5" />
+            <div className="h-16 w-16 shrink-0 rounded-xl bg-zinc-100 dark:bg-white/5" />
           )}
 
-          <form action={uploadFormAction} className="flex flex-wrap items-center gap-3">
+          <form action={uploadFormAction} className="flex min-w-0 flex-wrap items-center gap-3">
             <FilePicker
               accept="image/jpeg,image/png,image/webp"
               onChange={handleFileChange}
-              onSelectionChange={(name) => setLogoChosen(name !== null)}
+              onSelectionChange={(name) => {
+                setLogoChosen(name !== null);
+                // Formulário reiniciado (enviado) ou seleção desfeita: volta a mostrar a logo salva.
+                if (name === null) setPreviewUrl(null);
+              }}
               disabled={uploadPending || compressing}
             />
             <Button
