@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTenant } from "./get-tenant";
+import { absoluteLogoUrl } from "./logo-url";
 import { publicApi } from "@/lib/api";
 import { marketplaceApi } from "@/lib/marketplace-api";
 import { ApiError } from "@/lib/api";
@@ -45,6 +46,7 @@ export async function generateMetadata({
 
   const pageTitle = `${tenant.name} - Agendamento Online`;
   const fullTitle = `${pageTitle} | Marquo`;
+  const logo = absoluteLogoUrl(tenant.logoUrl, tenant.updatedAt);
   const description =
     tenant.description?.slice(0, 160) ||
     `Agende seu horário em ${tenant.name} pelo Marquo. Escolha serviço, profissional e horário sem complicação.`;
@@ -61,13 +63,13 @@ export async function generateMetadata({
       type: "profile",
       url: `${SITE_URL}/${slug}`,
       siteName: "Marquo",
-      images: tenant.logoUrl ? [{ url: tenant.logoUrl, alt: tenant.name }] : undefined,
+      images: logo ? [{ url: logo, alt: tenant.name }] : undefined,
     },
     twitter: {
       card: "summary",
       title: fullTitle,
       description,
-      images: tenant.logoUrl ? [tenant.logoUrl] : undefined,
+      images: logo ? [logo] : undefined,
     },
   };
 }
@@ -119,7 +121,7 @@ export default async function TenantProfilePage({
     name: tenant.name,
     description: tenant.description ?? `Página de agendamento online de ${tenant.name} no Marquo.`,
     url: `${SITE_URL}/${slug}`,
-    image: tenant.logoUrl ?? undefined,
+    image: absoluteLogoUrl(tenant.logoUrl),
     telephone: tenant.whatsappNumber ?? undefined,
     address: tenant.address
       ? {

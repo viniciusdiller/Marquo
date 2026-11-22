@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Manrope, Outfit } from "next/font/google";
 import { cookies } from "next/headers";
+import { PLAN_CATALOG } from "@marquo/shared-types";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { FloatingThemeToggle } from "@/components/ui/FloatingThemeToggle";
@@ -24,6 +25,13 @@ const brand = Outfit({
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://marquo.com.br";
+
+// Perfis oficiais da marca (Instagram, LinkedIn...). Ligam o site aos perfis no "painel de conhecimento" do Google
+// quando alguém pesquisa "Marquo". Só entram no JSON-LD se houver algum.
+const SOCIAL_PROFILES: string[] = [];
+
+// Faixa real de preço dos planos (a mesma do catálogo), em reais.
+const PLAN_PRICES = PLAN_CATALOG.map((plan) => plan.priceCents / 100);
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -57,6 +65,7 @@ export const metadata: Metadata = {
       { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
     ],
   },
+  // A imagem (og:image) vem de app/opengraph-image.tsx, em 1200x630.
   openGraph: {
     title: "Marquo - Agenda online para salões e barbearias",
     description:
@@ -65,22 +74,15 @@ export const metadata: Metadata = {
     siteName: "Marquo",
     locale: "pt_BR",
     type: "website",
-    images: [
-      {
-        url: "/brand/email/marquo-logo.png",
-        width: 600,
-        height: 600,
-        alt: "Logo Marquo",
-      },
-    ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Marquo - Agenda online para salões e barbearias",
     description:
       "Cada profissional com sua própria agenda online. Cliente marca pelo link, sem complicação.",
-    images: ["/brand/email/marquo-logo.png"],
   },
+  // Código da verificação por meta tag do Google Search Console (opcional: a verificação por DNS dispensa).
+  ...(process.env.GOOGLE_SITE_VERIFICATION ? { verification: { google: process.env.GOOGLE_SITE_VERIFICATION } } : {}),
   robots: {
     index: true,
     follow: true,
@@ -102,18 +104,25 @@ const jsonLd = {
       "@id": `${SITE_URL}/#organization`,
       name: "Marquo",
       url: SITE_URL,
+      // Logo QUADRADA: o Google pede no mínimo 112x112 e recorta logos muito largas.
       logo: {
         "@type": "ImageObject",
-        url: `${SITE_URL}/brand/email/marquo-logo.png`,
+        url: `${SITE_URL}/icon-512.png`,
+        width: 512,
+        height: 512,
       },
       description:
         "Plataforma de agenda online e gestão para salões de beleza, barbearias e profissionais da estética.",
+      ...(SOCIAL_PROFILES.length ? { sameAs: SOCIAL_PROFILES } : {}),
     },
     {
       "@type": "WebSite",
       "@id": `${SITE_URL}/#website`,
       url: SITE_URL,
       name: "Marquo",
+      // Ajuda o Google a mostrar "Marquo" como nome do site nos resultados.
+      alternateName: ["Marquo Agenda", "marquo.com.br"],
+      inLanguage: "pt-BR",
       publisher: {
         "@id": `${SITE_URL}/#organization`,
       },
@@ -129,11 +138,16 @@ const jsonLd = {
     {
       "@type": "SoftwareApplication",
       name: "Marquo",
+      url: SITE_URL,
       operatingSystem: "Web",
       applicationCategory: "BusinessApplication",
+      publisher: { "@id": `${SITE_URL}/#organization` },
+      // Preços reais dos planos mensais (antes dizia "grátis", o que não é verdade fora do período de teste).
       offers: {
-        "@type": "Offer",
-        price: "0",
+        "@type": "AggregateOffer",
+        lowPrice: Math.min(...PLAN_PRICES).toFixed(2),
+        highPrice: Math.max(...PLAN_PRICES).toFixed(2),
+        offerCount: PLAN_PRICES.length,
         priceCurrency: "BRL",
       },
     },
