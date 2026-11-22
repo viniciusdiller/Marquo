@@ -1,7 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "module": "commonjs",
     "declaration": false,
     "removeComments": true,
     "emitDecoratorMetadata": true,
@@ -10,7 +9,8 @@
     "target": "ES2022",
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
+    // TS 6 não inclui mais todos os @types automaticamente: os globais (Node, Jest e Express.Multer) precisam estar listados.
+    "types": ["node", "jest", "multer"],
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
