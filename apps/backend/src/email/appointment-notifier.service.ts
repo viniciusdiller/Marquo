@@ -23,6 +23,10 @@ export interface NotifyOptions {
   notifyProfessional?: boolean;
 }
 
+// Encaixe: a equipe marcou para daqui a pouco (cliente no balcão ou ao telefone). A confirmação por e-mail chegaria junto com o
+// atendimento e só gastaria a cota do provedor.
+export const WALK_IN_WINDOW_MS = 60 * 60 * 1000;
+
 // Templates and recipients are snapshotted inside the appointment transaction.
 // External email delivery is handled by NotificationWorkerService after commit.
 @Injectable()
@@ -98,6 +102,12 @@ export class AppointmentNotifierService {
     // O dono pode desligar os avisos da EQUIPE; o que o cliente recebe não depende disso.
     const staffAllowed = appointment.tenant.notifyStaffByEmail;
 
+    // Economia de cota: a equipe lançou um atendimento que JÁ COMEÇOU (registro retroativo) ou cancelou um que já passou
+    // (limpeza da agenda). Ninguém precisa ser avisado de algo que já aconteceu.
+    const msUntilStart = appointment.startAt.getTime() - Date.now();
+    if (actor === "STAFF" && (event === "CREATED" || event === "CANCELED") && msUntilStart <= 0) return [];
+    const walkIn = actor === "STAFF" && event === "CREATED" && msUntilStart <= WALK_IN_WINDOW_MS;
+
     if (staffAllowed && actor === "STAFF" && options.notifyProfessional && appointment.professional.user.isActive) {
       sends.push(
         ({
@@ -120,7 +130,7 @@ export class AppointmentNotifierService {
       }
     }
 
-    if (actor === "STAFF" || options.alsoConfirmToClient) {
+    if ((actor === "STAFF" || options.alsoConfirmToClient) && !walkIn) {
       const clientEmail = this.clientEmail(appointment);
       if (clientEmail) {
         sends.push(({ to: [clientEmail], ...buildAppointmentEmail({ ...base, audience: "CLIENT" }) }));

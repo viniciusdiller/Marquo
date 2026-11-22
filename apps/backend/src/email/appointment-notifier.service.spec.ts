@@ -37,6 +37,49 @@ function build(appointment: unknown, configured = true) {
   return { service: new AppointmentNotifierService(prisma, email, config), findFirst, send };
 }
 
+// Relógio fixo ANTES dos atendimentos do fixture (10/03/2026 17:30Z): "atendimento futuro" é o caso normal dos testes.
+beforeAll(() => {
+  jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate", "queueMicrotask"] });
+  jest.setSystemTime(new Date("2026-03-01T12:00:00.000Z"));
+});
+afterAll(() => jest.useRealTimers());
+
+describe("economia de cota de e-mail", () => {
+  const at = (iso: string) => hydrated({ startAt: new Date(iso), endAt: new Date(new Date(iso).getTime() + 3600_000) });
+
+  it("equipe lança atendimento que já começou (retroativo): ninguém é avisado", async () => {
+    const { service, send } = build(at("2026-03-01T11:00:00.000Z"));
+    await service.deliver("CREATED", "a", "t", "STAFF", { notifyProfessional: true });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("equipe cancela atendimento que já passou (limpeza da agenda): ninguém é avisado", async () => {
+    const { service, send } = build(at("2026-02-28T15:00:00.000Z"));
+    await service.deliver("CANCELED", "a", "t", "STAFF", { notifyProfessional: true });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("encaixe para daqui a pouco: o cliente não recebe confirmação, o profissional ainda é avisado", async () => {
+    const { service, send } = build(at("2026-03-01T12:40:00.000Z"));
+    await service.deliver("CREATED", "a", "t", "STAFF", { notifyProfessional: true });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0].to).toEqual(["alex@salao.com"]);
+  });
+
+  it("marcado pela equipe com mais de 1 h de antecedência: o cliente recebe a confirmação", async () => {
+    const { service, send } = build(at("2026-03-01T14:00:00.000Z"));
+    await service.deliver("CREATED", "a", "t", "STAFF");
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0].to).toEqual(["conta@cliente.com"]);
+  });
+
+  it("cancelamento futuro pela equipe continua avisando o cliente", async () => {
+    const { service, send } = build(at("2026-03-01T12:30:00.000Z"));
+    await service.deliver("CANCELED", "a", "t", "STAFF");
+    expect(send.mock.calls[0][0].to).toEqual(["conta@cliente.com"]);
+  });
+});
+
 describe("AppointmentNotifierService.deliver", () => {
   it("busca o atendimento com tenantId no WHERE (nunca só por id)", async () => {
     const { service, findFirst } = build(hydrated());
