@@ -25,7 +25,8 @@ export default async function ReportsPage(props: PageProps) {
   const startISO = DateTime.fromISO(startDate, { zone: "America/Sao_Paulo" }).startOf("day").toUTC().toISO()!;
   const endISO = DateTime.fromISO(endDate, { zone: "America/Sao_Paulo" }).endOf("day").toUTC().toISO()!;
 
-  const report = await getGeneralBalanceReport(startISO, endISO);
+  // Erro da API (sem permissão, fora do ar) vira aviso na tela, não a página de erro do Next.
+  const report = await getGeneralBalanceReport(startISO, endISO).catch(() => null);
 
   return (
     <div className="mx-auto w-full max-w-7xl">
@@ -45,6 +46,11 @@ export default async function ReportsPage(props: PageProps) {
           </Form>
         </div>
 
+        {!report ? (
+          <p role="alert" className="text-sm text-red-600 lg:col-span-8 xl:col-span-9 dark:text-red-400">
+            Não foi possível carregar o relatório agora. Tente novamente em instantes.
+          </p>
+        ) : (
         <div className="flex min-w-0 flex-col gap-8 lg:col-span-8 xl:col-span-9">
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Faturamento</h3>
@@ -94,6 +100,7 @@ export default async function ReportsPage(props: PageProps) {
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

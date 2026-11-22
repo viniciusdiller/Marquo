@@ -1,7 +1,8 @@
 import type { AdminProduct, CommissionRule, EarningsReport } from "@marquo/shared-types";
 import { authedFetch } from "@/lib/api-server";
-import { requireArea } from "@/lib/access-server";
-import { canAccess } from "@/lib/access";
+import { redirect } from "next/navigation";
+import { getAccess } from "@/lib/access-server";
+import { canAccess, ownEarningsOnly } from "@/lib/access";
 import { resolvePeriod } from "@/lib/earnings-period";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { HowItWorks } from "@/components/ui/HowItWorks";
@@ -25,12 +26,39 @@ export default async function ComissoesPage({
 }: {
   searchParams: Promise<{ periodo?: string | string[]; de?: string | string[]; ate?: string | string[] }>;
 }) {
-  const access = await requireArea("comissoes");
+  const access = await getAccess();
+  // Profissional sem a área: só os PRÓPRIOS ganhos (o backend força o filtro pelo token). Qualquer outro sem a área volta.
+  const selfOnly = ownEarningsOnly(access);
+  if (!selfOnly && !canAccess(access, "comissoes")) redirect("/dashboard");
   const canEditRules = canAccess(access, "comissoes", "EDIT");
 
   const query = await searchParams;
   const period = resolvePeriod({ periodo: first(query.periodo), de: first(query.de), ate: first(query.ate) });
   const earningsQuery = new URLSearchParams({ from: period.from, to: period.to });
+
+  if (selfOnly) {
+    const report = await authedFetch<EarningsReport>(`/commissions/earnings?${earningsQuery.toString()}`).catch(() => null);
+    return (
+      <div className="mx-auto w-full max-w-7xl">
+        <PageHeader
+          title="Meus ganhos"
+          description="Quanto você faturou e a sua comissão no período. Atualizado a cada comanda fechada."
+        />
+        <div className="mt-6 flex flex-col gap-6">
+          <HowItWorks>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>Entram aqui as comandas <strong>fechadas</strong> no período com itens atendidos por você.</li>
+              <li><strong>Bruto:</strong> soma do preço dos seus serviços e produtos, antes de descontos.</li>
+              <li><strong>Líquido:</strong> bruto menos a sua parte dos descontos dados nas comandas.</li>
+              <li><strong>Minha comissão:</strong> o que você ganhou no período pelas regras definidas pelo dono.</li>
+              <li><strong>A receber:</strong> comissões de todo o histórico que ainda não foram repassadas a você.</li>
+            </ul>
+          </HowItWorks>
+          <EarningsSection report={report} period={period} canPayout={false} selfOnly />
+        </div>
+      </div>
+    );
+  }
 
   const [report, rules, team, services, products] = await Promise.all([
     authedFetch<EarningsReport>(`/commissions/earnings?${earningsQuery.toString()}`).catch(() => null),

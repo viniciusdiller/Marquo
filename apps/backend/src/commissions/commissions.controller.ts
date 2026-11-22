@@ -40,7 +40,8 @@ export class CommissionsController {
 
   // PROFESSIONAL vê só o próprio; OWNER/RECEPTIONIST veem todos. O filtro é forçado dentro
   // do CommissionsService.report (não aqui), pra valer mesmo se outro caller chamar o
-  // service direto no futuro.
+  // service direto no futuro. Por isso o profissional entra sem a área ("Meus ganhos").
+  @Area("comissoes", undefined, { professionalSelf: true })
   @Get("report")
   report(
     @CurrentUser() user: AuthenticatedUser,
@@ -54,6 +55,7 @@ export class CommissionsController {
 
   // Faturamento bruto/líquido, repasse e saldo por profissional, sem passo de "fechar período".
   // Mesmo escopo do report: o service força o filtro quando o chamador é PROFESSIONAL.
+  @Area("comissoes", undefined, { professionalSelf: true })
   @Get("earnings")
   earnings(
     @CurrentUser() user: AuthenticatedUser,

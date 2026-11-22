@@ -129,15 +129,45 @@ function MobileCard({ row, index, canPayout }: { row: ProfessionalEarnings; inde
   );
 }
 
+// Só os números do próprio profissional (tela "Meus ganhos"): sem tabela da equipe nem a parte da casa.
+function SelfCards({ report }: { report: EarningsReport }) {
+  const me = report.totals;
+  return (
+    <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Card label="Faturamento bruto" value={brl(me.grossCents)} hint={`${me.ticketCount} ${me.ticketCount === 1 ? "comanda" : "comandas"}`} tone="muted" />
+      <Card label="Faturamento líquido" value={brl(me.netCents)} hint={me.discountCents > 0 ? `após ${brl(me.discountCents)} de desconto` : "sem descontos"} tone="muted" />
+      <Card label="Minha comissão no período" value={brl(me.commissionCents)} />
+      <Card label="A receber (acumulado)" value={brl(me.payableBalanceCents)} hint={me.payableBalanceCents > 0 ? "ainda não repassado" : "nada pendente"} tone="muted" />
+    </div>
+  );
+}
+
 export function EarningsSection({
   report,
   period,
   canPayout,
+  selfOnly = false,
 }: {
   report: EarningsReport | null;
   period: EarningsPeriod;
   canPayout: boolean;
+  selfOnly?: boolean;
 }) {
+  if (selfOnly) {
+    return (
+      <section aria-label="Meus ganhos">
+        <PeriodBar period={period} />
+        {report ? (
+          <SelfCards report={report} />
+        ) : (
+          <p role="alert" className="mt-6 text-sm text-red-600 dark:text-red-400">
+            Não foi possível carregar seus ganhos agora. Tente novamente em instantes.
+          </p>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section aria-labelledby="equipe-heading">
       <h2 id="equipe-heading" className="font-display text-lg font-semibold text-zinc-900 dark:text-white">

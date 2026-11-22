@@ -11,10 +11,16 @@ export interface AreaRequirement {
   // Nome do parâmetro de rota com o id do PROFISSIONAL (ex.: "id"). Se o usuário logado for esse profissional, passa mesmo sem a
   // permissão da área: cada profissional cuida da PRÓPRIA foto e dos PRÓPRIOS horários, qualquer que seja o perfil dele.
   selfParam?: string;
+  // Rota cujo SERVICE já restringe o resultado ao próprio profissional (ex.: ganhos em Comissões). Quem tem papel PROFISSIONAL passa
+  // mesmo sem a área e vê só o que é dele; os demais continuam precisando da área. Usar SÓ onde o service força esse filtro.
+  professionalSelf?: boolean;
 }
 
 // Marca uma rota (ou o controller inteiro) como pertencente a uma área do painel. O dono sempre passa; os demais precisam do nível
 // exigido no perfil. A rota de um método sobrepõe a do controller. Rota sem @Area não é limitada por perfil (continua valendo o
 // que já valia: @Roles, @Public e o escopo de cada service).
-export const Area = (area: AccessAreaKey | AccessAreaKey[], level?: AccessLevel, options: { selfParam?: string } = {}) =>
-  SetMetadata(AREA_KEY, { area, level, selfParam: options.selfParam } satisfies AreaRequirement);
+export const Area = (
+  area: AccessAreaKey | AccessAreaKey[],
+  level?: AccessLevel,
+  options: { selfParam?: string; professionalSelf?: boolean } = {},
+) => SetMetadata(AREA_KEY, { area, level, selfParam: options.selfParam, professionalSelf: options.professionalSelf } satisfies AreaRequirement);

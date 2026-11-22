@@ -88,4 +88,21 @@ describe("SidebarNav com perfil de acesso", () => {
     expect(screen.getByRole("link", { name: /perfis e acessos/i })).toHaveAttribute("href", "/dashboard/acessos");
     expect(screen.getByRole("link", { name: /plano e cobrança/i })).toBeInTheDocument();
   });
+
+  it("profissional padrão vê 'Meus ganhos' (só os dele) e nada de financeiro ou relatórios", () => {
+    render(
+      <SidebarNav
+        access={{ isOwner: false, role: "PROFESSIONAL", permissions: perms({ agenda: "EDIT", fichas: "VIEW", servicos: "VIEW", profissionais: "VIEW" }) }}
+      />,
+    );
+    expect(screen.getByRole("link", { name: /meus ganhos/i })).toHaveAttribute("href", "/dashboard/comissoes");
+    for (const name of [/^comissões$/i, /financeiro/i, /relatórios/i, /caixa/i]) {
+      expect(screen.queryByRole("link", { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it("recepção sem a área Comissões não vê o item (não existe 'meus ganhos' para ela)", () => {
+    render(<SidebarNav access={{ isOwner: false, role: "RECEPTIONIST", permissions: perms({ agenda: "EDIT" }) }} />);
+    expect(screen.queryByRole("link", { name: /ganhos|comissões/i })).not.toBeInTheDocument();
+  });
 });
