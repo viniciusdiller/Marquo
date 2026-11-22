@@ -83,4 +83,24 @@ describe("GET /dashboard/configuracoes/exportar", () => {
     backendFetch.mockRejectedValue(new Error("ECONNREFUSED"));
     expect((await GET()).status).toBe(502);
   });
+
+  it("?formato=planilha pede o .xlsx ao backend e devolve como planilha", async () => {
+    auth.mockResolvedValue(ownerSession);
+    backendFetch.mockResolvedValue(
+      new Response("PK", { status: 200, headers: { "content-disposition": 'attachment; filename="marquo-dados-salao-2026-10-22.xlsx"' } }),
+    );
+
+    const response = await GET(new Request("http://localhost/dashboard/configuracoes/exportar?formato=planilha"));
+
+    expect(backendFetch.mock.calls[0][0]).toMatch(/\/export\/data\?formato=planilha$/);
+    expect(response.headers.get("content-type")).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(response.headers.get("content-disposition")).toBe('attachment; filename="marquo-dados-salao-2026-10-22.xlsx"');
+  });
+
+  it("formato desconhecido cai no JSON (o valor nunca vai para a URL do backend)", async () => {
+    auth.mockResolvedValue(ownerSession);
+    backendFetch.mockResolvedValue(new Response("{}", { status: 200 }));
+    await GET(new Request("http://localhost/dashboard/configuracoes/exportar?formato=../../x"));
+    expect(backendFetch.mock.calls[0][0]).toMatch(/\/export\/data$/);
+  });
 });

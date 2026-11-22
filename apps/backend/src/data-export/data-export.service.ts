@@ -1,6 +1,10 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Readable } from "stream";
 import { PrismaService } from "../prisma/prisma.service";
+import { buildExportSheets } from "./data-export.sheets";
+import { writeXlsx } from "./xlsx-writer";
+
+export type ExportFormat = "json" | "xlsx";
 
 export const EXPORT_BATCH_SIZE = 500;
 
@@ -27,7 +31,7 @@ export class DataExportService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async start(tenantId: string): Promise<{ filename: string; stream: Readable }> {
+  async start(tenantId: string, format: ExportFormat = "json"): Promise<{ filename: string; stream: Readable }> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: {
@@ -52,14 +56,27 @@ export class DataExportService {
     this.inProgress.add(tenantId);
 
     const release = () => this.inProgress.delete(tenantId);
-    const stream = Readable.from(this.generate(tenant, release), { objectMode: false });
+    const source = format === "xlsx" ? this.generateXlsx(tenant, release) : this.generate(tenant, release);
+    const stream = Readable.from(source, { objectMode: false });
     // Cliente que cancela o download destrói o stream: a trava precisa sair junto.
     stream.once("close", release);
 
-    this.logger.log(`Exportação de dados iniciada (negócio ${tenantId}).`);
+    this.logger.log(`Exportação de dados (${format}) iniciada (negócio ${tenantId}).`);
     const today = new Date().toISOString().slice(0, 10);
     const safeSlug = tenant.slug.replace(/[^a-z0-9-]/g, "");
-    return { filename: `marquo-dados-${safeSlug || "negocio"}-${today}.json`, stream };
+    return { filename: `marquo-dados-${safeSlug || "negocio"}-${today}.${format}`, stream };
+  }
+
+  // Planilha .xlsx com uma aba por assunto (mesmos dados do JSON, em formato legível). Também em streaming e lotes.
+  private async *generateXlsx(
+    tenant: Parameters<typeof buildExportSheets>[2] & { id: string },
+    release: () => void,
+  ): AsyncGenerator<Uint8Array> {
+    try {
+      yield* writeXlsx(buildExportSheets(this.prisma, tenant.id, tenant, this.batchSize));
+    } finally {
+      release();
+    }
   }
 
   private async *generate(tenant: { id: string }, release: () => void): AsyncGenerator<string> {

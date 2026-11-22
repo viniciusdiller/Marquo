@@ -26,10 +26,21 @@ describe("DataExportController", () => {
 
     const result = await controller.download(user);
 
-    expect(start).toHaveBeenCalledWith("tenant-1");
+    expect(start).toHaveBeenCalledWith("tenant-1", "json");
     expect(result).toBeInstanceOf(StreamableFile);
     const options = result.options;
     expect(options.type).toContain("application/json");
     expect(options.disposition).toBe('attachment; filename="marquo-dados-x-2026-10-22.json"');
+  });
+
+  it("?formato=planilha devolve o .xlsx com o tipo de planilha", async () => {
+    const start = jest.fn().mockResolvedValue({ filename: "marquo-dados-x-2026-10-22.xlsx", stream: Readable.from([""]) });
+    const controller = new DataExportController({ start } as unknown as DataExportService);
+    const user: AuthenticatedUser = { userId: "u-1", tenantId: "tenant-1", role: Role.OWNER };
+
+    const result = await controller.download(user, { formato: "planilha" });
+
+    expect(start).toHaveBeenCalledWith("tenant-1", "xlsx");
+    expect(result.options.type).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   });
 });
