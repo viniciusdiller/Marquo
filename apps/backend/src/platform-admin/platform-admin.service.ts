@@ -54,6 +54,9 @@ function isUniqueViolation(error: unknown, field: string): boolean {
   return typeof target === "string" && target.includes(field);
 }
 
+// Teto da equipe mostrada por dono na lista (a tela indica quando há mais e leva ao detalhe do negócio).
+export const TEAM_PREVIEW_LIMIT = 50;
+
 @Injectable()
 export class PlatformAdminService {
   private readonly logger = new Logger(PlatformAdminService.name);
@@ -343,21 +346,36 @@ export class PlatformAdminService {
   // Usuários, assinaturas, auditoria
   // ─────────────────────────────────────────────
 
+  // Lista por DONO: cada linha é um dono, com a equipe do negócio dele (recepção e profissionais) para abrir na tela.
+  // - Busca: acha o dono pelo nome/e-mail dele, pelo nome do negócio OU por alguém da equipe (o dono da pessoa aparece).
+  // - Papel: "Dono" lista todos os donos; "Recepção"/"Profissional" lista os donos cujo negócio tem alguém com esse
+  //   papel, e a equipe mostrada fica só com esse papel.
   async listUsers(query: PlatformUsersQueryDto) {
     const pagination = resolvePagination(query);
     const search = query.search?.trim();
+    const teamRole = query.role && query.role !== Role.OWNER ? query.role : undefined;
+    const matchesSearch = (s: string): Prisma.UserWhereInput => ({
+      OR: [{ name: { contains: s, mode: "insensitive" } }, { email: { contains: s.toLowerCase() } }],
+    });
+
     const where: Prisma.UserWhereInput = {
-      ...(query.role ? { role: query.role } : {}),
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { email: { contains: search.toLowerCase() } },
-              { tenant: { name: { contains: search, mode: "insensitive" } } },
-            ],
-          }
-        : {}),
+      role: Role.OWNER,
+      AND: [
+        ...(search
+          ? [
+              {
+                OR: [
+                  matchesSearch(search),
+                  { tenant: { name: { contains: search, mode: "insensitive" as const } } },
+                  { tenant: { users: { some: { role: { not: Role.OWNER }, ...matchesSearch(search) } } } },
+                ],
+              },
+            ]
+          : []),
+        ...(teamRole ? [{ tenant: { users: { some: { role: teamRole } } } }] : []),
+      ],
     };
+    const teamWhere: Prisma.UserWhereInput = teamRole ? { role: teamRole } : { role: { not: Role.OWNER } };
 
     const [rows, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -372,12 +390,32 @@ export class PlatformAdminService {
           role: true,
           isActive: true,
           createdAt: true,
-          tenant: { select: { id: true, name: true, slug: true } },
+          tenant: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              users: {
+                where: teamWhere,
+                orderBy: [{ role: "asc" }, { name: "asc" }],
+                take: TEAM_PREVIEW_LIMIT,
+                select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+              },
+              _count: { select: { users: { where: teamWhere } } },
+            },
+          },
         },
       }),
       this.prisma.user.count({ where }),
     ]);
-    return toPage(rows, total, pagination);
+
+    const items = rows.map(({ tenant, ...owner }) => ({
+      ...owner,
+      tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug },
+      team: tenant.users,
+      teamTotal: tenant._count.users,
+    }));
+    return toPage(items, total, pagination);
   }
 
   async listSubscriptions(query: PlatformSubscriptionsQueryDto) {
