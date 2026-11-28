@@ -20,7 +20,7 @@ export default function EsqueciSenhaPage() {
           </Link>
           <h1 className="mt-6 font-display text-2xl font-bold text-zinc-900 dark:text-white">Esqueci a senha</h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-stone-400">
-            Informe o e-mail da conta do seu negócio (dono ou equipe) e enviaremos um link para criar uma nova senha.
+            Informe o e-mail da sua conta. Serve para quem agenda como cliente e para quem trabalha no negócio (dono ou equipe).
           </p>
           <div className="mt-8">
             <ForgotPasswordForm />

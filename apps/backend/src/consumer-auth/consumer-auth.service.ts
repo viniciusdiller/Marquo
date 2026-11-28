@@ -20,6 +20,7 @@ import {
   ChangeConsumerPasswordDto,
   ConsumerLoginDto,
   RegisterConsumerDto,
+  ResetConsumerPasswordDto,
   UpdateConsumerProfileDto,
 } from "./dto/consumer-dtos";
 import { AuthenticatedConsumer, ConsumerJwtPayload, passwordVersion } from "./types/consumer-auth-user";
@@ -202,6 +203,33 @@ export class ConsumerAuthService {
       data: { revokedAt: new Date() },
     });
     return { updated: true, ...(await this.issueSession({ ...consumer, passwordHash }, userAgent)) };
+  }
+
+  // Esqueci a senha (cliente): o código enviado ao e-mail prova que a pessoa controla a caixa daquela conta. Código errado,
+  // vencido ou conta inexistente dão a MESMA resposta. Troca a senha, destrava a conta, derruba todos os dispositivos e
+  // já devolve uma sessão nova (a pessoa entra direto).
+  async resetPassword(dto: ResetConsumerPasswordDto, userAgent?: string) {
+    if (this.emailCodes.mode() !== "required") {
+      throw new ServiceUnavailableException("Não foi possível redefinir a senha agora. Tente novamente mais tarde.");
+    }
+    const invalid = () => new BadRequestException("Código inválido ou expirado. Peça um novo código.");
+    if ((await this.emailCodes.checkReset(dto.email, dto.code)) !== "ok") throw invalid();
+
+    const consumer = await this.prisma.consumer.findUnique({ where: { email: dto.email } });
+    if (!consumer?.passwordHash) throw invalid();
+
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.consumer.update({
+        where: { id: consumer.id },
+        data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null },
+      });
+      await tx.consumerSession.updateMany({
+        where: { consumerId: consumer.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    });
+    return this.issueSession({ ...consumer, passwordHash }, userAgent);
   }
 
   // LGPD: exclusão da conta global. Os Client por tenant permanecem (histórico do negócio); o
