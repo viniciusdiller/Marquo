@@ -97,3 +97,40 @@ describe("ConsumerEmailCodeService.process / check", () => {
     expect(JSON.stringify(Object.keys(service))).not.toContain(code);
   });
 });
+
+describe("ConsumerEmailCodeService: código de redefinição de senha", () => {
+  it("conta de cliente com senha recebe o código, que confere uma vez", async () => {
+    const { service, send } = build({ existing: { passwordHash: "h" } });
+    await service.processReset(" Ana@Example.com ");
+    expect(send.mock.calls[0][0].to).toEqual(["ana@example.com"]);
+    expect(send.mock.calls[0][0].text).toMatch(/redefinir sua senha/i);
+    const code = codeSent(send);
+    expect(await service.checkReset("ana@example.com", code)).toBe("ok");
+    expect(await service.checkReset("ana@example.com", code)).toBe("expired");
+  });
+
+  it("sem conta, ou conta sem senha: nenhum e-mail sai", async () => {
+    const semConta = build({ existing: null });
+    await semConta.service.processReset("x@x.com");
+    expect(semConta.send).not.toHaveBeenCalled();
+    const semSenha = build({ existing: { passwordHash: null } });
+    await semSenha.service.processReset("x@x.com");
+    expect(semSenha.send).not.toHaveBeenCalled();
+  });
+
+  it("código de cadastro não serve para redefinir senha (e vice-versa)", async () => {
+    const cadastro = build({ existing: null });
+    await cadastro.service.process("a@x.com");
+    expect(await cadastro.service.checkReset("a@x.com", codeSent(cadastro.send))).not.toBe("ok");
+
+    const reset = build({ existing: { passwordHash: "h" } });
+    await reset.service.processReset("a@x.com");
+    expect(await reset.service.check("a@x.com", codeSent(reset.send))).not.toBe("ok");
+  });
+
+  it("sem e-mail configurado não gera código", async () => {
+    const { service, send } = build({ configured: false, existing: { passwordHash: "h" } });
+    await service.processReset("a@x.com");
+    expect(send).not.toHaveBeenCalled();
+  });
+});

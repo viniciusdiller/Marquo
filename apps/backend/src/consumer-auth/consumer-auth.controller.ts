@@ -18,7 +18,9 @@ import {
   ChangeConsumerPasswordDto,
   ConsumerLoginDto,
   RegisterConsumerDto,
+  RequestConsumerPasswordResetDto,
   RequestRegisterCodeDto,
+  ResetConsumerPasswordDto,
   UpdateConsumerProfileDto,
 } from "./dto/consumer-dtos";
 import { ConsumerEmailCodeService } from "./consumer-email-code.service";
@@ -56,6 +58,26 @@ export class ConsumerAuthController {
   @Post("register")
   register(@Body() dto: RegisterConsumerDto, @Headers("user-agent") userAgent?: string) {
     return this.consumerAuth.register(dto, userAgent);
+  }
+
+  // Esqueci a senha, passo 1: manda um código ao e-mail se houver conta de cliente com senha. Resposta SEMPRE igual
+  // (não revela se o e-mail tem conta) e o envio roda depois de responder. Cada pedido pode virar um e-mail: limite estrito.
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
+  @HttpCode(200)
+  @Post("password-reset/code")
+  requestPasswordReset(@Body() dto: RequestConsumerPasswordResetDto) {
+    this.emailCodes.requestReset(dto.email);
+    return { message: "Se houver uma conta de cliente com esse e-mail, enviamos um código." };
+  }
+
+  // Passo 2: código + nova senha. Entra direto com uma sessão nova.
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 15 * 60_000 } })
+  @HttpCode(200)
+  @Post("password-reset")
+  resetPassword(@Body() dto: ResetConsumerPasswordDto, @Headers("user-agent") userAgent?: string) {
+    return this.consumerAuth.resetPassword(dto, userAgent);
   }
 
   @Public()

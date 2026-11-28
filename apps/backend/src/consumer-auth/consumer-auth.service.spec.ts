@@ -70,7 +70,12 @@ function build(
   prisma.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
   const jwt = { sign: jest.fn().mockReturnValue("tok") } as unknown as JwtService;
   // Padrão "skip" (e-mail desligado, desenvolvimento): o cadastro não exige código e os testes antigos seguem valendo.
-  const emailCodes = { mode: jest.fn().mockReturnValue(codeMode), check: jest.fn().mockReturnValue("ok"), consume: jest.fn() };
+  const emailCodes = {
+    mode: jest.fn().mockReturnValue(codeMode),
+    check: jest.fn().mockReturnValue("ok"),
+    checkReset: jest.fn().mockResolvedValue("ok"),
+    consume: jest.fn(),
+  };
   return {
     service: new ConsumerAuthService(prisma as unknown as PrismaService, jwt, emailCodes as unknown as ConsumerEmailCodeService),
     prisma: prisma as any,
@@ -527,5 +532,47 @@ describe("ConsumerAuthService.register: código de confirmação do e-mail", () 
     const { service, emailCodes } = build({ ...BASE_CONSUMER }, {}, "required");
     await expect(service.register({ ...dto, emailCode: "123456" })).rejects.toThrow(ConflictException);
     expect(emailCodes.consume).not.toHaveBeenCalled();
+  });
+});
+
+describe("ConsumerAuthService.resetPassword (esqueci a senha do cliente)", () => {
+  const dto = { email: "ana@example.com", code: "123456", password: "nova-senha-123" };
+  const claimed = { id: "c-1", name: "Ana", phone: PHONE, email: "ana@example.com", passwordHash: "hash-antigo", failedLoginAttempts: 4, lockedUntil: new Date(Date.now() + 60_000) };
+
+  it("código certo: troca a senha, destrava, derruba todos os dispositivos e já entra", async () => {
+    const { service, prisma, emailCodes } = build(claimed, {}, "required");
+    const result = await service.resetPassword(dto, "Safari");
+
+    expect(emailCodes.checkReset).toHaveBeenCalledWith("ana@example.com", "123456");
+    const data = prisma.consumer.update.mock.calls[0][0].data;
+    expect(data.passwordHash).not.toBe("hash-antigo");
+    expect(await bcrypt.compare("nova-senha-123", data.passwordHash)).toBe(true);
+    expect(data).toMatchObject({ failedLoginAttempts: 0, lockedUntil: null });
+    expect(prisma.consumerSession.updateMany).toHaveBeenCalledWith({
+      where: { consumerId: "c-1", revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(result).toHaveProperty("accessToken");
+  });
+
+  it("código errado ou vencido: recusa sem tocar na senha", async () => {
+    const { service, prisma, emailCodes } = build(claimed, {}, "required");
+    emailCodes.checkReset.mockResolvedValue("invalid");
+    await expect(service.resetPassword(dto)).rejects.toThrow(/código inválido ou expirado/i);
+    expect(prisma.consumer.update).not.toHaveBeenCalled();
+  });
+
+  it("e-mail sem conta (ou conta sem senha): MESMA resposta de código errado", async () => {
+    const semConta = build(null, {}, "required");
+    await expect(semConta.service.resetPassword(dto)).rejects.toThrow(/código inválido ou expirado/i);
+    const semSenha = build({ ...claimed, passwordHash: null }, {}, "required");
+    await expect(semSenha.service.resetPassword(dto)).rejects.toThrow(/código inválido ou expirado/i);
+    expect(semSenha.prisma.consumer.update).not.toHaveBeenCalled();
+  });
+
+  it("sem e-mail configurado não há como provar a posse: indisponível", async () => {
+    const { service, emailCodes } = build(claimed, {}, "skip");
+    await expect(service.resetPassword(dto)).rejects.toThrow(/não foi possível redefinir/i);
+    expect(emailCodes.checkReset).not.toHaveBeenCalled();
   });
 });

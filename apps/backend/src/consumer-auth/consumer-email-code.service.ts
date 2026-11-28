@@ -9,6 +9,7 @@ import { SharedStateService } from "../shared-state/shared-state.service";
 const CODE_TTL_MS = 10 * 60_000;
 // Intervalo mínimo entre dois códigos para o MESMO e-mail (além do limite por IP da rota).
 export const REGISTER_CODE_COOLDOWN_MS = 60_000;
+const RESET_SCOPE = "consumer-reset";
 
 // required = e-mail configurado: o cadastro exige o código. skip = sem e-mail E fora de produção (desenvolvimento): não
 // exige, senão ninguém se cadastraria. unavailable = sem e-mail em PRODUÇÃO: sem como entregar o código, recusa (fail closed).
@@ -66,5 +67,40 @@ export class ConsumerEmailCodeService {
 
   check(rawEmail: string, code: string): Promise<CodeCheck> {
     return this.state.checkCode("consumer-code", rawEmail.trim().toLowerCase(), code);
+  }
+
+  // ── Esqueci a senha (cliente) ──
+  // Mesmo mecanismo do cadastro (código de 6 dígitos no Redis, HMAC, validade, tentativas, uso único), em OUTRO escopo:
+  // um código de cadastro nunca serve para redefinir senha e vice-versa. Resposta HTTP igual exista a conta ou não.
+  requestReset(rawEmail: string): void {
+    void this.processReset(rawEmail).catch((error: unknown) => {
+      this.logger.warn(`Falha ao enviar código de redefinição de senha: ${(error as Error).name}`);
+    });
+  }
+
+  async processReset(rawEmail: string): Promise<void> {
+    if (this.mode() !== "required") return;
+    const email = rawEmail.trim().toLowerCase();
+
+    // Só conta de cliente COM senha (conta sem senha ainda não foi reivindicada: o caminho é o cadastro).
+    const existing = await this.prisma.consumer.findUnique({ where: { email }, select: { passwordHash: true } });
+    if (!existing?.passwordHash) return;
+
+    const code = await this.state.issueCode(RESET_SCOPE, email, CODE_TTL_MS, REGISTER_CODE_COOLDOWN_MS);
+    if (!code) return;
+    const frontend = (this.config.get<string>("FRONTEND_URL") ?? "").replace(/\/+$/, "");
+    const message = buildVerificationCodeEmail({
+      title: "Redefinir sua senha",
+      intro: "Use o código abaixo para criar uma nova senha na sua conta do Marquo. Se não foi você que pediu, ignore este e-mail: sua senha continua a mesma.",
+      code,
+      expiresInMinutes: CODE_TTL_MS / 60_000,
+      logoUrl: frontend ? `${frontend}/brand/email/marquo-logo.png` : undefined,
+      siteUrl: frontend || undefined,
+    });
+    await this.email.send({ to: [email], ...message });
+  }
+
+  checkReset(rawEmail: string, code: string): Promise<CodeCheck> {
+    return this.state.checkCode(RESET_SCOPE, rawEmail.trim().toLowerCase(), code);
   }
 }

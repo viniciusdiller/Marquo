@@ -48,6 +48,29 @@ export class RequestRegisterCodeDto {
   email!: string;
 }
 
+export class RequestConsumerPasswordResetDto {
+  @IsEmail()
+  @MaxLength(254)
+  @NormalizeEmail()
+  email!: string;
+}
+
+export class ResetConsumerPasswordDto {
+  @IsEmail()
+  @MaxLength(254)
+  @NormalizeEmail()
+  email!: string;
+
+  @IsString()
+  @Matches(/^\d{6}$/, { message: "O código tem 6 dígitos." })
+  code!: string;
+
+  @IsString()
+  @MinLength(PASSWORD_MIN)
+  @MaxLength(PASSWORD_MAX)
+  password!: string;
+}
+
 // Telefone ou e-mail. Sem @IsEmail/regra de telefone de propósito: um formato inválido tem que
 // cair no mesmo 401 genérico de "senha errada", não num 400 que diferencia os casos.
 export class ConsumerLoginDto {
