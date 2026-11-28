@@ -170,14 +170,21 @@ export interface PlatformCouponRow {
   state: CouponState;
 }
 
-export interface PlatformUserRow {
+export interface PlatformTeamMember {
   id: string;
   name: string;
   email: string;
   role: string;
   isActive: boolean;
   createdAt: string;
+}
+
+// Uma linha por DONO, com a equipe do negócio dele (recepção e profissionais) para abrir na lista.
+export interface PlatformUserRow extends PlatformTeamMember {
   tenant: { id: string; name: string; slug: string };
+  team: PlatformTeamMember[];
+  // Total da equipe (a lista `team` vem com teto; a tela avisa quando há mais).
+  teamTotal: number;
 }
 
 export const METHOD_LABEL = {
